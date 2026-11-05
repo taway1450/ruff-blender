@@ -1619,6 +1619,9 @@ impl<'db> StaticClassLiteral<'db> {
             }
         }
 
+        if crate::types::blender::hides_class_member(db, self, name) {
+            return Member::unbound();
+        }
         let sources = self.member_sources(db);
         let symbol = sources.table.symbol_id(name);
         let member = class_member_with_symbol(db, sources.scope, symbol).map_type(|ty| {
@@ -3004,6 +3007,9 @@ impl<'db> StaticClassLiteral<'db> {
         // - `typing.Final`
         // - Proper diagnostics
 
+        if crate::types::blender::hides_instance_member(db, self, name) {
+            return Member::unbound();
+        }
         let sources = self.member_sources(db);
         let body_scope = sources.scope;
         let table = &sources.table;

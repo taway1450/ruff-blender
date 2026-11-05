@@ -54,6 +54,15 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
             infer_value_ty: MultiInferenceGuard::new(infer_value_ty),
         };
         let valid = evaluator.evaluate(&requirement, emit_diagnostics, deprecation.as_mut());
+        let valid = valid
+            && crate::types::blender::check_property_write(
+                &self.context,
+                self.program_environment(),
+                target,
+                object_ty,
+                attribute,
+                emit_diagnostics,
+            );
         if let Some(AttributeDeprecation::Deprecated(properties)) = deprecation {
             self.check_deprecated_property(target, properties, ast::ExprContext::Store);
         }

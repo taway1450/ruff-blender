@@ -615,6 +615,9 @@ pub(super) fn check_override<'db>(
     name: &Name,
     definition: Definition<'db>,
 ) -> OverrideCheck<'db> {
+    if crate::types::blender::exempts_attribute_override(db, superclass, name, definition) {
+        return OverrideCheck::Attribute(None);
+    }
     // Classify methods before constructing attribute contracts: some members, such as
     // `object.__hash__`, have method signatures but no general attribute contract.
     // Receiver annotations still describe instance storage even if a method with

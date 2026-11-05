@@ -1,3 +1,5 @@
+mod blender;
+
 use itertools::{Either, Itertools};
 use ruff_db::diagnostic::{Annotation, Diagnostic, SubDiagnostic, SubDiagnosticSeverity};
 use ruff_db::source::source_text;
@@ -1174,19 +1176,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 Type::unknown()
             }
 
-            ast::Expr::Call(call_expr) => {
-                if !self.in_string_annotation() {
-                    self.infer_call_expression(call_expr, TypeContext::default());
-                }
-                self.report_invalid_type_expression(
-                    expression,
-                    format_args!(
-                        "Function calls are not allowed in {}s",
-                        self.type_expression_context()
-                    ),
-                );
-                Type::unknown()
-            }
+            ast::Expr::Call(call_expr) => self.infer_call_type_expression(expression, call_expr),
 
             ast::Expr::FString(fstring) => {
                 if !self.in_string_annotation() {
