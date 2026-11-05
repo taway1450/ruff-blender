@@ -6,13 +6,6 @@ use ruff_db::system::SystemPath;
 
 use crate::discovery::{Addon, AddonKind, existing_file, folder_addon};
 
-/// An add-on as a salsa key, so that its files can be cached per add-on.
-#[salsa::interned(debug, heap_size=ruff_memory_usage::heap_size)]
-struct AddonKey<'db> {
-    #[returns(ref)]
-    addon: Addon,
-}
-
 /// The `.py` files of `addon`, in a fixed order: the files of a folder by name, then its sub-folders by
 /// name.
 ///
@@ -22,15 +15,9 @@ struct AddonKey<'db> {
 /// `bl_info` package), whose files belong to the nested add-on. Roots listed in a `[tool.blender]`
 /// table are not looked for. A single-file add-on is just its file.
 ///
-/// Every read goes through the db, so the result is invalidated when a file or folder of the add-on is
-/// added or removed.
-pub fn addon_source_files<'db>(db: &'db dyn Db, addon: &Addon) -> &'db [File] {
-    source_files(db, AddonKey::new(db, addon.clone()))
-}
-
-#[salsa::tracked(returns(deref), heap_size=ruff_memory_usage::heap_size)]
-fn source_files<'db>(db: &'db dyn Db, key: AddonKey<'db>) -> Box<[File]> {
-    let addon = key.addon(db);
+/// Not cached here: the caller caches what it derives from the files per add-on. Every read goes through
+/// the db, so a caller's query is invalidated when a file or folder of the add-on is added or removed.
+pub fn addon_source_files(db: &dyn Db, addon: &Addon) -> Vec<File> {
     let mut files = Vec::new();
     match addon.kind {
         AddonKind::SingleFile => files.extend(existing_file(db, &addon.root)),
@@ -38,7 +25,7 @@ fn source_files<'db>(db: &'db dyn Db, key: AddonKey<'db>) -> Box<[File]> {
             collect_folder(db, &addon.root, &mut files);
         }
     }
-    files.into_boxed_slice()
+    files
 }
 
 fn collect_folder(db: &dyn Db, folder: &SystemPath, files: &mut Vec<File>) {
