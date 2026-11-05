@@ -14,6 +14,7 @@ use crate::reachability::{
     NarrowingProjector, ReachabilityEvaluationCache, evaluate_reachability,
     evaluate_reachability_with_cache,
 };
+use crate::types::blender;
 use crate::types::{
     DeclaredType, KnownClass, MemberLookupPolicy, Type, TypeAndQualifiers, TypeQualifiers,
     UnionType, binding_type, inferred_declaration, is_discarded_dict_key_assignment,
@@ -618,6 +619,11 @@ pub(crate) fn imported_symbol<'db>(
                 }
             }
             "__getattr__" => Place::Undefined.into(),
+            "__package__"
+                if let Some(ty) = file.and_then(|file| blender::package_type(db, file)) =>
+            {
+                Place::bound(ty).into()
+            }
             "__builtins__" => Place::bound(Type::any()).into(),
             _ => KnownClass::ModuleType
                 .to_instance(db, env)
@@ -2537,6 +2543,10 @@ pub(crate) mod implicit_globals {
             }
 
             "__builtins__" => Place::bound(Type::any()).into(),
+
+            "__package__" if let Some(ty) = crate::types::blender::package_type(db, file) => {
+                Place::bound(ty).into()
+            }
 
             "__debug__" => Place::bound(KnownClass::Bool.to_instance(db, &env)).into(),
 
