@@ -11846,7 +11846,7 @@ impl std::fmt::Display for DynamicType<'_> {
 bitflags! {
     /// Type qualifiers from annotations or synthesized member metadata.
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Default, Hash)]
-    pub struct TypeQualifiers: u16 {
+    pub struct TypeQualifiers: u8 {
         /// `typing.ClassVar`
         const CLASS_VAR = 1 << 0;
         /// `typing.Final`
@@ -11867,8 +11867,6 @@ bitflags! {
         /// `__getattr__` function. We need this in order to implement precedence of submodules
         /// over module-level `__getattr__`, for compatibility with other type checkers.
         const FROM_MODULE_GETATTR = 1 << 7;
-        /// A non-standard qualifier: the annotation is a Blender property declaration.
-        const BLENDER_PROPERTY = 1 << 8;
     }
 }
 
@@ -11902,9 +11900,7 @@ impl TypeQualifiers {
     /// `IMPLICIT_INSTANCE_ATTRIBUTE` and `FROM_MODULE_GETATTR`.
     pub fn is_non_standard(self) -> bool {
         const NON_STANDARD: TypeQualifiers =
-            TypeQualifiers::IMPLICIT_INSTANCE_ATTRIBUTE
-            .union(TypeQualifiers::FROM_MODULE_GETATTR)
-            .union(TypeQualifiers::BLENDER_PROPERTY);
+            TypeQualifiers::IMPLICIT_INSTANCE_ATTRIBUTE.union(TypeQualifiers::FROM_MODULE_GETATTR);
         self.intersects(NON_STANDARD)
     }
 }

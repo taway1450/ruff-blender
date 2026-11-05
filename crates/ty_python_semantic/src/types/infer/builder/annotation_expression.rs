@@ -7,7 +7,6 @@ use crate::place::TypeOrigin;
 use crate::types::diagnostic::{INVALID_TYPE_FORM, REDUNDANT_FINAL_CLASSVAR};
 use crate::types::infer::builder::InferenceFlags;
 use crate::types::infer::builder::subscript::AnnotatedExprContext;
-use crate::types::dedicated::blender;
 use crate::types::infer::nearest_enclosing_class;
 use crate::types::string_annotation::parse_string_annotation;
 use crate::types::{
@@ -353,10 +352,9 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
             }
 
             // Fallback to `infer_type_expression_no_store` for everything else
-            type_expr => {
-                let ty = TypeAndQualifiers::declared(self.infer_type_expression_no_store(type_expr));
-                AnnotationExpressionInference::new(if blender::is_property_annotation(self.db(), type_expr, &|e| self.try_expression_type(e)) { ty.with_qualifier(TypeQualifiers::BLENDER_PROPERTY) } else { ty })
-            }
+            type_expr => AnnotationExpressionInference::new(TypeAndQualifiers::declared(
+                self.infer_type_expression_no_store(type_expr),
+            )),
         };
 
         let AnnotationExpressionInference {

@@ -1651,7 +1651,7 @@ impl<'db> StaticClassLiteral<'db> {
                 _ => ty,
             }
         });
-        if blender::hides_class_member(db, self, name, member.qualifiers()) { return Member::unbound(); }
+        if blender::hides_class_member(db, self, name) { return Member::unbound(); }
 
         if self.has_own_slot_descriptor(db, name) {
             return Member::definitely_declared(self.own_slot_descriptor(
@@ -3048,7 +3048,7 @@ impl<'db> StaticClassLiteral<'db> {
                     if qualifiers.contains(TypeQualifiers::CLASS_VAR) {
                         declared = Place::Undefined;
                     }
-                    if blender::hides_instance_member(db, self, name, qualifiers) { return Member::unbound(); }
+                    if blender::hides_instance_member(db, self, name) { return Member::unbound(); }
 
                     if qualifiers.contains(TypeQualifiers::INIT_VAR) {
                         // We ignore `InitVar` declarations on the class body, unless that attribute is overwritten
