@@ -406,6 +406,18 @@ fn registered_property<'db>(
     })
 }
 
+/// Whether the registration that gives instances of `class` the attribute `name` in `file`'s add-on
+/// is read-only: a collection, a pointer to a `PropertyGroup`, or `options={"READ_ONLY"}`.
+pub(super) fn is_registered_read_only<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    class: StaticClassLiteral<'db>,
+    name: &str,
+) -> bool {
+    registered_property(db, file, class, name)
+        .is_some_and(|property| property.declaration.is_read_only(db))
+}
+
 /// The registrations of the add-on `file` belongs to; none for a file in no add-on.
 fn registered_in_addon_of<'db>(
     db: &'db dyn Db,
