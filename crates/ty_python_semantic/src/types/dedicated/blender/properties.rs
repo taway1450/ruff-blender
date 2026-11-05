@@ -27,6 +27,7 @@ use crate::types::{
 };
 use crate::{Db, ProgramEnvironment};
 
+use super::registered::is_registered_read_only;
 use super::symbols::{blender_function_name, bpy_types_bases};
 
 /// The ten functions of `bpy.props` that declare a property.
@@ -185,7 +186,7 @@ impl<'db> PropertyDeclaration<'db> {
 
     /// Whether writing the attribute is an error: a collection, a pointer to a `PropertyGroup`
     /// (Blender creates the group with its owner), or any property with `options={"READ_ONLY"}`.
-    fn is_read_only(&self, db: &'db dyn Db) -> bool {
+    pub(super) fn is_read_only(&self, db: &'db dyn Db) -> bool {
         self.read_only_option
             || match self.kind {
                 PropertyKind::Collection => true,
@@ -380,8 +381,9 @@ pub(crate) fn hides_instance_member<'db>(
 }
 
 /// Check a write `target = ...` to the attribute `attribute` of an instance of `object_ty`, which
-/// ty's own checks have accepted, against a read-only annotated property. Reports an
-/// `invalid-assignment` and returns `false` when the property is read-only.
+/// ty's own checks have accepted, against a read-only property: an annotated one, or a registered
+/// one (`bpy.types.Scene.my_group = PointerProperty(...)`) when no class body declares the
+/// attribute. Reports an `invalid-assignment` and returns `false` when the property is read-only.
 ///
 /// Blender's read-only properties behave like a property with a getter and no setter: writing
 /// `group.items = []` or `scene.my_group = other` raises `AttributeError`.
@@ -412,10 +414,12 @@ pub(crate) fn check_property_write<'db>(
         }
         _ => None,
     });
-    if !owner
-        .and_then(|owner| annotated_property(db, owner, attribute))
-        .is_some_and(|declaration| declaration.is_read_only(db))
-    {
+    let read_only = match owner {
+        Some(owner) => annotated_property(db, owner, attribute)
+            .is_some_and(|declaration| declaration.is_read_only(db)),
+        None => is_registered_read_only(db, context.program_file(), class, attribute),
+    };
+    if !read_only {
         return true;
     }
     if emit_diagnostics && let Some(builder) = context.report_lint(&INVALID_ASSIGNMENT, target) {
