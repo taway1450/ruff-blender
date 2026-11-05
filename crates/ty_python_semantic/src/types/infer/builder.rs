@@ -11257,6 +11257,14 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         let fallback_place = member_lookup.member(db).map_type(|ty| {
             self.narrow_expr_with_applicable_constraints(attribute, ty, &constraint_keys)
         });
+        let fallback_place = crate::types::blender::on_load(
+            db,
+            env,
+            self.program_file(),
+            value_type,
+            &attr.id,
+            fallback_place,
+        ); // PROTOTYPE #9
 
         // An augmented assignment also loads its target, but its write validation reports this
         // error. Avoid reporting the same invalid access twice.
