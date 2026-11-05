@@ -73,22 +73,8 @@ pub fn addon_for_path(db: &dyn Db, path: &SystemPath, bound: &SystemPath) -> Opt
             .map(|root| extension(db, root));
     }
 
-    for folder in folders() {
-        if let Some(manifest_file) = existing_file(db, &folder.join(MANIFEST_FILE)) {
-            if manifest(db, manifest_file).is_theme() {
-                continue;
-            }
-            return Some(extension(db, folder.to_path_buf()));
-        }
-        if existing_file(db, &folder.join("__init__.py"))
-            .is_some_and(|init| bl_info(db, init).is_some())
-        {
-            return Some(Addon {
-                kind: AddonKind::LegacyPackage,
-                root: folder.to_path_buf(),
-                name: folder.file_name().unwrap_or_default().to_string(),
-            });
-        }
+    if let Some(addon) = folders().find_map(|folder| folder_addon(db, folder)) {
+        return Some(addon);
     }
 
     let is_single_file = path.extension() == Some("py")
@@ -99,6 +85,22 @@ pub fn addon_for_path(db: &dyn Db, path: &SystemPath, bound: &SystemPath) -> Opt
         root: path.to_path_buf(),
         name: path.file_stem().unwrap_or_default().to_string(),
     })
+}
+
+/// The add-on rooted at `folder`, when it has a manifest that is not a theme's (an extension) or an
+/// `__init__.py` with a top-level `bl_info` (a legacy package).
+pub(crate) fn folder_addon(db: &dyn Db, folder: &SystemPath) -> Option<Addon> {
+    if let Some(manifest_file) = existing_file(db, &folder.join(MANIFEST_FILE)) {
+        return (!manifest(db, manifest_file).is_theme())
+            .then(|| extension(db, folder.to_path_buf()));
+    }
+    existing_file(db, &folder.join("__init__.py"))
+        .is_some_and(|init| bl_info(db, init).is_some())
+        .then(|| Addon {
+            kind: AddonKind::LegacyPackage,
+            root: folder.to_path_buf(),
+            name: folder.file_name().unwrap_or_default().to_string(),
+        })
 }
 
 /// An extension rooted at `root`: named by its manifest `id`, or by the folder when `id` is missing or invalid.
@@ -113,6 +115,6 @@ fn extension(db: &dyn Db, root: SystemPathBuf) -> Addon {
     }
 }
 
-fn existing_file(db: &dyn Db, path: &SystemPath) -> Option<File> {
+pub(crate) fn existing_file(db: &dyn Db, path: &SystemPath) -> Option<File> {
     system_path_to_file(db, path).ok()
 }

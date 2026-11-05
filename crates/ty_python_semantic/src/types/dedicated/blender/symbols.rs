@@ -44,6 +44,11 @@ fn bpy_types_class_name<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) ->
         .then(|| class.name(db).as_str())
 }
 
+/// Whether `class` is a class of `bpy.types`.
+pub(super) fn is_bpy_types_class<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool {
+    bpy_types_class_name(db, class).is_some()
+}
+
 /// The names of the `bpy.types` classes in the method resolution order of `class`, starting with
 /// the most derived. A class defined in an add-on is never one of them.
 pub(super) fn bpy_types_bases<'db>(

@@ -93,7 +93,7 @@ impl<'db> PropertyDeclaration<'db> {
     /// Blender only accepts them for these parameters. `scope` is where a module constant passed as
     /// `items=` is looked up. `type=` is read from its inferred type, which `argument_type` gives,
     /// so that aliases and forward references to the target class work.
-    fn from_call(
+    pub(super) fn from_call(
         db: &'db dyn Db,
         scope: ScopeId<'db>,
         callee: Type<'db>,
@@ -121,7 +121,7 @@ impl<'db> PropertyDeclaration<'db> {
     }
 
     /// The type of the attribute Blender creates from this declaration.
-    fn value_type(&self, db: &'db dyn Db, env: &ProgramEnvironment<'db>) -> Type<'db> {
+    pub(super) fn value_type(&self, db: &'db dyn Db, env: &ProgramEnvironment<'db>) -> Type<'db> {
         match self.kind {
             PropertyKind::Bool => KnownClass::Bool.to_instance(db, env),
             PropertyKind::Int => KnownClass::Int.to_instance(db, env),

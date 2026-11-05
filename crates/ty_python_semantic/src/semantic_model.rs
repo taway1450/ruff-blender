@@ -311,6 +311,12 @@ impl<'db> SemanticModel<'db> {
 
         all_members(db, &self.program_environment(), ty)
             .into_iter()
+            .chain(crate::types::blender::completions(
+                db,
+                &self.program_environment(),
+                self.program_file(),
+                ty,
+            ))
             .map(|member| Completion {
                 name: CompactString::new(member.name),
                 ty: Some(member.ty),

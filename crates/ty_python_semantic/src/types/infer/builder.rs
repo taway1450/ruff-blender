@@ -11237,7 +11237,15 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 );
                 error.fallback_member(db)
             });
-        let fallback_place = member_lookup.member(db).map_type(|ty| {
+        let member = crate::types::blender::on_load(
+            db,
+            env,
+            self.program_file(),
+            attribute,
+            value_type,
+            member_lookup.member(db),
+        );
+        let fallback_place = member.map_type(|ty| {
             self.narrow_expr_with_applicable_constraints(attribute, ty, &constraint_keys)
         });
 
