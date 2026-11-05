@@ -3,8 +3,12 @@
 //! Blender turns an annotation that is a call to a `bpy.props` function into a property, and the
 //! instance attribute then holds the property's value (an `int` here), not the `_PropertyDeferred`
 //! the stubs return. The annotation takeover in type-expression inference asks this module for that
-//! value type, and the class-member lookups ask [`property_declaration`] whether a member is such a
-//! declaration.
+//! value type.
+//!
+//! [`PropertyDeclaration`] describes one declaration, whether it annotates a class member
+//! ([`property_declaration`]) or is assigned to a Blender class at runtime (found by the Add-on
+//! index). Which declaration an attribute of an instance stands for is decided by the Property
+//! member module.
 
 use ruff_db::parsed::{parsed_module, parsed_string_annotation};
 use ruff_db::source::source_text;
@@ -12,22 +16,19 @@ use ruff_python_ast::helpers::any_over_expr;
 use ruff_python_ast::name::Name;
 use ruff_python_ast::{self as ast, Expr};
 use ty_module_resolver::{ModuleName, resolve_module_confident};
-use ty_python_core::definition::{Definition, DefinitionKind, DefinitionState};
+use ty_python_core::ProgramFile;
+use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::scope::{ScopeId, ScopeKind};
-use ty_python_core::{ProgramFile, place_table, use_def_map};
 
 use crate::place::imported_symbol;
-use crate::types::context::InferContext;
 use crate::types::definition_resolution::{ImportAliasResolution, definitions_for_name};
-use crate::types::diagnostic::INVALID_ASSIGNMENT;
 use crate::types::infer::infer_definition_types;
 use crate::types::{
-    ClassBase, ClassType, KnownClass, KnownUnion, StaticClassLiteral, Type, UnionType,
+    KnownClass, KnownUnion, StaticClassLiteral, Type, UnionType,
     definition_expression_type_in_scope,
 };
 use crate::{Db, ProgramEnvironment};
 
-use super::registered::is_registered_read_only;
 use super::symbols::{blender_function_name, bpy_types_bases};
 
 /// The ten functions of `bpy.props` that declare a property.
@@ -340,135 +341,6 @@ pub(super) fn property_declaration<'db>(
     PropertyDeclaration::from_call(db, scope, callee, call, |argument| {
         definition_expression_type_in_scope(db, definition, argument, scope)
     })
-}
-
-/// The property that the class body of `class` declares as `name: SomeProperty(...)`.
-fn annotated_property<'db>(
-    db: &'db dyn Db,
-    class: StaticClassLiteral<'db>,
-    name: &str,
-) -> Option<&'db PropertyDeclaration<'db>> {
-    let scope = class.body_scope(db);
-    let symbol = place_table(db, scope).symbol_id(name)?;
-    use_def_map(db, scope)
-        .end_of_scope_symbol_declarations(symbol)
-        .find_map(|declaration| match declaration.declaration {
-            DefinitionState::Defined(definition) => property_declaration(db, definition).as_ref(),
-            DefinitionState::Undefined | DefinitionState::Deleted => None,
-        })
-}
-
-/// Whether the class attribute `name` of `class` is hidden because it is an annotated property.
-///
-/// Blender replaces the class attribute with an RNA property when it registers the class, so
-/// `MyGroup.count` is an `AttributeError` at runtime, while `my_group.count` is the value.
-pub(crate) fn hides_class_member<'db>(
-    db: &'db dyn Db,
-    class: StaticClassLiteral<'db>,
-    name: &str,
-) -> bool {
-    annotated_property(db, class, name).is_some()
-}
-
-/// Whether the instance attribute `name` of `class` is hidden because Blender ignores the
-/// annotated property that declares it: `value: IntProperty()` on a Panel creates nothing.
-pub(crate) fn hides_instance_member<'db>(
-    db: &'db dyn Db,
-    class: StaticClassLiteral<'db>,
-    name: &str,
-) -> bool {
-    annotated_property(db, class, name).is_some() && is_ignored_host(db, class)
-}
-
-/// Check a write `target = ...` to the attribute `attribute` of an instance of `object_ty`, which
-/// ty's own checks have accepted, against a read-only property: an annotated one, or a registered
-/// one (`bpy.types.Scene.my_group = PointerProperty(...)`) when no class body declares the
-/// attribute. Reports an `invalid-assignment` and returns `false` when the property is read-only.
-///
-/// Blender's read-only properties behave like a property with a getter and no setter: writing
-/// `group.items = []` or `scene.my_group = other` raises `AttributeError`.
-pub(crate) fn check_property_write<'db>(
-    context: &InferContext<'db, '_>,
-    env: &ProgramEnvironment<'db>,
-    target: &ast::ExprAttribute,
-    object_ty: Type<'db>,
-    attribute: &str,
-    emit_diagnostics: bool,
-) -> bool {
-    let db = context.db();
-    let Some(class) = object_ty
-        .as_nominal_instance()
-        .and_then(|instance| instance.class(db, env).class_literal(db).as_static())
-    else {
-        return true;
-    };
-    // The class nearest in the MRO whose body declares or assigns the attribute decides, so that a
-    // subclass can replace a property with another one or with a plain class attribute. A body
-    // that only reads the name (`alias = items`) does not.
-    let owner = class.iter_mro(db, None).find_map(|base| match base {
-        ClassBase::Class(base) => {
-            let base = base.class_literal(db).as_static()?;
-            let table = place_table(db, base.body_scope(db));
-            let symbol = table.symbol(table.symbol_id(attribute)?);
-            (symbol.is_declared() || symbol.is_bound()).then_some(base)
-        }
-        _ => None,
-    });
-    let read_only = match owner {
-        Some(owner) => annotated_property(db, owner, attribute)
-            .is_some_and(|declaration| declaration.is_read_only(db)),
-        None => is_registered_read_only(db, context.program_file(), class, attribute),
-    };
-    if !read_only {
-        return true;
-    }
-    if emit_diagnostics && let Some(builder) = context.report_lint(&INVALID_ASSIGNMENT, target) {
-        builder.into_diagnostic(format_args!(
-            "Property `{attribute}` defined in `{}` is read-only",
-            object_ty.display(db, env)
-        ));
-    }
-    false
-}
-
-/// Whether overriding `name` of `superclass` with `definition` is never an incompatible override,
-/// because one of the two is an annotated property.
-///
-/// A subclass may give an inherited property another type (`base_value: StringProperty()` over
-/// `base_value: IntProperty()`), or replace it with a plain class attribute (`base_value = 5`),
-/// and its instances then have the subclass's attribute.
-pub(crate) fn exempts_attribute_override<'db>(
-    db: &'db dyn Db,
-    superclass: ClassType<'db>,
-    name: &str,
-    definition: Definition<'db>,
-) -> bool {
-    property_declaration(db, definition).is_some()
-        || superclass
-            .class_literal(db)
-            .as_static()
-            .is_some_and(|superclass| annotated_property(db, superclass, name).is_some())
-}
-
-/// Whether Blender ignores the annotations of `class`: it derives from a `bpy.types` class, but
-/// from none of the Property hosts (a Panel or a Menu, not a `PropertyGroup` or an Operator). A
-/// plain class keeps its annotations, as it may be a mixin of a Property host.
-fn is_ignored_host<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool {
-    const PROPERTY_HOSTS: [&str; 9] = [
-        "PropertyGroup",
-        "Operator",
-        "Macro",
-        "AddonPreferences",
-        "UIList",
-        "Node",
-        "NodeSocket",
-        "NodeTree",
-        "Gizmo",
-    ];
-    let mut bases = bpy_types_bases(db, class)
-        .filter(|base| *base != "bpy_struct")
-        .peekable();
-    bases.peek().is_some() && !bases.any(|base| PROPERTY_HOSTS.contains(&base))
 }
 
 /// The set of strings in a set literal such as `options={"ENUM_FLAG", "HIDDEN"}`.
