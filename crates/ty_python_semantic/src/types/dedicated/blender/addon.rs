@@ -1,0 +1,20 @@
+use ty_blender::{Addon, addon_for_path};
+use ty_python_core::ProgramFile;
+
+use crate::Db;
+
+/// The add-on `file` belongs to, or `None` for a file in no add-on.
+///
+/// The probe is bounded by the outermost first-party root that contains the file, so a file outside
+/// every first-party root (site-packages, typeshed, the stubs) never belongs to an add-on.
+#[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
+pub(crate) fn addon_of_file<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Option<Addon> {
+    let path = file.file(db).path(db).as_system_path()?;
+    let bound = file
+        .program(db)
+        .search_paths(db)
+        .first_party_roots()
+        .filter(|root| path.starts_with(root))
+        .min_by_key(|root| root.components().count())?;
+    addon_for_path(db, path, bound)
+}

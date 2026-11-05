@@ -148,6 +148,7 @@ mod context;
 mod context_manager;
 mod cyclic;
 mod dedicated;
+pub(crate) use self::dedicated::blender;
 mod diagnostic;
 mod dict;
 mod display;
