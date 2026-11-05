@@ -28,7 +28,17 @@ pub(crate) fn hides_instance_member(
     class: StaticClassLiteral<'_>,
     name: &str,
 ) -> bool {
-    declares_property(db, class, name) && !is_property_host(db, class)
+    declares_property(db, class, name) && is_off_host(db, class)
+}
+
+/// A `bpy.types` subclass that is not a host (`Panel`, `Menu`, ...). A plain class (a mixin)
+/// keeps the attribute: it becomes a property in whatever host class mixes it in.
+fn is_off_host(db: &dyn Db, class: StaticClassLiteral<'_>) -> bool {
+    let derives_from_bpy_types = class.iter_mro(db, None).skip(1).any(|base| {
+        base.into_class()
+            .is_some_and(|base| super::is_bpy_types_class(db, base.class_literal(db)))
+    });
+    derives_from_bpy_types && !is_property_host(db, class)
 }
 
 /// Does `class`'s own body declare `name` with a property annotation?
