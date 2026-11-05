@@ -1,19 +1,17 @@
 //! Route B: a tracked query keyed on the member's `Definition` decides whether its annotation is a
-//! property declaration: syntactic check of the annotation, then the callee is resolved through
-//! the defining file's module globals. No core type changes.
+//! property declaration. It reads the callee type from the definition's own inference (the same
+//! inference that took the annotation over), so the two can never disagree. No core type changes.
 
-use ruff_db::parsed::parsed_module;
+use ruff_db::parsed::{parsed_module, parsed_string_annotation};
+use ruff_db::source::source_text;
 use ruff_python_ast as ast;
-use ruff_python_parser::parse_expression;
 use ty_python_core::definition::{Definition, DefinitionKind, DefinitionState};
-use ty_python_core::program_file::ProgramFile;
+use ty_python_core::{place_table, use_def_map};
 
 use crate::Db;
-use crate::ProgramEnvironment;
-use crate::place::global_symbol;
-use ty_python_core::{place_table, use_def_map};
-use crate::types::Type;
 use crate::types::class::StaticClassLiteral;
+use crate::types::definition_expression_type_in_scope;
+use crate::types::infer::infer_definition_types;
 
 use super::{is_property_host, may_be_property_call, property_function};
 
@@ -61,16 +59,24 @@ fn is_property_declaration<'db>(db: &'db dyn Db, definition: Definition<'db>) ->
     let DefinitionKind::AnnotatedAssignment(assignment) = definition.kind(db) else {
         return false;
     };
-    let file = definition.program_file(db);
     let module = parsed_module(db, definition.python_file(db)).load(db);
-    match assignment.annotation(&module) {
-        ast::Expr::Call(call) => is_property_call(db, file, call),
+    let annotation = assignment.annotation(&module);
+    match annotation {
+        ast::Expr::Call(call) => is_property_call(db, definition, call),
         ast::Expr::StringLiteral(string) => {
-            let Ok(parsed) = parse_expression(string.value.to_str()) else {
+            // Cheap syntactic exit before touching inference.
+            if !infer_definition_types(db, definition).is_string_annotation(annotation) {
+                return false;
+            }
+            let Some(literal) = string.as_single_part_string() else {
+                return false;
+            };
+            let source = source_text(db, definition.file(db));
+            let Ok(parsed) = parsed_string_annotation(&source, literal) else {
                 return false;
             };
             match parsed.expr() {
-                ast::Expr::Call(call) => is_property_call(db, file, call),
+                ast::Expr::Call(call) => is_property_call(db, definition, call),
                 _ => false,
             }
         }
@@ -78,23 +84,11 @@ fn is_property_declaration<'db>(db: &'db dyn Db, definition: Definition<'db>) ->
     }
 }
 
-fn is_property_call(db: &dyn Db, file: ProgramFile<'_>, call: &ast::ExprCall) -> bool {
-    may_be_property_call(call)
-        && resolve(db, file, &call.func).is_some_and(|callee| property_function(db, callee).is_some())
-}
-
-/// Resolve a dotted callee through the file's module globals (class-scope and function-local
-/// imports are not seen; good enough for a prototype).
-fn resolve<'db>(db: &'db dyn Db, file: ProgramFile<'db>, expr: &ast::Expr) -> Option<Type<'db>> {
-    match expr {
-        ast::Expr::Name(name) => global_symbol(db, file, &name.id).ignore_possibly_undefined(),
-        ast::Expr::Attribute(attr) => {
-            let env = ProgramEnvironment::from_file(file);
-            resolve(db, file, &attr.value)?
-                .member(db, &env, &attr.attr.id)
-                .place
-                .ignore_possibly_undefined()
-        }
-        _ => None,
+/// Syntactic pre-filter first, then the callee type the annotation's inference stored.
+fn is_property_call(db: &dyn Db, definition: Definition<'_>, call: &ast::ExprCall) -> bool {
+    if !may_be_property_call(call) {
+        return false;
     }
+    let callee = definition_expression_type_in_scope(db, definition, &call.func, definition.scope(db));
+    property_function(db, callee).is_some()
 }
