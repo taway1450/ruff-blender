@@ -41,8 +41,13 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
         emit_diagnostics: bool,
     ) -> bool {
         let db = self.db();
-        let requirement =
-            attribute_write_requirement(db, self.program_environment(), object_ty, attribute, None);
+        let requirement = crate::types::blender::on_store(
+            db,
+            self.program_environment(),
+            self.program_file(),
+            attribute,
+            attribute_write_requirement(db, self.program_environment(), object_ty, attribute, None),
+        );
         let mut deprecation = (emit_diagnostics && self.context.is_lint_enabled(&DEPRECATED))
             .then_some(AttributeDeprecation::Missing);
         let mut evaluator = AssignmentAttributeWriteEvaluator {

@@ -11751,8 +11751,15 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 );
                 error.fallback_member(db)
             });
-        let fallback_place = member_lookup
-            .member(db)
+        let member = crate::types::blender::on_load(
+            db,
+            env,
+            self.program_file(),
+            attribute,
+            value_type,
+            member_lookup.member(db),
+        );
+        let fallback_place = member
             .map_type(|ty| self.narrow_source_place(place_expr.as_ref(), ty, &constraint_keys));
 
         // An augmented assignment also loads its target, but its write validation reports this
