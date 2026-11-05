@@ -5,7 +5,9 @@
 //! into it through one-line hooks.
 
 mod addon;
+mod lints;
 mod module_dunders;
 
 pub(crate) use addon::addon_of_file;
+pub(crate) use lints::{addon_diagnostics, register_lints};
 pub(crate) use module_dunders::package_type;
