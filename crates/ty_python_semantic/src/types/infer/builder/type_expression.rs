@@ -11,6 +11,7 @@ use ruff_text_size::{Ranged, TextRange};
 
 use super::{DeferredExpressionState, InferenceRegion, TypeInferenceBuilder};
 use crate::types::call::CallArguments;
+use crate::types::dedicated::blender;
 use crate::types::diagnostic::{
     self, CYCLIC_TYPE_ALIAS_DEFINITION, EXPERIMENTAL_SYNTAX, INVALID_INIT_TYPE_VARIABLE,
     INVALID_TYPE_FORM, NOT_SUBSCRIPTABLE, UNBOUND_TYPE_VARIABLE, UNSUPPORTED_OPERATOR,
@@ -1175,8 +1176,12 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
             }
 
             ast::Expr::Call(call_expr) => {
-                if !self.in_string_annotation() {
-                    self.infer_call_expression(call_expr, TypeContext::default());
+                if !self.in_string_annotation() || blender::may_be_property_call(call_expr) {
+                    let callee = self.infer_callee(&call_expr.func);
+                    self.infer_call_expression_impl(call_expr, callee, TypeContext::default());
+                    if let Some(ty) = blender::annotation_value_type(self.db(), self.program_environment(), callee, call_expr, &|e| self.try_expression_type(e)) {
+                        return ty;
+                    }
                 }
                 self.report_invalid_type_expression(
                     expression,

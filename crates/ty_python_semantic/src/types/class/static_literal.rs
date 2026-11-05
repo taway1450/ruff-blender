@@ -40,7 +40,7 @@ use crate::{
             typed_dict::{TypedDictFields, synthesize_typed_dict_method, typed_dict_class_member},
         },
         context::InferContext,
-        dedicated::{django, pydantic},
+        dedicated::{blender, django, pydantic},
         definition_expression_type, determine_self_class,
         diagnostic::INVALID_DATACLASS_OVERRIDE,
         enums::{enum_metadata, is_enum_class_by_inheritance, try_unwrap_nonmember_value},
@@ -1651,6 +1651,7 @@ impl<'db> StaticClassLiteral<'db> {
                 _ => ty,
             }
         });
+        if blender::hides_class_member(db, self, name, member.qualifiers()) { return Member::unbound(); }
 
         if self.has_own_slot_descriptor(db, name) {
             return Member::definitely_declared(self.own_slot_descriptor(
@@ -3047,6 +3048,7 @@ impl<'db> StaticClassLiteral<'db> {
                     if qualifiers.contains(TypeQualifiers::CLASS_VAR) {
                         declared = Place::Undefined;
                     }
+                    if blender::hides_instance_member(db, self, name, qualifiers) { return Member::unbound(); }
 
                     if qualifiers.contains(TypeQualifiers::INIT_VAR) {
                         // We ignore `InitVar` declarations on the class body, unless that attribute is overwritten
