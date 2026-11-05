@@ -4736,6 +4736,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ty_blender"
+version = "0.0.20"
+dependencies = [
+ "get-size2",
+ "ruff_db",
+ "ruff_memory_usage",
+ "ruff_python_ast",
+ "ruff_python_parser",
+ "ruff_text_size",
+ "salsa",
+ "toml 1.1.6+spec-1.1.0",
+]
+
+[[package]]
 name = "ty_combine"
 version = "0.0.20"
 dependencies = [
@@ -4981,6 +4995,7 @@ dependencies = [
  "test-case",
  "thiserror 2.0.21",
  "tracing",
+ "ty_blender",
  "ty_combine",
  "ty_module_resolver",
  "ty_python_core",

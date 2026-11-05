@@ -50,6 +50,7 @@ ruff_unicode_names2_generator = { version = "0.0.20", path = "crates/ruff_unicod
 ruff_workspace = { version = "0.0.20", path = "crates/ruff_workspace" }
 
 ty = { path = "crates/ty" }
+ty_blender = { version = "0.0.20", path = "crates/ty_blender" }
 ty_combine = { version = "0.0.20", path = "crates/ty_combine" }
 ty_completion_bench = { path = "crates/ty_completion_bench" }
 ty_completion_eval = { path = "crates/ty_completion_eval" }

@@ -1,0 +1,28 @@
+[package]
+name = "ty_blender"
+version = "0.0.20"
+description = "Facts about Blender add-ons for ty that need no types: discovery, manifests and bl_info"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+doctest = false
+
+[dependencies]
+ruff_db = { workspace = true }
+ruff_memory_usage = { workspace = true }
+ruff_python_ast = { workspace = true }
+ruff_python_parser = { workspace = true }
+ruff_text_size = { workspace = true }
+
+get-size2 = { workspace = true }
+salsa = { workspace = true }
+toml = { workspace = true }
+
+[lints]
+workspace = true
