@@ -55,7 +55,10 @@ use super::symbols::{bpy_types_bases, bpy_types_class_name, is_bpy_types_class};
 /// The root whose callbacks `class` has: the first `bpy.types` class in its method resolution
 /// order that has callbacks (`Node` for a `ShaderNode` subclass). `None` for a `bpy.types` class
 /// itself.
-fn callback_root<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> Option<&'db str> {
+pub(super) fn callback_root<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+) -> Option<&'db str> {
     if is_bpy_types_class(db, class) {
         return None;
     }
