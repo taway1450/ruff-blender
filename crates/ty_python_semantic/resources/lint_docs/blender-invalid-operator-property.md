@@ -1,14 +1,20 @@
 ## What it does
 
 Checks the properties of an operator or a macro for one that Blender refuses: a pointer to a
-data-block (`PointerProperty(type=Object)`), or a pointer or collection to a `PropertyGroup` that holds
-one, at any depth. It is reported on the property's name, or on the operator's class name when the
-property comes from a mixin that is not an operator.
+data-block (`PointerProperty(type=Object)`), or a pointer or collection to a `PropertyGroup` that
+holds one, at any depth. It is reported on the property's name, or on the operator's class name when
+the property comes from a mixin that is not an operator.
+
+It also checks where an operator's properties are named by a string: the `property` argument of
+`layout.operator_enum(...)` and `layout.operator_menu_enum(...)` must be an enum property of the
+operator, and the `("name", value)` pairs of a tool's `bl_keymap` items must name a property of the
+operator and give it a value it accepts. Blender only prints a warning for those, and the menu or
+the key-map item does not do what was meant.
 
 ## Why is this bad?
 
-An operator's properties cannot point to data-blocks. Blender prints a `ValueError` when it registers
-the operator, and registers it without that property **and every property after it**:
+An operator's properties cannot point to data-blocks. Blender prints a `ValueError` when it
+registers the operator, and registers it without that property **and every property after it**:
 `bpy.ops.my_addon.run(after=1)` then raises `TypeError`, and the properties are missing from
 `self.properties` and the operator's panel.
 
@@ -20,6 +26,7 @@ operator runs.
 ```py
 from bpy.props import IntProperty, PointerProperty
 from bpy.types import Object, Operator
+
 
 class MY_OT_run(Operator):
     bl_idname = "my.run"

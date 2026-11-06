@@ -58,6 +58,26 @@ impl OperatorIdname {
         Self::from_bl_idname(idname)
     }
 
+    /// The operator a string names in Blender's operator lookup (`WM_operatortype_find`), which
+    /// first converts it as `WM_operator_bl_idname` does: everything before the first `.` is
+    /// upper-cased and the `.` becomes `_OT_`, and a string without a `.` is taken as is. The
+    /// lookup then matches the `CATEGORY_OT_name` form exactly, so `"object.select_all"` and
+    /// `"OBJECT_OT_select_all"` name the same operator, and `"object_OT_select_all"` none.
+    pub fn from_lookup(idname: &str) -> Option<Self> {
+        let bl_form = match idname.split_once('.') {
+            Some((category, name)) => format!("{}_OT_{name}", category.to_ascii_uppercase()),
+            None => idname.to_string(),
+        };
+        let (category, name) = bl_form.split_once("_OT_")?;
+        if category.is_empty() || name.is_empty() || category != category.to_ascii_uppercase() {
+            return None;
+        }
+        Some(OperatorIdname {
+            category: category.to_ascii_lowercase(),
+            name: name.to_string(),
+        })
+    }
+
     /// The Python form, `category.name`, what `idname_py()` returns.
     pub fn py_form(&self) -> String {
         format!("{}.{}", self.category, self.name)
@@ -84,5 +104,18 @@ mod tests {
         );
         assert!(OperatorIdname::from_bl_idname("OPCALL_MACRO_OT_step").is_none());
         assert!(OperatorIdname::from_either("not valid").is_none());
+    }
+
+    #[test]
+    fn lookup() {
+        let select_all = OperatorIdname::from_bl_idname("object.select_all");
+        assert_eq!(OperatorIdname::from_lookup("object.select_all"), select_all);
+        assert_eq!(OperatorIdname::from_lookup("Object.select_all"), select_all);
+        assert_eq!(
+            OperatorIdname::from_lookup("OBJECT_OT_select_all"),
+            select_all
+        );
+        assert!(OperatorIdname::from_lookup("object_OT_select_all").is_none());
+        assert!(OperatorIdname::from_lookup("select_all").is_none());
     }
 }
