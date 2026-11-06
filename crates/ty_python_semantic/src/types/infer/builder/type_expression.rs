@@ -296,6 +296,9 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
         definition: Option<Definition<'db>>,
         annotation: &ast::Expr,
     ) -> Type<'db> {
+        if let Some(ty) = self.blender_reference_type_expression(ty, annotation) {
+            return ty;
+        }
         let db = self.db();
         let env = self.program_environment();
         match self.legacy_type_alias_reference(ty, definition, annotation) {
@@ -1499,6 +1502,9 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
         value_ty: Type<'db>,
         definition: Option<Definition<'db>>,
     ) -> Type<'db> {
+        if let Some(ty) = self.blender_subscript_type_expression(subscript, value_ty) {
+            return ty;
+        }
         let db = self.db();
         let alias_reference =
             self.legacy_type_alias_reference(value_ty, definition, &subscript.value);

@@ -27,7 +27,7 @@ use crate::{Db, ProgramEnvironment};
 
 /// What a declaration says about an option that decides the value type: it is not written, it is
 /// written with a value the checker reads, or it is written with a value the checker cannot read.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
 pub(super) enum Known<T> {
     Absent,
     Value(T),
@@ -35,23 +35,13 @@ pub(super) enum Known<T> {
 }
 
 impl<T> Known<T> {
-    /// Read the option `expr`, which `read` turns into a value or `None` when it can't. When the
-    /// call unpacks a mapping the checker can't read (`FloatVectorProperty(**SETTINGS)`), an option
-    /// that isn't written out may come from it, so it is unknown rather than absent.
-    pub(super) fn read(
-        expr: Option<&Expr>,
-        unpacks_mapping: bool,
-        read: impl FnOnce(&Expr) -> Option<T>,
-    ) -> Self {
-        match expr {
-            None if unpacks_mapping => Known::Unknown,
-            None => Known::Absent,
-            Some(expr) => read(expr).map_or(Known::Unknown, Known::Value),
-        }
+    /// The value that `read` gives, or unknown when it gives none.
+    pub(super) fn from_read(value: Option<T>) -> Self {
+        value.map_or(Known::Unknown, Known::Value)
     }
 
     /// The value, `default` when the option is absent, or `None` when it is unreadable.
-    fn or_default(self, default: T) -> Option<T> {
+    pub(super) fn or_default(self, default: T) -> Option<T> {
         match self {
             Known::Absent => Some(default),
             Known::Value(value) => Some(value),

@@ -9,9 +9,9 @@
 use ty_module_resolver::file_to_module;
 use ty_python_core::ProgramFile;
 
-use crate::Db;
 use crate::types::class_base::ClassBase;
 use crate::types::{StaticClassLiteral, Type};
+use crate::{Db, ProgramEnvironment};
 
 /// The name of the module `file` is, when it is a `bpy` module of Blender's stubs.
 #[salsa::tracked(returns(as_deref), heap_size=ruff_memory_usage::heap_size)]
@@ -61,4 +61,24 @@ pub(super) fn bpy_types_bases<'db>(
         }
         _ => None,
     })
+}
+
+/// Whether `ty` is an instance of `bpy.props._PropertyDeferred`, what the stubs say every
+/// `bpy.props` function returns.
+pub(super) fn is_property_deferred<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    ty: Type<'db>,
+) -> bool {
+    let Type::NominalInstance(instance) = ty else {
+        return false;
+    };
+    instance
+        .class(db, env)
+        .class_literal(db)
+        .as_static()
+        .is_some_and(|class| {
+            class.name(db).as_str() == "_PropertyDeferred"
+                && blender_module_name(db, class.program_file(db)) == Some("bpy.props")
+        })
 }

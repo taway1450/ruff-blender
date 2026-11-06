@@ -30,8 +30,8 @@ use crate::types::{
 };
 use crate::{Db, ProgramEnvironment};
 
+use super::evaluate::{PropertyValue, property_value};
 use super::index::{RegisteredProperty, registered_properties};
-use super::properties::{PropertyDeclaration, property_declaration};
 use super::symbols::bpy_types_bases;
 
 /// The property that gives instances of `class` the attribute `name` in `file`.
@@ -46,7 +46,7 @@ fn instance_property<'db>(
     file: ProgramFile<'db>,
     class: StaticClassLiteral<'db>,
     name: &str,
-) -> Option<&'db PropertyDeclaration<'db>> {
+) -> Option<&'db PropertyValue<'db>> {
     let registered = registered_properties(db, file);
     let registered = registered.iter().any(|property| property.name == name);
     class.iter_mro(db, None).find_map(|base| {
@@ -60,7 +60,7 @@ fn instance_property<'db>(
         registered
             .then(|| registered_on(db, file, base, name))
             .flatten()
-            .map(|property| Some(&property.declaration))
+            .map(|property| Some(&property.value))
     })?
 }
 
@@ -115,13 +115,13 @@ fn annotated_property<'db>(
     db: &'db dyn Db,
     class: StaticClassLiteral<'db>,
     name: &str,
-) -> Option<&'db PropertyDeclaration<'db>> {
+) -> Option<&'db PropertyValue<'db>> {
     let scope = class.body_scope(db);
     let symbol = place_table(db, scope).symbol_id(name)?;
     use_def_map(db, scope)
         .end_of_scope_symbol_declarations(symbol)
         .find_map(|declaration| match declaration.declaration {
-            DefinitionState::Defined(definition) => property_declaration(db, definition).as_ref(),
+            DefinitionState::Defined(definition) => property_value(db, definition).as_ref(),
             DefinitionState::Undefined | DefinitionState::Deleted => None,
         })
 }
@@ -298,7 +298,7 @@ pub(crate) fn exempts_attribute_override<'db>(
     name: &str,
     definition: Definition<'db>,
 ) -> bool {
-    property_declaration(db, definition).is_some()
+    property_value(db, definition).is_some()
         || superclass
             .class_literal(db)
             .as_static()
