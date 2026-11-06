@@ -19,7 +19,7 @@ use ty_python_core::{place_table, use_def_map};
 use crate::place::{Definedness, Place, PlaceAndQualifiers};
 use crate::types::attribute_write::{
     AttributeWriteRequirement, ClassAttributeWriteMember, ExplicitAttributeWriteRequirement,
-    InstanceAttributeWriteMember,
+    FallbackAttributeWriteRequirement, InstanceAttributeWriteMember,
 };
 use crate::types::context::InferContext;
 use crate::types::diagnostic::INVALID_ASSIGNMENT;
@@ -199,6 +199,23 @@ fn instance_value_type<'db>(
     }
 }
 
+/// What a write to the attribute `name` of the instance `receiver` in `file` accepts, when a
+/// property of either origin gives it the attribute. A vector property accepts more than its value
+/// type: `s.location = (0.0, 0.0, 1.0)` where `s.location` is a `Vector`.
+fn instance_write_type<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    file: ProgramFile<'db>,
+    receiver: Type<'db>,
+    name: &str,
+) -> Option<Type<'db>> {
+    let Type::NominalInstance(instance) = receiver else {
+        return None;
+    };
+    let class = instance.class(db, env).class_literal(db).as_static()?;
+    Some(instance_property(db, file, class, name)?.write_type(db, env))
+}
+
 /// Whether writing the attribute `name` of `receiver` in `file` hits a read-only property on any
 /// arm of the receiver: every arm of a union, element of an intersection and bound or constraint
 /// of a type variable is written to.
@@ -325,9 +342,10 @@ pub(crate) fn on_load<'db>(
 /// The write requirement of `object_ty.attribute = ...` in `file`, given the one ty computed.
 ///
 /// Where ty finds no declared member, a Registered property in the file's add-on decides: an
-/// instance write must be assignable to the value type, and a write to the class object (the
-/// registration itself) is unconstrained. Read-only properties are rejected afterwards by
-/// [`check_property_write`].
+/// instance write must be assignable to the property's write type, and a write to the class object
+/// (the registration itself) is unconstrained. Where ty finds the instance attribute that an
+/// Annotated property declares, which has the value type, the write type replaces it. The two
+/// differ only for a vector property. Read-only properties are rejected afterwards by [`check_property_write`].
 pub(in crate::types) fn on_store<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
@@ -340,7 +358,9 @@ pub(in crate::types) fn on_store<'db>(
             object_ty,
             receiver,
             member: InstanceAttributeWriteMember::SetAttr,
-        } if let Some(ty) = instance_value_type(db, env, file, object_ty, attribute) => {
+        } if let Some(ty) = instance_write_type(db, env, file, object_ty, attribute)
+            .or_else(|| instance_value_type(db, env, file, object_ty, attribute)) =>
+        {
             AttributeWriteRequirement::Instance {
                 object_ty,
                 receiver,
@@ -351,6 +371,31 @@ pub(in crate::types) fn on_store<'db>(
                     },
                     fallback: None,
                 },
+            }
+        }
+        // `count: IntProperty()` without a value declares an instance attribute, not a class one.
+        AttributeWriteRequirement::Instance {
+            object_ty,
+            receiver,
+            member:
+                InstanceAttributeWriteMember::Instance(
+                    FallbackAttributeWriteRequirement::AssignableTo {
+                        qualifiers,
+                        possibly_missing,
+                        ..
+                    },
+                ),
+        } if let Some(ty) = instance_write_type(db, env, file, object_ty, attribute) => {
+            AttributeWriteRequirement::Instance {
+                object_ty,
+                receiver,
+                member: InstanceAttributeWriteMember::Instance(
+                    FallbackAttributeWriteRequirement::AssignableTo {
+                        ty,
+                        qualifiers,
+                        possibly_missing,
+                    },
+                ),
             }
         }
         AttributeWriteRequirement::Class {
