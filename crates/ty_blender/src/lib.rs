@@ -8,6 +8,7 @@
 //! type-aware glue lives in `ty_python_semantic`'s `types/dedicated/blender/`.
 
 mod callbacks;
+mod context;
 mod discovery;
 mod files;
 mod metadata;
@@ -21,6 +22,7 @@ pub use callbacks::{
     CALLBACKS, Callback, CallbackKind, CallbackShape, MethodKind, PYTHON_BASE_NAMES, callback_of,
     callbacks_of, is_callback_name, is_callback_root, problem, python_base_names,
 };
+pub use context::{ContextGuarantee, context_guarantee, runs_in_editor};
 pub use discovery::{Addon, AddonKind, addon_for_path};
 pub use files::addon_source_files;
 pub use metadata::{MANIFEST_FILE, Manifest, REQUIRED_MANIFEST_KEYS, manifest};
