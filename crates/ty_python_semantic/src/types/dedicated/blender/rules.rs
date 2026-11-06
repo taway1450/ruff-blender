@@ -3,8 +3,10 @@
 //!
 //! - `blender-invalid-property`: a `bpy.props` call that Blender rejects at registration
 //!   (`EnumProperty(items=AB, default="C")`, `IntProperty(set=...)` without `get=`, ...). The checks
-//!   that need no owner run at every call where it is written, module constants included, so a
-//!   broken shared declaration is reported once, where it is defined. The data-block check needs the
+//!   that need no owner run at every call where it is written (module constants, lambdas,
+//!   comprehensions and annotations outside a class body included), so a broken shared declaration
+//!   is reported once, where it is defined. The old `x = IntProperty()` form in a class body is the
+//!   exception: it only gets `blender-legacy-property`. The data-block check needs the
 //!   owner and runs only on direct annotations and registrations.
 //! - `blender-unsupported-property-host`: an annotated property in the body of an Ignored host (a
 //!   Panel), which creates no property.
@@ -42,10 +44,10 @@ use super::lints::{
 };
 use super::member::is_ignored_host;
 use super::properties::{
-    EnumItems, OptionReader, PointerTarget, PropertyDeclaration, PropertyKind, StaticItems,
+    EnumItems, Known, OptionReader, PointerTarget, PropertyDeclaration, PropertyKind, StaticItems,
 };
 use super::symbols::bpy_types_bases;
-use super::vector::{Known, int_literal, int_type, read_dimensions, valid_size};
+use super::vector::{int_literal, int_type, read_dimensions, valid_size};
 
 /// Report the property rules of the file `context` checks, whose syntax tree is `module`.
 pub(super) fn check_properties(context: &InferContext<'_, '_>, module: &ParsedModuleRef) {
@@ -117,10 +119,56 @@ impl<'db> Checker<'_, 'db, '_> {
         class: Option<StaticClassLiteral<'db>>,
         body: &[ast::Stmt],
     ) {
+        self.in_scope(scope, class, |checker| checker.visit_body(body));
+    }
+
+    /// Run `visit` with `scope` (and `class`) as the current scope.
+    fn in_scope(
+        &mut self,
+        scope: ScopeId<'db>,
+        class: Option<StaticClassLiteral<'db>>,
+        visit: impl FnOnce(&mut Self),
+    ) {
         let outer = (self.scope, self.class);
         (self.scope, self.class) = (scope, class);
-        self.visit_body(body);
+        visit(self);
         (self.scope, self.class) = outer;
+    }
+
+    /// The scope that `node` (a class, function, lambda or comprehension of this file) opens.
+    fn node_scope(&self, node: NodeWithScopeRef<'_>) -> ScopeId<'db> {
+        self.index
+            .node_scope(node)
+            .to_scope_id(self.db(), self.context.program_file())
+    }
+
+    /// A comprehension (`node`), whose first iterable belongs to the enclosing scope and everything
+    /// else, `elements` included, to its own: `[EnumProperty(...) for _ in range(2)]`.
+    fn visit_comprehension(
+        &mut self,
+        node: NodeWithScopeRef<'_>,
+        generators: &[ast::Comprehension],
+        elements: &[&Expr],
+    ) {
+        let Some((first, rest)) = generators.split_first() else {
+            return;
+        };
+        self.visit_expr(&first.iter);
+        let scope = self.node_scope(node);
+        self.in_scope(scope, None, |checker| {
+            for condition in &first.ifs {
+                checker.visit_expr(condition);
+            }
+            for generator in rest {
+                checker.visit_expr(&generator.iter);
+                for condition in &generator.ifs {
+                    checker.visit_expr(condition);
+                }
+            }
+            for element in elements {
+                checker.visit_expr(element);
+            }
+        });
     }
 
     /// Whether `call`, in the current scope, calls one of the `bpy.props` functions.
@@ -135,23 +183,49 @@ impl<'db> Checker<'_, 'db, '_> {
     /// Check a `bpy.props` call in the current scope. `data_block_owner` names the owner when it
     /// cannot hold data-block pointers.
     fn check_call(&self, call: &ast::ExprCall, data_block_owner: Option<&str>) {
-        let db = self.db();
-        let inference = infer_complete_scope_types(db, self.scope);
+        let inference = infer_complete_scope_types(self.db(), self.scope);
         let argument_type = |expression: &Expr| {
             inference
                 .try_expression_type(expression)
                 .unwrap_or_else(Type::unknown)
         };
+        self.check_call_with(call, data_block_owner, &argument_type);
+    }
+
+    /// Check a `bpy.props` call in the current scope, whose parts have the types `argument_type`
+    /// gives.
+    fn check_call_with(
+        &self,
+        call: &ast::ExprCall,
+        data_block_owner: Option<&str>,
+        argument_type: &dyn Fn(&Expr) -> Type<'db>,
+    ) {
         let reader = OptionReader {
-            db,
+            db: self.db(),
             scope: self.scope,
-            argument_type: &argument_type,
+            argument_type,
         };
         if let Some(problems) =
             property_problems(&reader, argument_type(&call.func), call, data_block_owner)
         {
             self.report_invalid(problems);
         }
+    }
+
+    /// An annotation outside a class body that is a call: `SHARED: EnumProperty(...)`. Blender
+    /// never registers it, but the owner-free checks run wherever a call is written.
+    fn check_annotation(&self, assign: &ast::StmtAnnAssign) {
+        let Expr::Call(call) = &*assign.annotation else {
+            return;
+        };
+        let Some(definition) = self.index.try_definition(assign) else {
+            return;
+        };
+        let (db, scope) = (self.db(), self.scope);
+        let argument_type = |expression: &Expr| {
+            definition_expression_type_in_scope(db, definition, expression, scope)
+        };
+        self.check_call_with(call, None, &argument_type);
     }
 
     /// An annotated member of a class body: `value: IntProperty()`.
@@ -192,10 +266,7 @@ impl<'db> Checker<'_, 'db, '_> {
             scope,
             argument_type: &argument_type,
         };
-        let owner = class.name(db).as_str();
-        let data_block_owner = bpy_types_bases(db, class)
-            .any(|base| base == "AddonPreferences")
-            .then_some(owner);
+        let data_block_owner = forbids_data_blocks(db, class).then(|| class.name(db).as_str());
         let problems = with_member_annotation(db, definition, self.module, |annotation, quoted| {
             let Expr::Call(call) = annotation else {
                 return None;
@@ -278,17 +349,10 @@ impl<'db> Checker<'_, 'db, '_> {
             self.visit_expr(value);
             return;
         };
-        let forbids_data_blocks = bpy_types_bases(db, registration.owner).any(|base| {
-            matches!(
-                base,
-                "OperatorProperties"
-                    | "GizmoProperties"
-                    | "GizmoGroupProperties"
-                    | "KeyConfigPreferences"
-                    | "IDPropertyWrapPtr"
-            )
-        });
-        self.check_call(call, forbids_data_blocks.then_some(owner));
+        self.check_call(
+            call,
+            forbids_data_blocks(db, registration.owner).then_some(owner),
+        );
         walk_expr(self, value);
     }
 
@@ -309,27 +373,20 @@ impl<'db> Checker<'_, 'db, '_> {
 
 impl<'ast> Visitor<'ast> for Checker<'_, '_, '_> {
     fn visit_stmt(&mut self, statement: &'ast ast::Stmt) {
-        let db = self.db();
-        let file = self.context.program_file();
         match statement {
             ast::Stmt::ClassDef(class_def) => {
-                let scope = self
-                    .index
-                    .node_scope(NodeWithScopeRef::Class(class_def))
-                    .to_scope_id(db, file);
-                let class = nearest_enclosing_class(db, self.index, scope);
+                let scope = self.node_scope(NodeWithScopeRef::Class(class_def));
+                let class = nearest_enclosing_class(self.db(), self.index, scope);
                 self.visit_scope(scope, class, &class_def.body);
             }
             ast::Stmt::FunctionDef(function) => {
-                let scope = self
-                    .index
-                    .node_scope(NodeWithScopeRef::Function(function))
-                    .to_scope_id(db, file);
+                let scope = self.node_scope(NodeWithScopeRef::Function(function));
                 self.visit_scope(scope, None, &function.body);
             }
             ast::Stmt::AnnAssign(assign) => {
-                if let Some(class) = self.class {
-                    self.check_member(class, assign);
+                match self.class {
+                    Some(class) => self.check_member(class, assign),
+                    None => self.check_annotation(assign),
                 }
                 if let Some(value) = &assign.value {
                     self.visit_expr(value);
@@ -368,12 +425,46 @@ impl<'ast> Visitor<'ast> for Checker<'_, '_, '_> {
 
     fn visit_expr(&mut self, expression: &'ast Expr) {
         match expression {
-            // Their own scopes; Blender's declarations are not written there.
-            Expr::Lambda(_)
-            | Expr::ListComp(_)
-            | Expr::SetComp(_)
-            | Expr::DictComp(_)
-            | Expr::Generator(_) => {}
+            // Their own scopes: `lambda: IntProperty(...)`, `[IntProperty(...) for _ in ...]`.
+            Expr::Lambda(lambda) => {
+                // The defaults belong to the enclosing scope.
+                for parameter in lambda
+                    .parameters
+                    .iter()
+                    .flat_map(|parameters| parameters.iter_non_variadic_params())
+                {
+                    if let Some(default) = parameter.default() {
+                        self.visit_expr(default);
+                    }
+                }
+                let scope = self.node_scope(NodeWithScopeRef::Lambda(lambda));
+                self.in_scope(scope, None, |checker| checker.visit_expr(&lambda.body));
+            }
+            Expr::ListComp(comprehension) => self.visit_comprehension(
+                NodeWithScopeRef::ListComprehension(comprehension),
+                &comprehension.generators,
+                &[&comprehension.elt],
+            ),
+            Expr::SetComp(comprehension) => self.visit_comprehension(
+                NodeWithScopeRef::SetComprehension(comprehension),
+                &comprehension.generators,
+                &[&comprehension.elt],
+            ),
+            Expr::Generator(generator) => self.visit_comprehension(
+                NodeWithScopeRef::GeneratorExpression(generator),
+                &generator.generators,
+                &[&generator.elt],
+            ),
+            Expr::DictComp(comprehension) => self.visit_comprehension(
+                NodeWithScopeRef::DictComprehension(comprehension),
+                &comprehension.generators,
+                &comprehension
+                    .key
+                    .as_deref()
+                    .into_iter()
+                    .chain([&*comprehension.value])
+                    .collect::<Vec<_>>(),
+            ),
             Expr::Call(call) => {
                 self.check_call(call, None);
                 walk_expr(self, expression);
@@ -381,6 +472,30 @@ impl<'ast> Visitor<'ast> for Checker<'_, '_, '_> {
             expression => walk_expr(self, expression),
         }
     }
+}
+
+/// Whether Blender rejects a pointer to a data-block (an ID) among the properties of `class`, as an
+/// annotation or as a Registered property.
+///
+/// These are the structs Blender flags `STRUCT_NO_DATABLOCK_IDPROPERTIES`, and the Property hosts
+/// whose properties are stored in one of them: an Operator's and a Macro's in `OperatorProperties`,
+/// a Gizmo's in `GizmoProperties`.
+fn forbids_data_blocks<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool {
+    const OWNERS: [&str; 12] = [
+        "AddonPreferences",
+        "AssetMetaData",
+        "Gizmo",
+        "GizmoGroupProperties",
+        "GizmoProperties",
+        "IDPropertyWrapPtr",
+        "KeyConfigPreferences",
+        "Macro",
+        "Operator",
+        "OperatorProperties",
+        "UIList",
+        "UndoStep",
+    ];
+    bpy_types_bases(db, class).any(|base| OWNERS.contains(&base))
 }
 
 /// The problem with a property named `_x`.

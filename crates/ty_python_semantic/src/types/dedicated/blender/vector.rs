@@ -25,30 +25,7 @@ use crate::place::imported_symbol;
 use crate::types::{KnownClass, KnownUnion, StaticClassLiteral, Type, UnionType};
 use crate::{Db, ProgramEnvironment};
 
-/// What a declaration says about an option that decides the value type: it is not written, it is
-/// written with a value the checker reads, or it is written with a value the checker cannot read.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
-pub(super) enum Known<T> {
-    Absent,
-    Value(T),
-    Unknown,
-}
-
-impl<T> Known<T> {
-    /// The value that `read` gives, or unknown when it gives none.
-    pub(super) fn from_read(value: Option<T>) -> Self {
-        value.map_or(Known::Unknown, Known::Value)
-    }
-
-    /// The value, `default` when the option is absent, or `None` when it is unreadable.
-    pub(super) fn or_default(self, default: T) -> Option<T> {
-        match self {
-            Known::Absent => Some(default),
-            Known::Value(value) => Some(value),
-            Known::Unknown => None,
-        }
-    }
-}
+use super::properties::Known;
 
 /// The scalar type an Int, Float or Bool vector holds.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize)]
@@ -90,9 +67,9 @@ impl MathClass {
         }
     }
 
-    /// An instance of the class, or `Unknown` when the `mathutils` stubs don't define it.
+    /// An instance of the class, or `Any` when the `mathutils` stubs don't define it.
     fn to_instance<'db>(self, db: &'db dyn Db, env: &ProgramEnvironment<'db>) -> Type<'db> {
-        module_class(db, env, "mathutils", self.name()).map_or_else(Type::unknown, |class| {
+        module_class(db, env, "mathutils", self.name()).map_or_else(Type::any, |class| {
             Type::instance(db, env, class.default_specialization(db))
         })
     }
@@ -157,7 +134,7 @@ impl VectorShape {
         }
         let array = module_class(db, env, "bpy.types", "bpy_prop_array");
         size.iter().fold(self.element.to_type(db, env), |item, _| {
-            array.map_or_else(Type::unknown, |array| {
+            array.map_or_else(Type::any, |array| {
                 // Only a generic stub class can say what the array holds; a non-generic one is
                 // used as it is.
                 let array = array.apply_specialization(db, |generic_context| {

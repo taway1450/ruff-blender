@@ -1,7 +1,7 @@
 //! The Property evaluator: which Property declarations an expression evaluates to.
 //!
-//! Blender evaluates a class annotation and only needs the value to be a deferred property, so an
-//! add-on can share declarations in many ways:
+//! Blender evaluates a class annotation and only needs its value to be a `_PropertyDeferred` value,
+//! so an add-on can share Property declarations in many ways:
 //!
 //! ```python
 //! COMMON = IntProperty(min=0)
@@ -61,8 +61,8 @@ use super::symbols::{bpy_types_bases, is_property_deferred};
 pub(super) enum PropertyValue<'db> {
     /// One of these declarations, such as the two returns of a wrapper.
     Declarations(Box<[PropertyDeclaration<'db>]>),
-    /// A deferred property whose function or options the checker cannot read. It is still a
-    /// property, of any type.
+    /// A `_PropertyDeferred` value whose function or options the checker cannot read. It is still
+    /// a property, of any type.
     Opaque,
 }
 
@@ -315,7 +315,8 @@ fn constant_value<'db>(db: &'db dyn Db, definition: Definition<'db>) -> Option<C
     let argument_type =
         |expression: &Expr| definition_expression_type_in_scope(db, definition, expression, scope);
     let evaluator = Evaluator::new(db, scope, &argument_type);
-    // An element that ty types as a deferred property is one, even if the checker can't tell which.
+    // An element that ty types as `_PropertyDeferred` is a Property declaration, even if the
+    // checker can't tell which.
     let element = |element: &Expr| {
         evaluator.evaluate(element).or_else(|| {
             is_property_deferred(db, &env, argument_type(element)).then_some(PropertyValue::Opaque)
@@ -371,7 +372,7 @@ struct WrapperTemplate<'db> {
     kwargs: bool,
     /// One template per `return`.
     returns: Box<[DeclarationTemplate<'db>]>,
-    /// Some `return` gives a deferred property the checker cannot read.
+    /// Some `return` gives a `_PropertyDeferred` value the checker cannot read.
     opaque: bool,
 }
 
@@ -528,7 +529,7 @@ pub(crate) fn is_opaque_call<'db>(
 }
 
 /// The value type of the annotation `reference` (a name, dotted name or subscript, in `scope`),
-/// when ty's value type of it, `ty`, says it is a deferred property: `x: COMMON`,
+/// when ty's value type of it, `ty`, is a `_PropertyDeferred` value: `x: COMMON`,
 /// `x: props.COMMON`, `x: PROPS["weight"]`. `Any` when the evaluator cannot tell which.
 pub(crate) fn reference_value_type<'db>(
     db: &'db dyn Db,
@@ -548,8 +549,8 @@ pub(crate) fn reference_value_type<'db>(
 }
 
 /// The value type of the annotation `subscript` in `scope`, when `container` (ty's value type of
-/// what it subscripts) holds deferred properties: `x: PROPS["weight"]`. `Any` when the evaluator
-/// cannot tell which.
+/// what it subscripts) holds `_PropertyDeferred` values: `x: PROPS["weight"]`. `Any` when the
+/// evaluator cannot tell which.
 pub(crate) fn subscript_value_type<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
@@ -563,7 +564,7 @@ pub(crate) fn subscript_value_type<'db>(
         .value_type(db, env)
 }
 
-/// Whether `ty` is a deferred property, or a union of deferred properties and dynamic types.
+/// Whether `ty` is a `_PropertyDeferred` value, or a union of them and dynamic types.
 fn is_property_value_type<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
@@ -583,8 +584,8 @@ fn is_property_value_type<'db>(
     }
 }
 
-/// Whether subscripting `container` gives deferred properties: a tuple of them, or a dict or list
-/// whose values are (`dict[str, _PropertyDeferred]`).
+/// Whether subscripting `container` gives `_PropertyDeferred` values: a tuple of them, or a dict or
+/// list whose values are (`dict[str, _PropertyDeferred]`).
 pub(crate) fn is_property_container<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
