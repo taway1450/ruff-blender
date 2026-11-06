@@ -236,7 +236,7 @@ value = unknown  # ty: ignore[unresolved-reference]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-duplicate-registration%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L93" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L102" target="_blank">View source</a>
 </small>
 
 
@@ -365,7 +365,7 @@ def unregister(): ...
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-idname%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L102" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L111" target="_blank">View source</a>
 </small>
 
 
@@ -442,6 +442,87 @@ def register_class(cls: type) -> None: ...
 def unregister_class(cls: type) -> None: ...
 ```
 
+## `blender-invalid-operator-property`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-operator-property%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L57" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the properties of an operator or a macro for one that Blender refuses: a pointer to a
+data-block (`PointerProperty(type=Object)`), or a pointer or collection to a `PropertyGroup` that holds
+one, at any depth. It is reported on the property's name, or on the operator's class name when the
+property comes from a mixin that is not an operator.
+
+**Why is this bad?**
+
+
+An operator's properties cannot point to data-blocks. Blender prints a `ValueError` when it registers
+the operator, and registers it without that property **and every property after it**:
+`bpy.ops.my_addon.run(after=1)` then raises `TypeError`, and the properties are missing from
+`self.properties` and the operator's panel.
+
+Store the name of the data-block instead (`StringProperty()`), and look it up in `bpy.data` when the
+operator runs.
+
+**Examples**
+
+
+```py
+from bpy.props import IntProperty, PointerProperty
+from bpy.types import Object, Operator
+
+class MY_OT_run(Operator):
+    bl_idname = "my.run"
+    bl_label = "Run"
+
+    before: IntProperty()
+    target: PointerProperty(type=Object)  # error: [blender-invalid-operator-property]
+    after: IntProperty()
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+def PointerProperty(*, type: type, **kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class ID(bpy_struct): ...
+class Object(ID): ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+    bl_label: str
+```
+
 ## `blender-invalid-property`
 
 <small>
@@ -466,8 +547,8 @@ that Blender rejects when it registers the property:
 - a `size=` outside 1 to 32, or with more than three dimensions;
 - `set=` without `get=`;
 - a property name that starts with `_`;
-- a pointer to a data-block (`PointerProperty(type=Object)`) on a class that cannot hold one, such as
-  `AddonPreferences`.
+- a pointer to a data-block (`PointerProperty(type=Object)`), or to a group that holds one, on a class that
+  cannot hold one, such as `AddonPreferences` (on an operator or a macro, this is [`blender-invalid-operator-property`](#blender-invalid-operator-property)).
 
 **Why is this bad?**
 
@@ -577,7 +658,7 @@ def register(context):  # error: [blender-invalid-register] "callable with no ar
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-legacy-property%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L66" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L75" target="_blank">View source</a>
 </small>
 
 
@@ -645,7 +726,7 @@ class PropertyGroup(bpy_struct): ...
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-register-order%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L84" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L93" target="_blank">View source</a>
 </small>
 
 
@@ -743,7 +824,7 @@ def unregister_class(cls: type) -> None: ...
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unreachable-registration%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L120" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L129" target="_blank">View source</a>
 </small>
 
 
@@ -827,7 +908,7 @@ def unregister_class(cls: type) -> None: ...
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unregister-mismatch%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L129" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L138" target="_blank">View source</a>
 </small>
 
 
@@ -923,7 +1004,7 @@ def unregister_class(cls: type) -> None: ...
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unregistered-class%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L111" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L120" target="_blank">View source</a>
 </small>
 
 
@@ -1008,7 +1089,7 @@ def unregister_class(cls: type) -> None: ...
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unsupported-property-host%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L57" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L66" target="_blank">View source</a>
 </small>
 
 
@@ -1081,7 +1162,7 @@ class Panel(bpy_struct): ...
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unsupported-property-target%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L75" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L84" target="_blank">View source</a>
 </small>
 
 

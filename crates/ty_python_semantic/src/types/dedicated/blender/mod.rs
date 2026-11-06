@@ -11,6 +11,7 @@
 //! - [`walk`]: the `register()` walk, what `register()` and `unregister()` do, in order;
 //! - [`index`]: the Add-on index, what an add-on's code does to Blender, gathered without inference;
 //! - [`member`]: the property behind an attribute of a Blender instance, of either origin;
+//! - [`operators`]: `bpy.ops.<category>.<name>` for an add-on's own operators;
 //! - [`callbacks`]: the `self` that a property's callbacks are called with;
 //! - [`vector`]: the value and write types of vector properties;
 //! - [`lints`]: the Blender lints and the per-file query that reports them;
@@ -26,6 +27,7 @@ mod index;
 mod lints;
 mod member;
 mod module_dunders;
+mod operators;
 mod properties;
 mod registration_checks;
 mod rules;

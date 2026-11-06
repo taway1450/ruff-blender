@@ -8,6 +8,9 @@
 //!   is reported once, where it is defined. The old `x = IntProperty()` form in a class body is the
 //!   exception: it only gets `blender-legacy-property`. The data-block check needs the
 //!   owner and runs only on direct annotations and registrations.
+//! - `blender-invalid-operator-property`: a pointer to data-blocks (or to a group that holds one) on an
+//!   Operator or a Macro, reported on the property name, or on the operator when a plain mixin
+//!   declares it. Blender drops that property and every property after it.
 //! - `blender-unsupported-property-host`: an annotated property in the body of an Ignored host (a
 //!   Panel), which creates no property.
 //! - `blender-legacy-property`: `x = IntProperty()` in the body of a class with a `bpy.types` base,
@@ -39,10 +42,13 @@ use crate::types::{StaticClassLiteral, Type, definition_expression_type_in_scope
 use super::evaluate::{property_value, with_member_annotation};
 use super::index::{RegisteredProperty, file_facts};
 use super::lints::{
-    BLENDER_INVALID_PROPERTY, BLENDER_LEGACY_PROPERTY, BLENDER_UNSUPPORTED_PROPERTY_HOST,
-    BLENDER_UNSUPPORTED_PROPERTY_TARGET,
+    BLENDER_INVALID_OPERATOR_PROPERTY, BLENDER_INVALID_PROPERTY, BLENDER_LEGACY_PROPERTY,
+    BLENDER_UNSUPPORTED_PROPERTY_HOST, BLENDER_UNSUPPORTED_PROPERTY_TARGET,
 };
 use super::member::is_ignored_host;
+use super::operators::{
+    class_properties, declaration_contains_data_blocks, is_operator_class, refused_property,
+};
 use super::properties::{
     EnumItems, Known, OptionReader, PointerTarget, PropertyDeclaration, PropertyKind, StaticItems,
 };
@@ -68,6 +74,8 @@ pub(super) fn check_properties(context: &InferContext<'_, '_>, module: &ParsedMo
 struct Problem {
     range: TextRange,
     message: String,
+    /// Whether it is a pointer to data-blocks on a class that cannot hold one.
+    data_block: bool,
 }
 
 impl Problem {
@@ -75,6 +83,7 @@ impl Problem {
         Problem {
             range: range.range(),
             message: message.into(),
+            data_block: false,
         }
     }
 }
@@ -102,14 +111,48 @@ impl<'db> Checker<'_, 'db, '_> {
         }
     }
 
-    /// Report problems of `blender-invalid-property`.
-    ///
-    /// When the registration cluster adds `blender-invalid-operator-property`, a declaration owned by
-    /// an Operator or a Macro is reported with that rule instead, so that each line gets one rule.
+    /// Report problems of `blender-invalid-property`. A pointer to data-blocks on an Operator or a
+    /// Macro is `blender-invalid-operator-property` instead, so that each line gets one rule.
     fn report_invalid(&self, problems: Vec<Problem>) {
+        let operator = self
+            .class
+            .is_some_and(|class| is_operator_class(self.db(), class));
         for problem in problems {
-            self.report(&BLENDER_INVALID_PROPERTY, problem);
+            let lint = if operator && problem.data_block {
+                &BLENDER_INVALID_OPERATOR_PROPERTY
+            } else {
+                &BLENDER_INVALID_PROPERTY
+            };
+            self.report(lint, problem);
         }
+    }
+
+    /// Report the operator `class` (whose name is at `name`) when Blender refuses a property that it
+    /// gets from a mixin that is not an operator: the mixin's own declaration is fine where it is
+    /// used by a `PropertyGroup`, so the operator is reported.
+    fn check_operator_mixins(&self, class: StaticClassLiteral<'db>, name: &ast::Identifier) {
+        let db = self.db();
+        if !is_operator_class(db, class) {
+            return;
+        }
+        let Some(position) = refused_property(db, class) else {
+            return;
+        };
+        let property = &class_properties(db, class)[position];
+        if property.owner == class || is_operator_class(db, property.owner) {
+            return;
+        }
+        self.report(
+            &BLENDER_INVALID_OPERATOR_PROPERTY,
+            Problem::new(
+                name,
+                format!(
+                    "`{}` from `{}` points to data-blocks, which an operator cannot hold; Blender drops it and every property after it",
+                    property.name,
+                    property.owner.name(db)
+                ),
+            ),
+        );
     }
 
     /// Visit `body` as the body of `scope`, the body of `class` when it is a class body.
@@ -281,7 +324,14 @@ impl<'db> Checker<'_, 'db, '_> {
             }
             Some(problems)
         });
-        self.report_invalid(problems.unwrap_or_default());
+        let mut problems = problems.unwrap_or_default();
+        // The operator rule names the property Blender drops, with every property after it.
+        if is_operator_class(db, class) {
+            for problem in problems.iter_mut().filter(|problem| problem.data_block) {
+                problem.range = target.range();
+            }
+        }
+        self.report_invalid(problems);
     }
 
     /// `x = IntProperty()` in the body of a class with a `bpy.types` base.
@@ -377,6 +427,9 @@ impl<'ast> Visitor<'ast> for Checker<'_, '_, '_> {
             ast::Stmt::ClassDef(class_def) => {
                 let scope = self.node_scope(NodeWithScopeRef::Class(class_def));
                 let class = nearest_enclosing_class(self.db(), self.index, scope);
+                if let Some(class) = class {
+                    self.check_operator_mixins(class, &class_def.name);
+                }
                 self.visit_scope(scope, class, &class_def.body);
             }
             ast::Stmt::FunctionDef(function) => {
@@ -539,18 +592,25 @@ fn property_problems<'db>(
         PropertyKind::BoolVector | PropertyKind::FloatVector | PropertyKind::IntVector => {
             vector_problems(reader, &declaration, call, &mut problems);
         }
-        PropertyKind::Pointer => {
+        PropertyKind::Pointer | PropertyKind::Collection => {
             if let Some(owner) = data_block_owner
-                && let Some((target, PointerTarget::Id)) = declaration.target_class(reader.db)
+                && let Some(target) = declaration_contains_data_blocks(reader.db, &declaration, 0)
             {
                 let range = keyword("type").map_or(call.range(), Ranged::range);
-                problems.push(Problem::new(
-                    range,
-                    format!(
+                let message = match declaration.target_class(reader.db) {
+                    Some((_, PointerTarget::Id)) => format!(
                         "`{owner}` cannot hold pointers to data-blocks such as `{}`",
                         target.name(reader.db)
                     ),
-                ));
+                    _ => format!(
+                        "`{owner}` cannot hold pointers to data-blocks, and `{}` holds one",
+                        target.name(reader.db)
+                    ),
+                };
+                problems.push(Problem {
+                    data_block: true,
+                    ..Problem::new(range, message)
+                });
             }
         }
         _ => {}

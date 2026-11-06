@@ -4,8 +4,8 @@
 //!
 //! - The add-on lints, `blender-invalid-register` and `blender-invalid-addon-metadata`, describe the
 //!   add-on as a whole, not one expression, and are reported on the add-on's root module.
-//! - The property rules (`blender-invalid-property` and the three warnings about properties Blender
-//!   ignores) are reported on every first-party file, by [`super::rules`].
+//! - The property rules (`blender-invalid-property`, `blender-invalid-operator-property` and the three
+//!   warnings about properties Blender ignores) are reported on every first-party file, by [`super::rules`].
 //! - The registration checks (`blender-unregistered-class` and five more) are reported on the file of the
 //!   add-on they are in, by [`super::registration_checks`].
 
@@ -49,6 +49,15 @@ declare_lint! {
     #[doc = include_str!("../../../../resources/lint_docs/blender-invalid-property.md")]
     pub(crate) static BLENDER_INVALID_PROPERTY = {
         summary: "detects a Blender property declaration that Blender rejects when it registers the property",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Error,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-invalid-operator-property.md")]
+    pub(crate) static BLENDER_INVALID_OPERATOR_PROPERTY = {
+        summary: "detects an operator property that Blender refuses, which drops it and every property after it",
         status: LintStatus::stable("0.0.97"),
         default_level: Level::Error,
     }
@@ -139,6 +148,7 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
     registry.register_lint(&BLENDER_INVALID_PROPERTY);
+    registry.register_lint(&BLENDER_INVALID_OPERATOR_PROPERTY);
     registry.register_lint(&BLENDER_UNSUPPORTED_PROPERTY_HOST);
     registry.register_lint(&BLENDER_LEGACY_PROPERTY);
     registry.register_lint(&BLENDER_UNSUPPORTED_PROPERTY_TARGET);

@@ -184,7 +184,7 @@ impl<'db> AddonInProgram<'db> {
     cycle_initial=|_, _, _| AddonIndex::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
-fn addon_index<'db>(db: &'db dyn Db, key: AddonInProgram<'db>) -> AddonIndex<'db> {
+pub(super) fn addon_index<'db>(db: &'db dyn Db, key: AddonInProgram<'db>) -> AddonIndex<'db> {
     let walk = register_walk(db, key);
     let mut registered_properties: Vec<RegisteredProperty<'db>> = Vec::new();
     let mut registered_classes: Vec<StaticClassLiteral<'db>> = Vec::new();

@@ -16,7 +16,10 @@ use crate::{Db, ProgramEnvironment};
 
 /// The name of the module `file` is, when it is a `bpy` or `bpy_extras` module of Blender's stubs.
 #[salsa::tracked(returns(as_deref), heap_size=ruff_memory_usage::heap_size)]
-fn blender_module_name<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Option<Box<str>> {
+pub(super) fn blender_module_name<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+) -> Option<Box<str>> {
     let module = file_to_module(db, file.resolver_file(db))?;
     if module.search_path(db)?.is_first_party() {
         return None;
