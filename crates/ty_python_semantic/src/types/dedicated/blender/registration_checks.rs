@@ -13,21 +13,24 @@ use ruff_db::files::File;
 use ruff_python_ast::name::Name;
 use ruff_text_size::TextRange;
 use rustc_hash::FxHashSet;
-use ty_blender::IdnameFamily;
+use ty_blender::{IdnameFamily, callbacks_of, python_base_names};
 use ty_python_core::definition::{Definition, DefinitionState};
 use ty_python_core::{place_table, use_def_map};
 
 use crate::Db;
-use crate::types::StaticClassLiteral;
+use crate::types::class_base::ClassBase;
+use crate::types::{KnownClass, StaticClassLiteral};
 
 use super::addon::is_first_party;
 use super::classes::{
-    class_attribute, class_string, definition_site, mro_classes, only_bases, own_binding,
+    class_attribute, class_string, definition_site, derives_from, mro_classes, only_bases,
+    own_binding,
 };
 use super::evaluate::{PropertyValue, property_value};
 use super::index::{AddonInProgram, file_facts};
+use super::overrides::callback_root;
 use super::properties::PointerTarget;
-use super::symbols::{bpy_types_bases, is_bpy_types_class};
+use super::symbols::{bpy_types_bases, bpy_types_class_name, is_bpy_types_class};
 use super::walk::{
     BranchPath, ClassEvent, Event, HookTarget, Site, Walk, register_walk, registration_ir,
     unregister_walk,
@@ -43,6 +46,8 @@ pub(super) enum Rule {
     UnreachableRegistration,
     UnregisterMismatch,
     PreferencesIdname,
+    RegisteredBase,
+    MissingCallback,
 }
 
 /// One registration or preferences mistake, at a place in one of the add-on's files.
@@ -76,6 +81,8 @@ pub(super) fn registration_findings<'db>(
     checks.register_order(register, &classes);
     checks.duplicates(register);
     checks.idnames(register, &classes);
+    checks.registered_bases(register);
+    checks.missing_callbacks(register, &classes);
     checks.unregister_mismatch(register, unregister);
     let mut seen = FxHashSet::default();
     checks
@@ -110,6 +117,22 @@ impl<'db> AddonClasses<'db> {
         }
         let bases = only_bases(db, classes.iter().map(|(class, _)| *class));
         AddonClasses { classes, bases }
+    }
+
+    /// The classes whose own shape is checked: those `register()` registers, and when the walk gave
+    /// up, every class that may be registered (all but the bases of others).
+    fn checked<'a>(
+        &'a self,
+        register: &Walk<'db>,
+    ) -> impl Iterator<Item = (StaticClassLiteral<'db>, Site)> + 'a {
+        let registered: FxHashSet<_> = registered_classes(register).collect();
+        let complete = register.is_complete();
+        self.classes
+            .iter()
+            .filter(move |(class, _)| {
+                registered.contains(class) || (!complete && !self.bases.contains(class))
+            })
+            .copied()
     }
 }
 
@@ -344,22 +367,16 @@ impl<'db> Checks<'db> {
     /// that may be registered.
     fn idnames(&mut self, register: &Walk<'db>, classes: &AddonClasses<'db>) {
         let db = self.db;
-        let registered: FxHashSet<_> = registered_classes(register).collect();
-        for (class, class_site) in &classes.classes {
-            let checked = registered.contains(class)
-                || (!register.is_complete() && !classes.bases.contains(class));
-            if !checked {
-                continue;
-            }
-            let Some(family) = idname_family(db, *class) else {
+        for (class, class_site) in classes.checked(register) {
+            let Some(family) = idname_family(db, class) else {
                 continue;
             };
             let name = class.name(db);
-            match (family, class_idname_binding(db, *class)) {
+            match (family, class_idname_binding(db, class)) {
                 (_, Idname::NotLiteral) => {}
                 (IdnameFamily::Operator, Idname::Missing) => self.report(
                     Rule::InvalidIdname,
-                    *class_site,
+                    class_site,
                     format!(
                         "`{name}` has no `bl_idname`; Blender refuses an operator without a `category.name` idname"
                     ),
@@ -368,7 +385,7 @@ impl<'db> Checks<'db> {
                     if let Some(problem) = family.problem(name) {
                         self.report(
                             Rule::InvalidIdname,
-                            *class_site,
+                            class_site,
                             format!(
                                 "`{name}` has no `bl_idname`, so its class name is its idname: {problem}"
                             ),
@@ -381,7 +398,7 @@ impl<'db> Checks<'db> {
                         let site = if self.files.contains(&site.file) {
                             site
                         } else {
-                            *class_site
+                            class_site
                         };
                         self.report(
                             Rule::InvalidIdname,
@@ -391,6 +408,92 @@ impl<'db> Checks<'db> {
                     }
                 }
             }
+        }
+    }
+
+    /// `blender-registered-base`: a registered class that derives from another registered class,
+    /// in either order, unless both are `PropertyGroup`s (they have no callbacks to lose) or they
+    /// are registered in different branches of an `if`. Blender detaches the base's Python class
+    /// when it registers the subclass after it, and warns about either order.
+    fn registered_bases(&mut self, register: &Walk<'db>) {
+        let db = self.db;
+        let registrations: Vec<&ClassEvent<'db>> = register
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                Event::RegisterClass(event) => Some(event),
+                _ => None,
+            })
+            .collect();
+        for subclass in &registrations {
+            if derives_from(db, subclass.class, &["PropertyGroup"]) {
+                continue;
+            }
+            let Some(base) = registrations.iter().find(|base| {
+                base.class != subclass.class
+                    && !base.path.is_exclusive_with(&subclass.path)
+                    && mro_classes(db, subclass.class).any(|class| class == base.class)
+            }) else {
+                continue;
+            };
+            let name = subclass.class.name(db);
+            let base_name = base.class.name(db);
+            self.report(
+                Rule::RegisteredBase,
+                definition_site(db, subclass.class.definition(db)),
+                format!(
+                    "`{name}` derives from `{base_name}`, which is registered too; Blender detaches `{base_name}` from its Python class, so its callbacks are no longer called. Derive both from an unregistered base or a mixin"
+                ),
+            );
+        }
+    }
+
+    /// `blender-missing-callback`: a callback Blender requires that no class of the add-on in the
+    /// method resolution order defines, on the classes `blender-invalid-idname` checks. A class
+    /// with a base ty cannot resolve may get the callback from it, and is not reported.
+    fn missing_callbacks(&mut self, register: &Walk<'db>, classes: &AddonClasses<'db>) {
+        let db = self.db;
+        for (class, site) in classes.checked(register) {
+            let Some(root) = callback_root(db, class) else {
+                continue;
+            };
+            if class.iter_mro(db, None).any(|base| {
+                matches!(
+                    base,
+                    ClassBase::Any | ClassBase::Dynamic(_) | ClassBase::Divergent(_)
+                )
+            }) {
+                continue;
+            }
+            let mro: Vec<_> = mro_classes(db, class).collect();
+            // Present when a class of the add-on or a mixin binds it, or when Blender's own Python
+            // base does (`Node.poll`).
+            let binds = |name: &str| {
+                mro.iter()
+                    .any(|base| match bpy_types_class_name(db, *base) {
+                        Some(base) => python_base_names(base).contains(&name),
+                        None => {
+                            !base.is_known(db, KnownClass::Object)
+                                && own_binding(db, *base, name).is_some()
+                        }
+                    })
+            };
+            let missing: Vec<String> = callbacks_of(root)
+                .filter(|callback| callback.required && !binds(callback.name))
+                .map(|callback| format!("`{}`", callback.name))
+                .collect();
+            if missing.is_empty() {
+                continue;
+            }
+            let name = class.name(db);
+            let missing = missing.join(", ");
+            self.report(
+                Rule::MissingCallback,
+                site,
+                format!(
+                    "`{name}` defines no {missing}; Blender refuses a `{root}` without it when it registers the class"
+                ),
+            );
         }
     }
 
