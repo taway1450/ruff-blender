@@ -24,6 +24,7 @@ use std::rc::Rc;
 
 use ruff_db::files::File;
 use ruff_db::parsed::{ParsedModuleRef, parsed_module};
+use ruff_python_ast::helpers::any_over_expr;
 use ruff_python_ast::name::Name;
 use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_text_size::{Ranged, TextRange, TextSize};
@@ -65,18 +66,72 @@ pub(super) enum BranchId {
     Dynamic(u32),
 }
 
-/// The branches an event depends on, outermost first: each with the arm the walk took.
+/// Some arms of a branch, by their position. Usually one arm: the arm the walk took. The code after
+/// a branch some of whose arms return runs only after the others:
+///
+/// ```python
+/// if early:
+///     register_class(A)
+///     return
+/// register_class(A)  # only when `early` is false: arm 1, the implicit `else`
+/// ```
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
+pub(super) struct Arms(u64);
+
+impl Arms {
+    const NONE: Arms = Arms(0);
+
+    /// The arm at `position`. Arms past the 64th share one bit, so they never exclude each other.
+    fn one(position: u8) -> Self {
+        Arms(1 << position.min(63))
+    }
+
+    /// Every arm of a branch with `count` arms.
+    fn all(count: usize) -> Self {
+        (0..count).fold(Arms::NONE, |arms, position| {
+            arms.with(Arms::one(u8::try_from(position).unwrap_or(u8::MAX)))
+        })
+    }
+
+    fn with(self, other: Arms) -> Self {
+        Arms(self.0 | other.0)
+    }
+
+    fn without(self, other: Arms) -> Self {
+        Arms(self.0 & !other.0)
+    }
+
+    fn is_disjoint(self, other: Arms) -> bool {
+        self.0 & other.0 == 0
+    }
+}
+
+/// The branches an event depends on, outermost first: each with the arms it is on. One branch may
+/// occur twice, and the event then needs both.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
-pub(super) struct BranchPath(Box<[(BranchId, u8)]>);
+pub(super) struct BranchPath(Box<[(BranchId, Arms)]>);
 
 impl BranchPath {
-    /// Whether two events cannot both happen: they took different arms of one branch.
+    fn new(steps: impl IntoIterator<Item = (BranchId, Arms)>) -> Self {
+        BranchPath(steps.into_iter().collect())
+    }
+
+    fn steps(&self) -> &[(BranchId, Arms)] {
+        &self.0
+    }
+
+    /// This path below the branches `outer`.
+    fn prefixed(&self, outer: &[(BranchId, Arms)]) -> BranchPath {
+        BranchPath::new(outer.iter().chain(self.0.iter()).copied())
+    }
+
+    /// Whether two events cannot both happen: they are on different arms of one branch.
     pub(super) fn is_exclusive_with(&self, other: &BranchPath) -> bool {
-        self.0.iter().any(|(id, arm)| {
+        self.0.iter().any(|(id, arms)| {
             other
                 .0
                 .iter()
-                .any(|(other_id, other_arm)| id == other_id && arm != other_arm)
+                .any(|(other_id, other_arms)| id == other_id && arms.is_disjoint(*other_arms))
         })
     }
 }
@@ -237,8 +292,9 @@ impl<'db> FileIr<'db> {
     }
 }
 
-/// The branches of a module-level statement: each `if` or `try` it is in, by its offset, with the arm.
-type StaticPath = Box<[(TextSize, u8)]>;
+/// The branches of a module-level statement: each `if`, `try` or `match` it is in, by its offset,
+/// with the arms.
+type StaticPath = Box<[(TextSize, Arms)]>;
 
 /// A function or method, at any depth.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
@@ -246,7 +302,7 @@ pub(super) struct FunctionIr<'db> {
     pub(super) definition: Definition<'db>,
     /// The function's name in its `def`.
     pub(super) name_range: TextRange,
-    parameters: Box<[Parameter<'db>]>,
+    parameters: Box<[ParameterIr<'db>]>,
     body: Body<'db>,
     /// Whether its own body calls `register_class`.
     registers: bool,
@@ -257,7 +313,7 @@ pub(super) struct FunctionIr<'db> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
-struct Parameter<'db> {
+struct ParameterIr<'db> {
     name: Name,
     kind: ParameterKind,
     default: Option<Val<'db>>,
@@ -282,8 +338,9 @@ struct GlobalName<'db> {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
 struct GlobalEntry<'db> {
     kind: EntryKind<'db>,
-    /// The module-level branches of the statement.
-    path: Box<[(TextSize, u8)]>,
+    /// The module-level branches of the statement, then the arms of later branches that do not
+    /// rebind the name, where the binding is still visible.
+    path: StaticPath,
     /// False for a mutation in a function body, whose place in the order is not known.
     exact: bool,
 }
@@ -345,7 +402,8 @@ enum Target {
     Other,
 }
 
-/// An expression, with its names resolved as far as the syntax allows.
+/// An expression, with its names resolved as far as the syntax allows: the walk evaluates it to a
+/// [`Value`] each time it runs the step.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
 enum Val<'db> {
     Module(ProgramFile<'db>),
@@ -353,12 +411,16 @@ enum Val<'db> {
     /// A first-party function.
     Function(Definition<'db>),
     Blender(BlenderFunction),
+    Builtin(Builtin),
     /// A function that discovers code at runtime (`importlib.import_module`, `getattr`).
     Discovery,
     /// A name bound by the walk: a parameter, loop variable or local assignment.
     Local(Name, TextRange),
     /// A module-level name of a file that assignments bind.
     Global(ProgramFile<'db>, Name, TextRange),
+    /// The name a module-level assignment binds, read in its own value (`classes = classes + (C,)`):
+    /// the bindings visible before it.
+    Prior(Box<[GlobalEntry<'db>]>),
     Str(Name),
     /// A tuple, list or set display.
     Display {
@@ -387,7 +449,7 @@ enum Val<'db> {
     Opaque(TextRange),
 }
 
-/// The functions of Blender and Python the walk understands.
+/// The functions of Blender the walk understands.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
 enum BlenderFunction {
     RegisterClass,
@@ -395,6 +457,11 @@ enum BlenderFunction {
     ClassesFactory,
     SubmoduleFactory,
     TimerRegister,
+}
+
+/// The builtins of Python the walk understands.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
+enum Builtin {
     Setattr,
     Delattr,
     Reversed,
@@ -424,6 +491,8 @@ pub(super) fn registration_ir<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> F
         statements: Vec::new(),
         assigned: Vec::new(),
         path: Vec::new(),
+        branch_arms: FxHashMap::default(),
+        prior: None,
         current: None,
     };
     let scope = global_scope(db, file);
@@ -457,7 +526,12 @@ struct IrBuilder<'db, 'm> {
     /// The module-level names that assignments bind.
     assigned: Vec<Name>,
     /// The module-level branches of the statement being built.
-    path: Vec<(TextSize, u8)>,
+    path: Vec<(TextSize, Arms)>,
+    /// How many arms each module-level branch has, by its offset.
+    branch_arms: FxHashMap<TextSize, usize>,
+    /// The module-level name whose assignment is being built, when its value reads it, with the
+    /// bindings visible before the assignment.
+    prior: Option<(Name, Box<[GlobalEntry<'db>]>)>,
     current: Option<FunctionFacts<'db>>,
 }
 
@@ -480,7 +554,7 @@ impl<'db> IrBuilder<'db, '_> {
         arm: u8,
     ) -> Body<'db> {
         if module_level {
-            self.path.push((offset, arm));
+            self.path.push((offset, Arms::one(arm)));
         }
         let body = self.body(statements, scope, module_level);
         if module_level {
@@ -565,10 +639,7 @@ impl<'db> IrBuilder<'db, '_> {
                 if !has_else {
                     arms.push(Box::default());
                 }
-                steps.push(Step::Branch {
-                    offset,
-                    arms: arms.into_boxed_slice(),
-                });
+                self.branch(offset, arms, module_level, steps);
             }
             Stmt::For(for_statement) => {
                 let iterable = self.expression(&for_statement.iter, scope);
@@ -597,10 +668,7 @@ impl<'db> IrBuilder<'db, '_> {
                 }
                 let arm = u8::try_from(arms.len()).unwrap_or(u8::MAX);
                 arms.push(self.arm(&try_statement.orelse, scope, module_level, offset, arm));
-                steps.push(Step::Branch {
-                    offset,
-                    arms: arms.into_boxed_slice(),
-                });
+                self.branch(offset, arms, module_level, steps);
                 steps.extend(self.body(&try_statement.finalbody, scope, module_level));
             }
             Stmt::With(with_statement) => {
@@ -616,10 +684,7 @@ impl<'db> IrBuilder<'db, '_> {
                 for (case, arm) in match_statement.cases.iter().zip(0u8..) {
                     arms.push(self.arm(&case.body, scope, module_level, offset, arm));
                 }
-                steps.push(Step::Branch {
-                    offset,
-                    arms: arms.into_boxed_slice(),
-                });
+                self.branch(offset, arms, module_level, steps);
             }
             Stmt::Return(return_statement) => {
                 let value = return_statement
@@ -684,6 +749,22 @@ impl<'db> IrBuilder<'db, '_> {
         }
     }
 
+    fn branch(
+        &mut self,
+        offset: TextSize,
+        arms: Vec<Body<'db>>,
+        module_level: bool,
+        steps: &mut Vec<Step<'db>>,
+    ) {
+        if module_level {
+            self.branch_arms.insert(offset, arms.len());
+        }
+        steps.push(Step::Branch {
+            offset,
+            arms: arms.into_boxed_slice(),
+        });
+    }
+
     /// The module `name`, when it is a first-party module.
     fn first_party_module(&self, name: &str) -> Option<ProgramFile<'db>> {
         module_by_name(self.db, self.file, name).filter(|module| is_first_party(self.db, *module))
@@ -718,7 +799,7 @@ impl<'db> IrBuilder<'db, '_> {
                     .default
                     .as_deref()
                     .map(|default| self.expression(default, parent_scope));
-                parameters.push(Parameter {
+                parameters.push(ParameterIr {
                     name: parameter.parameter.name.id.clone(),
                     kind,
                     default,
@@ -726,7 +807,7 @@ impl<'db> IrBuilder<'db, '_> {
             }
         }
         for parameter in [vararg, kwarg].into_iter().flatten() {
-            parameters.push(Parameter {
+            parameters.push(ParameterIr {
                 name: parameter.name.id.clone(),
                 kind: ParameterKind::Variadic,
                 default: None,
@@ -1062,12 +1143,17 @@ impl<'db> IrBuilder<'db, '_> {
         if self.is_local(scope, name) {
             return Val::Local(Name::new(name), range);
         }
+        if let Some((assigned, entries)) = &self.prior
+            && assigned == name
+            && self.is_module_name(scope, name)
+        {
+            return Val::Prior(entries.clone());
+        }
         module_name_value(self.db, self.file, name, range)
     }
 
     /// The module-level names that assignments bind, with their entries: the bindings visible at
-    /// the end of the module, an augmented assignment adding to the bindings before it, then the
-    /// mutations found anywhere in the file.
+    /// the end of the module, then the mutations found anywhere in the file.
     fn globals(&mut self) -> Box<[GlobalName<'db>]> {
         let db = self.db;
         let scope = global_scope(db, self.file);
@@ -1079,34 +1165,16 @@ impl<'db> IrBuilder<'db, '_> {
         names.dedup();
         let mut globals = Vec::new();
         for name in names {
-            let mut definitions = Vec::new();
-            if let Some(symbol) = table.symbol_id(&name) {
-                definitions.extend(
+            let visible: Vec<Definition<'db>> = table
+                .symbol_id(&name)
+                .map(|symbol| {
                     use_def
                         .end_of_scope_symbol_bindings(symbol)
-                        .filter_map(|binding| binding.binding.definition()),
-                );
-            }
-            let mut entries = Vec::new();
-            let mut seen = FxHashSet::default();
-            while let Some(definition) = definitions.pop() {
-                if !seen.insert(definition) {
-                    continue;
-                }
-                if let DefinitionKind::AugmentedAssignment(_) = definition.kind(db) {
-                    definitions.extend(
-                        use_def
-                            .bindings_at_definition(definition)
-                            .filter_map(|binding| binding.binding.definition()),
-                    );
-                }
-                if let Some(entry) = self.global_entry(definition) {
-                    entries.push(entry);
-                }
-            }
-            entries.sort_by_key(|(start, _)| *start);
-            let mut entries: Vec<GlobalEntry<'db>> =
-                entries.into_iter().map(|(_, entry)| entry).collect();
+                        .filter_map(|binding| binding.binding.definition())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut entries = self.visible_entries(visible);
             entries.extend(
                 self.mutations
                     .iter()
@@ -1119,6 +1187,79 @@ impl<'db> IrBuilder<'db, '_> {
             });
         }
         globals.into_boxed_slice()
+    }
+
+    /// The entries of the module-level bindings `visible` at one place (the end of the module, or
+    /// an assignment that reads the name it binds), in file order. An augmented assignment adds the
+    /// bindings before it. A binding that a later one replaces in some arms of a branch is visible
+    /// only after the other arms, so its path gets those:
+    ///
+    /// ```python
+    /// classes = [A]  # visible only after the implicit `else` of the `if`
+    /// if more:
+    ///     classes = [A, B]
+    /// ```
+    fn visible_entries(&mut self, visible: Vec<Definition<'db>>) -> Vec<GlobalEntry<'db>> {
+        let use_def = use_def_map(self.db, global_scope(self.db, self.file));
+        let mut definitions = visible;
+        let mut found: Vec<(TextSize, GlobalEntry<'db>)> = Vec::new();
+        let mut seen = FxHashSet::default();
+        while let Some(definition) = definitions.pop() {
+            if !seen.insert(definition) {
+                continue;
+            }
+            if let DefinitionKind::AugmentedAssignment(_) = definition.kind(self.db) {
+                definitions.extend(
+                    use_def
+                        .bindings_at_definition(definition)
+                        .filter_map(|binding| binding.binding.definition()),
+                );
+            }
+            if let Some(entry) = self.global_entry(definition) {
+                found.push(entry);
+            }
+        }
+        found.sort_by_key(|(start, _)| *start);
+        let mut surviving: Vec<Vec<(TextSize, Arms)>> = vec![Vec::new(); found.len()];
+        for (earlier, arms) in surviving.iter_mut().enumerate() {
+            for (_, later) in &found[earlier + 1..] {
+                if matches!(later.kind, EntryKind::Bind { .. })
+                    && let Some(other_arms) = self.other_arms(&found[earlier].1.path, &later.path)
+                {
+                    arms.push(other_arms);
+                }
+            }
+        }
+        found
+            .into_iter()
+            .zip(surviving)
+            .map(|((_, mut entry), arms)| {
+                if !arms.is_empty() {
+                    entry.path = entry.path.iter().copied().chain(arms).collect();
+                }
+                entry
+            })
+            .collect()
+    }
+
+    /// The arms of the branch that holds the statement at `later` directly but not the statement at
+    /// `earlier`, without the arm `later` is in: where the earlier binding survives. `None` when
+    /// `later` sits deeper in that branch, where it may not run in any of its arms.
+    fn other_arms(&self, earlier: &StaticPath, later: &StaticPath) -> Option<(TextSize, Arms)> {
+        let depth = later
+            .iter()
+            .zip(earlier.iter())
+            .take_while(|(later, earlier)| later == earlier)
+            .count();
+        let [(offset, arm)] = &later[depth..] else {
+            return None;
+        };
+        // The earlier statement is in another arm of the same branch: the two never meet.
+        if earlier.get(depth).is_some_and(|(other, _)| other == offset) {
+            return None;
+        }
+        let count = self.branch_arms.get(offset).copied()?;
+        Some((*offset, Arms::all(count).without(*arm)))
     }
 
     /// The entry of a module-level binding, with its position in the file.
@@ -1139,7 +1280,7 @@ impl<'db> IrBuilder<'db, '_> {
                 };
                 let kind = match index {
                     Some(index) => EntryKind::Bind {
-                        value: self.expression(value, scope),
+                        value: self.bound_value(definition, value),
                         index,
                     },
                     None => EntryKind::Opaque(name.range()),
@@ -1151,7 +1292,7 @@ impl<'db> IrBuilder<'db, '_> {
                 (
                     value.start(),
                     EntryKind::Bind {
-                        value: self.expression(value, scope),
+                        value: self.bound_value(definition, value),
                         index: Box::default(),
                     },
                 )
@@ -1185,9 +1326,35 @@ impl<'db> IrBuilder<'db, '_> {
             },
         ))
     }
+
+    /// The value a module-level assignment binds. Where the value reads the name it binds
+    /// (`classes = classes + (C,)`), the name stands for the bindings visible before it.
+    fn bound_value(&mut self, definition: Definition<'db>, value: &Expr) -> Val<'db> {
+        let db = self.db;
+        let scope = definition.scope(db);
+        let ScopedPlaceId::Symbol(symbol) = definition.place(db) else {
+            return self.expression(value, scope);
+        };
+        let name = place_table(db, scope).symbol(symbol).name().clone();
+        let reads_itself = any_over_expr(
+            value,
+            |expression| matches!(expression, Expr::Name(read) if read.id == name),
+        );
+        if !reads_itself {
+            return self.expression(value, scope);
+        }
+        let before: Vec<Definition<'db>> = use_def_map(db, scope)
+            .bindings_at_definition(definition)
+            .filter_map(|binding| binding.binding.definition())
+            .collect();
+        let entries = self.visible_entries(before).into_boxed_slice();
+        let outer = self.prior.replace((name, entries));
+        let value = self.expression(value, scope);
+        self.prior = outer;
+        value
+    }
 }
 
-/// The names an assignment target binds.
 /// What an assignment or a `for` loop binds.
 fn assignment_target(target: &Expr) -> Target {
     match target {
@@ -1201,6 +1368,7 @@ fn assignment_target(target: &Expr) -> Target {
     }
 }
 
+/// The names an assignment target binds.
 fn collect_names(target: &Expr, names: &mut Vec<Name>) {
     match target {
         Expr::Name(name) => names.push(name.id.clone()),
@@ -1361,11 +1529,11 @@ fn function_value<'db>(db: &'db dyn Db, definition: Definition<'db>) -> Val<'db>
 /// A name no module binds: a builtin.
 fn builtin_value<'db>(name: &str) -> Val<'db> {
     match name {
-        "setattr" => Val::Blender(BlenderFunction::Setattr),
-        "delattr" => Val::Blender(BlenderFunction::Delattr),
-        "reversed" => Val::Blender(BlenderFunction::Reversed),
-        "list" | "tuple" => Val::Blender(BlenderFunction::Copy),
-        "sorted" | "set" | "frozenset" => Val::Blender(BlenderFunction::Unordered),
+        "setattr" => Val::Builtin(Builtin::Setattr),
+        "delattr" => Val::Builtin(Builtin::Delattr),
+        "reversed" => Val::Builtin(Builtin::Reversed),
+        "list" | "tuple" => Val::Builtin(Builtin::Copy),
+        "sorted" | "set" | "frozenset" => Val::Builtin(Builtin::Unordered),
         "getattr" | "__import__" | "globals" | "vars" | "locals" | "eval" | "exec" => {
             Val::Discovery
         }
@@ -1398,13 +1566,15 @@ fn is_register_half<'db>(db: &'db dyn Db, file: ProgramFile<'db>, name: &str) ->
 
 // The interpreter.
 
-/// A value while the walk runs.
+/// A value while the walk runs: what a [`Val`] evaluates to in one frame. Locals and module-level
+/// names are looked up, calls made and sequences built.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Value<'db> {
     Module(ProgramFile<'db>),
     Class(StaticClassLiteral<'db>, Site),
     Function(Definition<'db>),
     Blender(BlenderFunction),
+    Builtin(Builtin),
     Discovery,
     Str(Name),
     Seq(Rc<[Element<'db>]>),
@@ -1417,7 +1587,7 @@ enum Value<'db> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Element<'db> {
     value: Value<'db>,
-    path: Vec<(BranchId, u8)>,
+    path: BranchPath,
     exact: bool,
 }
 
@@ -1425,7 +1595,7 @@ impl<'db> Element<'db> {
     fn plain(value: Value<'db>) -> Self {
         Element {
             value,
-            path: Vec::new(),
+            path: BranchPath::default(),
             exact: true,
         }
     }
@@ -1453,7 +1623,7 @@ enum Half {
 struct Frame<'db> {
     file: ProgramFile<'db>,
     locals: FxHashMap<Name, Value<'db>>,
-    path: Vec<(BranchId, u8)>,
+    path: Vec<(BranchId, Arms)>,
     exact: bool,
     module_level: bool,
     returns: Vec<Value<'db>>,
@@ -1482,13 +1652,21 @@ impl<'db> Frame<'db> {
 /// How many nested calls the walk follows before it gives up.
 const MAX_DEPTH: usize = 64;
 
+/// A call the walk is in, with the values of its parameters: a call of the same function with the
+/// same values would recurse forever.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Call<'db> {
+    function: Definition<'db>,
+    parameters: FxHashMap<Name, Value<'db>>,
+}
+
 struct Walker<'db> {
     db: &'db dyn Db,
     events: Vec<Event<'db>>,
     entered: Vec<Definition<'db>>,
     incomplete: Option<Site>,
     imported: FxHashSet<ProgramFile<'db>>,
-    stack: Vec<(Definition<'db>, Vec<Value<'db>>)>,
+    stack: Vec<Call<'db>>,
     escaped: Vec<Definition<'db>>,
     next_branch: u32,
     /// False while the walk runs the functions Blender calls later.
@@ -1619,7 +1797,7 @@ impl<'db> Walker<'db> {
                                 value: value.clone(),
                             },
                             site: frame.site(db, *site),
-                            path: BranchPath(frame.path.clone().into_boxed_slice()),
+                            path: BranchPath::new(frame.path.iter().copied()),
                             exact: frame.exact && self.exact,
                         };
                         self.record(event);
@@ -1650,7 +1828,7 @@ impl<'db> Walker<'db> {
                 };
                 for element in elements.iter() {
                     let (depth, exact) = (frame.path.len(), frame.exact);
-                    frame.path.extend(element.path.iter().copied());
+                    frame.path.extend(element.path.steps().iter().copied());
                     frame.exact &= element.exact;
                     bind(db, target, element.value.clone(), frame);
                     let returned = self.body(body, frame);
@@ -1662,22 +1840,23 @@ impl<'db> Walker<'db> {
                 }
             }
             Step::Branch { offset, arms } => {
-                let id = if frame.module_level {
-                    BranchId::Static {
-                        file: frame.file.file(db),
-                        offset: *offset,
-                    }
-                } else {
-                    self.next_branch += 1;
-                    BranchId::Dynamic(self.next_branch)
-                };
-                let mut all_returned = true;
+                let id = self.branch_id(frame, *offset);
+                let depth = frame.path.len();
+                let mut falling_through = Arms::NONE;
                 for (steps, arm) in arms.iter().zip(0u8..) {
-                    frame.path.push((id, arm));
-                    all_returned &= self.body(steps, frame);
-                    frame.path.pop();
+                    frame.path.push((id, Arms::one(arm)));
+                    if !self.body(steps, frame) {
+                        falling_through = falling_through.with(Arms::one(arm));
+                    }
+                    frame.path.truncate(depth);
                 }
-                return all_returned;
+                if falling_through == Arms::NONE {
+                    return true;
+                }
+                // What follows runs only after the arms that did not return.
+                if falling_through != Arms::all(arms.len()) {
+                    frame.path.push((id, falling_through));
+                }
             }
             Step::Return(value) => {
                 let value = self.eval(value, frame);
@@ -1688,6 +1867,20 @@ impl<'db> Walker<'db> {
         false
     }
 
+    /// The branch a statement or conditional expression at `offset` is, as the walk executes it
+    /// in `frame`.
+    fn branch_id(&mut self, frame: &Frame<'db>, offset: TextSize) -> BranchId {
+        if frame.module_level {
+            BranchId::Static {
+                file: frame.file.file(self.db),
+                offset,
+            }
+        } else {
+            self.next_branch += 1;
+            BranchId::Dynamic(self.next_branch)
+        }
+    }
+
     fn eval(&mut self, value: &Val<'db>, frame: &Frame<'db>) -> Value<'db> {
         let db = self.db;
         match value {
@@ -1695,6 +1888,7 @@ impl<'db> Walker<'db> {
             Val::Class(class, range) => Value::Class(*class, frame.site(db, *range)),
             Val::Function(definition) => Value::Function(*definition),
             Val::Blender(function) => Value::Blender(*function),
+            Val::Builtin(function) => Value::Builtin(*function),
             Val::Discovery => Value::Discovery,
             Val::Local(name, range) => frame
                 .locals
@@ -1702,6 +1896,9 @@ impl<'db> Walker<'db> {
                 .cloned()
                 .unwrap_or_else(|| Value::Opaque(frame.site(db, *range))),
             Val::Global(file, name, range) => self.global(*file, name, frame.site(db, *range)),
+            Val::Prior(entries) => {
+                self.entries_value(frame.file, entries, frame.site(db, TextRange::default()))
+            }
             Val::Str(name) => Value::Str(name.clone()),
             Val::Display { elements, ordered } => {
                 let mut values = Vec::new();
@@ -1767,17 +1964,13 @@ impl<'db> Walker<'db> {
                 let values: Vec<Value<'db>> =
                     values.iter().map(|value| self.eval(value, frame)).collect();
                 if values.iter().all(|value| matches!(value, Value::Seq(_))) {
-                    let id = BranchId::Static {
-                        file: frame.file.file(db),
-                        offset: *offset,
-                    };
+                    let id = self.branch_id(frame, *offset);
                     let mut elements = Vec::new();
                     for (value, arm) in values.iter().zip(0u8..) {
                         if let Value::Seq(items) = value {
-                            elements.extend(items.iter().map(|item| {
-                                let mut item = item.clone();
-                                item.path.insert(0, (id, arm));
-                                item
+                            elements.extend(items.iter().map(|item| Element {
+                                path: item.path.prefixed(&[(id, Arms::one(arm))]),
+                                ..item.clone()
                             }));
                         }
                     }
@@ -1811,109 +2004,114 @@ impl<'db> Walker<'db> {
         if !self.evaluating.insert(key.clone()) {
             return Value::Opaque(site);
         }
-        let db = self.db;
-        let ir = registration_ir(db, file);
-        let value = match ir.global(name) {
+        let value = match registration_ir(self.db, file).global(name) {
             None => Value::Opaque(site),
-            Some(global) => {
-                self.pure += 1;
-                let frame = Frame::new(file, true);
-                let file_of = file.file(db);
-                // The value of a binding that is not a sequence, when all such bindings agree.
-                let mut single: Option<Value<'db>> = None;
-                let mut is_sequence = false;
-                let mut elements: Vec<Element<'db>> = Vec::new();
-                // Where a binding's value is unknown or disagrees with another.
-                let mut unknown: Option<Site> = None;
-                for entry in &global.entries {
-                    let path: Vec<(BranchId, u8)> = entry
-                        .path
-                        .iter()
-                        .map(|(offset, arm)| {
-                            (
-                                BranchId::Static {
-                                    file: file_of,
-                                    offset: *offset,
-                                },
-                                *arm,
-                            )
-                        })
-                        .collect();
-                    let adjust = |items: &[Element<'db>]| {
-                        items
-                            .iter()
-                            .map(|item| Element {
-                                value: item.value.clone(),
-                                path: path.iter().chain(item.path.iter()).copied().collect(),
-                                exact: item.exact && entry.exact,
-                            })
-                            .collect::<Vec<_>>()
-                    };
-                    match &entry.kind {
-                        EntryKind::Bind { value, index } => {
-                            let mut value = self.eval(value, &frame);
-                            for position in index {
-                                value = match value {
-                                    Value::Factory(factory, None) => Value::Factory(
-                                        factory,
-                                        match position {
-                                            0 => Some(Half::Register),
-                                            _ => Some(Half::Unregister),
-                                        },
-                                    ),
-                                    Value::Seq(items) => items
-                                        .get(*position as usize)
-                                        .map_or(Value::Opaque(site), |item| item.value.clone()),
-                                    _ => Value::Opaque(site),
-                                };
-                            }
-                            match value {
-                                Value::Seq(items) => {
-                                    is_sequence = true;
-                                    elements.extend(adjust(&items));
-                                }
-                                Value::Opaque(opaque) => unknown = Some(opaque),
-                                other => match &single {
-                                    None => single = Some(other),
-                                    Some(existing) if *existing == other => {}
-                                    Some(_) => unknown = Some(site),
-                                },
-                            }
-                        }
-                        EntryKind::Extend(value) => {
-                            is_sequence = true;
-                            let items = self.elements(value, &frame);
-                            elements.extend(adjust(&items));
-                        }
-                        EntryKind::Append(value) => {
-                            is_sequence = true;
-                            let item = Element::plain(self.eval(value, &frame));
-                            elements.extend(adjust(&[item]));
-                        }
-                        EntryKind::Opaque(range) => {
-                            unknown = Some(Site {
-                                file: file_of,
-                                range: *range,
-                            });
-                        }
-                    }
-                }
-                self.pure -= 1;
-                match (is_sequence, single, unknown) {
-                    (true, None, None) => Value::Seq(elements.into()),
-                    // `classes = discover(); classes.append(C)`: the unknown part stays.
-                    (true, _, unknown) => {
-                        elements.insert(0, Element::plain(Value::Opaque(unknown.unwrap_or(site))));
-                        Value::Seq(elements.into())
-                    }
-                    (false, Some(value), None) => value,
-                    (false, _, unknown) => Value::Opaque(unknown.unwrap_or(site)),
-                }
-            }
+            Some(global) => self.entries_value(file, &global.entries, site),
         };
         self.evaluating.remove(&key);
         self.globals.insert(key, value.clone());
         value
+    }
+
+    /// The value that the entries of a module-level name of `file` make up.
+    fn entries_value(
+        &mut self,
+        file: ProgramFile<'db>,
+        entries: &[GlobalEntry<'db>],
+        site: Site,
+    ) -> Value<'db> {
+        let db = self.db;
+        self.pure += 1;
+        let frame = Frame::new(file, true);
+        let file_of = file.file(db);
+        // The value of a binding that is not a sequence, when all such bindings agree.
+        let mut single: Option<Value<'db>> = None;
+        let mut is_sequence = false;
+        let mut elements: Vec<Element<'db>> = Vec::new();
+        // Where a binding's value is unknown or disagrees with another.
+        let mut unknown: Option<Site> = None;
+        for entry in entries {
+            let path: Vec<(BranchId, Arms)> = entry
+                .path
+                .iter()
+                .map(|(offset, arms)| {
+                    let id = BranchId::Static {
+                        file: file_of,
+                        offset: *offset,
+                    };
+                    (id, *arms)
+                })
+                .collect();
+            let adjust = |items: &[Element<'db>]| {
+                items
+                    .iter()
+                    .map(|item| Element {
+                        value: item.value.clone(),
+                        path: item.path.prefixed(&path),
+                        exact: item.exact && entry.exact,
+                    })
+                    .collect::<Vec<_>>()
+            };
+            match &entry.kind {
+                EntryKind::Bind { value, index } => {
+                    let mut value = self.eval(value, &frame);
+                    for position in index {
+                        value = match value {
+                            Value::Factory(factory, None) => Value::Factory(
+                                factory,
+                                match position {
+                                    0 => Some(Half::Register),
+                                    _ => Some(Half::Unregister),
+                                },
+                            ),
+                            Value::Seq(items) => items
+                                .get(*position as usize)
+                                .map_or(Value::Opaque(site), |item| item.value.clone()),
+                            _ => Value::Opaque(site),
+                        };
+                    }
+                    match value {
+                        Value::Seq(items) => {
+                            is_sequence = true;
+                            elements.extend(adjust(&items));
+                        }
+                        Value::Opaque(opaque) => unknown = Some(opaque),
+                        other => match &single {
+                            None => single = Some(other),
+                            Some(existing) if *existing == other => {}
+                            Some(_) => unknown = Some(site),
+                        },
+                    }
+                }
+                EntryKind::Extend(value) => {
+                    is_sequence = true;
+                    let items = self.elements(value, &frame);
+                    elements.extend(adjust(&items));
+                }
+                EntryKind::Append(value) => {
+                    is_sequence = true;
+                    let item = Element::plain(self.eval(value, &frame));
+                    elements.extend(adjust(&[item]));
+                }
+                EntryKind::Opaque(range) => {
+                    unknown = Some(Site {
+                        file: file_of,
+                        range: *range,
+                    });
+                }
+            }
+        }
+        self.pure -= 1;
+        match (is_sequence, single, unknown) {
+            (true, None, None) => Value::Seq(elements.into()),
+            // `classes = discover(); classes.append(C)`: the unknown part stays.
+            (true, _, unknown) => {
+                elements.insert(0, Element::plain(Value::Opaque(unknown.unwrap_or(site))));
+                Value::Seq(elements.into())
+            }
+            (false, Some(value), None) => value,
+            (false, _, unknown) => Value::Opaque(unknown.unwrap_or(site)),
+        }
     }
 
     /// `base.name`.
@@ -2053,7 +2251,14 @@ impl<'db> Walker<'db> {
                         let register = *function == BlenderFunction::RegisterClass;
                         match first {
                             Some(Value::Class(class, named_at)) => {
-                                self.class_event(register, *class, *named_at, frame, &[], true);
+                                self.class_event(
+                                    register,
+                                    *class,
+                                    *named_at,
+                                    frame,
+                                    &BranchPath::default(),
+                                    true,
+                                );
                             }
                             Some(Value::Opaque(site)) => self.give_up(*site),
                             None => self.give_up(site),
@@ -2103,7 +2308,12 @@ impl<'db> Walker<'db> {
                         }
                         Value::Foreign(None)
                     }
-                    BlenderFunction::Delattr => {
+                }
+            }
+            Value::Builtin(function) => {
+                let first = arguments.first();
+                match function {
+                    Builtin::Delattr => {
                         if let (Some(Value::Class(owner, _)), Some(Value::Str(name))) =
                             (first, arguments.get(1))
                         {
@@ -2114,20 +2324,20 @@ impl<'db> Walker<'db> {
                         }
                         Value::Foreign(None)
                     }
-                    BlenderFunction::Setattr => Value::Foreign(None),
-                    BlenderFunction::Reversed => match first {
+                    Builtin::Setattr => Value::Foreign(None),
+                    Builtin::Reversed => match first {
                         Some(Value::Seq(elements)) => {
                             Value::Seq(elements.iter().rev().cloned().collect())
                         }
                         Some(other @ Value::Opaque(_)) => other.clone(),
                         _ => Value::Foreign(None),
                     },
-                    BlenderFunction::Copy => match first {
+                    Builtin::Copy => match first {
                         Some(value @ (Value::Seq(_) | Value::Opaque(_))) => value.clone(),
                         None => Value::Seq(Rc::from([])),
                         _ => Value::Foreign(None),
                     },
-                    BlenderFunction::Unordered => match first {
+                    Builtin::Unordered => match first {
                         Some(Value::Seq(elements)) => Value::Seq(
                             elements
                                 .iter()
@@ -2164,13 +2374,13 @@ impl<'db> Walker<'db> {
         class: StaticClassLiteral<'db>,
         named_at: Site,
         frame: &Frame<'db>,
-        element_path: &[(BranchId, u8)],
+        element_path: &BranchPath,
         element_exact: bool,
     ) {
         let event = ClassEvent {
             class,
             named_at,
-            path: BranchPath(frame.path.iter().chain(element_path).copied().collect()),
+            path: element_path.prefixed(&frame.path),
             exact: frame.exact && element_exact && self.exact,
         };
         self.record(if register {
@@ -2261,12 +2471,6 @@ impl<'db> Walker<'db> {
             self.give_up(site);
             return Value::Opaque(site);
         }
-        if self.stack.iter().any(|(active, active_arguments)| {
-            *active == definition && *active_arguments == arguments
-        }) {
-            // Python would recurse forever.
-            return Value::Foreign(None);
-        }
         self.import(file);
         let ir = registration_ir(db, file);
         let Some(function) = ir.function(definition) else {
@@ -2309,7 +2513,15 @@ impl<'db> Walker<'db> {
                 frame.locals.insert(parameter.name.clone(), value);
             }
         }
-        self.stack.push((definition, arguments));
+        let call = Call {
+            function: definition,
+            parameters: frame.locals.clone(),
+        };
+        if self.stack.contains(&call) {
+            // Python would recurse forever.
+            return Value::Foreign(None);
+        }
+        self.stack.push(call);
         self.body(&function.body, &mut frame);
         self.stack.pop();
         let mut returns = frame.returns.into_iter();

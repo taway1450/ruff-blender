@@ -26,6 +26,7 @@ poit = "poit"
 BA = "BA" # acronym for "Bad Allowed", used in testing.
 jod = "jod" # e.g., `jod-thread`
 CPY = "CPY"  # it's a Ruff rule category
+OT = "OT"  # Blender operator idnames: `CATEGORY_OT_name`
 
 [default]
 extend-ignore-re = [

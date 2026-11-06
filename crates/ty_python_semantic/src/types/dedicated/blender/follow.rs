@@ -5,6 +5,7 @@
 //! `register()`, and the Property evaluator uses it to find the constant an annotation names
 //! (`x: COMMON`, `x: props.COMMON`).
 
+use indexmap::IndexSet;
 use ruff_db::parsed::parsed_module;
 use ruff_python_ast::Expr;
 use ty_module_resolver::{ModuleName, file_to_module, resolve_module_confident};
@@ -106,6 +107,26 @@ pub(super) fn module_by_name<'db>(
     }
 }
 
+/// The definitions of `name` read in `scope`: those of the nearest enclosing scope that has any.
+pub(super) fn nearest_definitions<'db>(
+    db: &'db dyn Db,
+    scope: ScopeId<'db>,
+    name: &str,
+) -> Option<IndexSet<Definition<'db>>> {
+    let file = scope.program_file(db);
+    let index = semantic_index(db, file);
+    index
+        .visible_ancestor_scopes(scope.file_scope_id(db))
+        .map(|(ancestor, _)| find_symbol_in_scope(db, ancestor.to_scope_id(db, file), name))
+        .find(|definitions| !definitions.is_empty())
+}
+
+/// The value all of `values` agree on, or `None` when there are none or two differ.
+pub(super) fn agreed<T: PartialEq>(mut values: impl Iterator<Item = T>) -> Option<T> {
+    let first = values.next()?;
+    values.all(|value| value == first).then_some(first)
+}
+
 /// The name `name` in `scope`: its definitions in the nearest enclosing scope that has any, which
 /// must all resolve to the same thing.
 fn resolve_name<'db>(
@@ -114,14 +135,8 @@ fn resolve_name<'db>(
     name: &str,
     depth: usize,
 ) -> Option<Resolved<'db>> {
-    let file = scope.program_file(db);
-    let index = semantic_index(db, file);
-    let definitions = index
-        .visible_ancestor_scopes(scope.file_scope_id(db))
-        .map(|(ancestor, _)| find_symbol_in_scope(db, ancestor.to_scope_id(db, file), name))
-        .find(|definitions| !definitions.is_empty())?;
     all_same(
-        definitions
+        nearest_definitions(db, scope, name)?
             .iter()
             .map(|definition| resolve_binding(db, *definition, name, depth)),
     )
@@ -167,9 +182,8 @@ fn resolve_binding<'db>(
 }
 
 /// The one item of `items`, when they are all the same and none is `None`.
-fn all_same<'db>(mut items: impl Iterator<Item = Option<Resolved<'db>>>) -> Option<Resolved<'db>> {
-    let first = items.next()??;
-    items.all(|item| item == Some(first)).then_some(first)
+fn all_same<'db>(items: impl Iterator<Item = Option<Resolved<'db>>>) -> Option<Resolved<'db>> {
+    agreed(items)?
 }
 
 /// `member` of `module`: a name the module defines or imports, or else its submodule.

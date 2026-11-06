@@ -17,6 +17,8 @@
 //! - [`preferences`]: `addons[KEY].preferences` as an add-on's own preferences class, and
 //!   [`addon_key`], which add-on such a key or a preferences `bl_idname` names;
 //! - [`callbacks`]: the `self` that a property's callbacks are called with;
+//! - [`classes`]: the classes of an add-on, their attributes as Blender reads them and which of them
+//!   may be registered;
 //! - [`vector`]: the value and write types of vector properties;
 //! - [`lints`]: the Blender lints and the per-file query that reports them;
 //! - [`rules`]: the property rules, what Blender rejects or ignores in property declarations;
@@ -26,6 +28,7 @@
 mod addon;
 mod addon_key;
 mod callbacks;
+mod classes;
 mod evaluate;
 mod follow;
 mod index;

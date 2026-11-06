@@ -28,10 +28,10 @@ use crate::{Db, ProgramEnvironment, declare_lint};
 
 use super::addon::is_first_party;
 use super::addon_of_file;
-use super::index::{AddonInProgram, addon_in_program};
+use super::index::addon_in_program;
 use super::operator_properties::check_keymaps;
 use super::preferences::addon_preferences;
-use super::registration_checks::{Rule, registration_findings};
+use super::registration_checks::{Finding, Rule, registration_findings};
 use super::rules::check_properties;
 
 declare_lint! {
@@ -221,16 +221,16 @@ pub(crate) fn file_diagnostics<'db>(
         check_keymaps(&context, &module);
     }
     if let Some(key) = addon_in_program(db, file) {
-        check_registration(&context, key);
-        check_preferences(&context, key);
+        report_findings(&context, registration_findings(db, key));
+        report_findings(&context, &addon_preferences(db, key).problems);
     }
     context.finish().diagnostics
 }
 
-/// The registration mistakes of the add-on that are in this file.
-fn check_registration(context: &InferContext, key: AddonInProgram) {
+/// The registration and preferences mistakes of the add-on that are in this file.
+fn report_findings(context: &InferContext, findings: &[Finding]) {
     let file = context.file();
-    for finding in registration_findings(context.db(), key) {
+    for finding in findings {
         if finding.file != file {
             continue;
         }
@@ -241,22 +241,10 @@ fn check_registration(context: &InferContext, key: AddonInProgram) {
             Rule::UnregisteredClass => &BLENDER_UNREGISTERED_CLASS,
             Rule::UnreachableRegistration => &BLENDER_UNREACHABLE_REGISTRATION,
             Rule::UnregisterMismatch => &BLENDER_UNREGISTER_MISMATCH,
+            Rule::PreferencesIdname => &BLENDER_PREFERENCES_IDNAME,
         };
         if let Some(builder) = context.report_lint(lint, finding.range) {
             builder.into_diagnostic(finding.message.clone());
-        }
-    }
-}
-
-/// The preferences classes of the add-on in this file that are never its preferences.
-fn check_preferences(context: &InferContext, key: AddonInProgram) {
-    let file = context.file();
-    for problem in &addon_preferences(context.db(), key).problems {
-        if problem.file != file {
-            continue;
-        }
-        if let Some(builder) = context.report_lint(&BLENDER_PREFERENCES_IDNAME, problem.range) {
-            builder.into_diagnostic(problem.message.clone());
         }
     }
 }

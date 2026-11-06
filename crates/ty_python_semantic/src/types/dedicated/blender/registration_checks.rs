@@ -10,22 +10,20 @@
 //! they are in; findings in files outside the add-on (a library it calls) are dropped.
 
 use ruff_db::files::File;
-use ruff_db::parsed::parsed_module;
 use ruff_python_ast::name::Name;
-use ruff_python_ast::{self as ast, Expr};
-use ruff_text_size::{Ranged, TextRange};
+use ruff_text_size::TextRange;
 use rustc_hash::FxHashSet;
-use ty_blender::{IdnameFamily, OperatorIdname};
-use ty_python_core::definition::{Definition, DefinitionKind, DefinitionState};
+use ty_blender::IdnameFamily;
+use ty_python_core::definition::{Definition, DefinitionState};
 use ty_python_core::{place_table, use_def_map};
 
 use crate::Db;
-use crate::types::class_base::ClassBase;
-use crate::types::{
-    LiteralValueType, StaticClassLiteral, Type, binding_type, definition_expression_type_in_scope,
-};
+use crate::types::StaticClassLiteral;
 
 use super::addon::is_first_party;
+use super::classes::{
+    class_attribute, class_string, definition_site, mro_classes, only_bases, own_binding,
+};
 use super::evaluate::{PropertyValue, property_value};
 use super::index::{AddonInProgram, file_facts};
 use super::properties::PointerTarget;
@@ -35,7 +33,7 @@ use super::walk::{
     unregister_walk,
 };
 
-/// The registration rules, each reported by its own lint.
+/// The registration rules and the preferences rule, each reported by its own lint.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
 pub(super) enum Rule {
     RegisterOrder,
@@ -44,9 +42,10 @@ pub(super) enum Rule {
     UnregisteredClass,
     UnreachableRegistration,
     UnregisterMismatch,
+    PreferencesIdname,
 }
 
-/// One registration mistake, at a place in one of the add-on's files.
+/// One registration or preferences mistake, at a place in one of the add-on's files.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
 pub(super) struct Finding {
     pub(super) rule: Rule,
@@ -109,28 +108,9 @@ impl<'db> AddonClasses<'db> {
                 ));
             }
         }
-        let all: FxHashSet<_> = classes.iter().map(|(class, _)| *class).collect();
-        let mut bases = FxHashSet::default();
-        for (class, _) in &classes {
-            for base in mro_classes(db, *class).skip(1) {
-                if all.contains(&base) {
-                    bases.insert(base);
-                }
-            }
-        }
+        let bases = only_bases(db, classes.iter().map(|(class, _)| *class));
         AddonClasses { classes, bases }
     }
-}
-
-/// The static classes of the method resolution order of `class`, starting with `class` itself.
-pub(super) fn mro_classes<'db>(
-    db: &'db dyn Db,
-    class: StaticClassLiteral<'db>,
-) -> impl Iterator<Item = StaticClassLiteral<'db>> {
-    class.iter_mro(db, None).filter_map(move |base| match base {
-        ClassBase::Class(class_type) => class_type.class_literal(db).as_static(),
-        _ => None,
-    })
 }
 
 struct Checks<'db> {
@@ -233,7 +213,10 @@ impl<'db> Checks<'db> {
                     if let Some(parent_id) = class_string(db, registration.class, "bl_parent_id")
                         && let Some(parent) = classes.classes.iter().find_map(|(class, _)| {
                             (bpy_types_bases(db, *class).any(|base| base == "Panel")
-                                && class_idname(db, *class).as_deref() == Some(parent_id.as_str()))
+                                && idname_family(db, *class)
+                                    .and_then(|family| family_idname(db, *class, family))
+                                    .as_deref()
+                                    == Some(parent_id.as_str()))
                             .then_some(*class)
                         })
                         && let Some(problem) =
@@ -611,29 +594,11 @@ fn family_idname(
     }
 }
 
-/// The `bl_idname` of `class` with the class name as the default, as Blender reads a panel's.
-fn class_idname(db: &dyn Db, class: StaticClassLiteral<'_>) -> Option<String> {
-    match class_idname_binding(db, class) {
-        Idname::Literal(idname, _) => Some(idname),
-        Idname::Missing => Some(class.name(db).to_string()),
-        Idname::NotLiteral => None,
-    }
-}
-
 /// Where the duplicate idname of `class` is reported: its own `bl_idname`, else its class name.
 fn idname_site(db: &dyn Db, class: StaticClassLiteral<'_>) -> Site {
     let definition = own_binding(db, class, "bl_idname")
         .map_or_else(|| class.definition(db), |(definition, _)| definition);
     definition_site(db, definition)
-}
-
-/// The name a definition binds: the `class` or `def` name, or the assignment target.
-pub(super) fn definition_site(db: &dyn Db, definition: Definition<'_>) -> Site {
-    let module = parsed_module(db, definition.python_file(db)).load(db);
-    Site {
-        file: definition.file(db),
-        range: definition.focus_range(db, &module).range(),
-    }
 }
 
 /// The `bl_idname` of a class, as Blender reads it from the class and the classes it derives from.
@@ -652,106 +617,4 @@ fn class_idname_binding(db: &dyn Db, class: StaticClassLiteral<'_>) -> Idname {
         Some((_, None)) => Idname::NotLiteral,
         Some((definition, Some(value))) => Idname::Literal(value, definition_site(db, definition)),
     }
-}
-
-/// The string value of the class attribute `name`, when it is a string literal.
-pub(super) fn class_string(
-    db: &dyn Db,
-    class: StaticClassLiteral<'_>,
-    name: &str,
-) -> Option<String> {
-    class_attribute(db, class, name)?.1
-}
-
-/// The last binding of the class attribute `name` in the nearest class of the add-on's method
-/// resolution order that binds it, with its value when that is a string literal. The `bpy.types`
-/// classes only declare it, so they end the search.
-pub(super) fn class_attribute<'db>(
-    db: &'db dyn Db,
-    class: StaticClassLiteral<'db>,
-    name: &str,
-) -> Option<(Definition<'db>, Option<String>)> {
-    for base in mro_classes(db, class) {
-        if is_bpy_types_class(db, base) {
-            return None;
-        }
-        if let Some(binding) = own_binding(db, base, name) {
-            return Some(binding);
-        }
-    }
-    None
-}
-
-/// The last binding of `name` in the body of `class`, with its value when that is a string
-/// literal.
-fn own_binding<'db>(
-    db: &'db dyn Db,
-    class: StaticClassLiteral<'db>,
-    name: &str,
-) -> Option<(Definition<'db>, Option<String>)> {
-    let scope = class.body_scope(db);
-    let symbol = place_table(db, scope).symbol_id(name)?;
-    let definition = use_def_map(db, scope)
-        .end_of_scope_symbol_bindings(symbol)
-        .filter_map(|binding| binding.binding.definition())
-        .last()?;
-    let value = binding_type(db, definition)
-        .as_literal_value()
-        .and_then(LiteralValueType::as_string)
-        .map(|string| string.value(db).to_string())
-        .or_else(|| folded_idname(db, definition).clone());
-    Some((definition, value))
-}
-
-/// The value of `bl_idname = Other.bl_idname + "_copy"`, which ty widens to `str`: the class
-/// attribute is declared `bl_idname: str` in `bpy.types`. The other class's idname is read as
-/// Blender does, and the string literals after it are appended.
-#[salsa::tracked(
-    returns(ref),
-    cycle_initial=|_, _, _| None,
-    heap_size=ruff_memory_usage::heap_size
-)]
-fn folded_idname<'db>(db: &'db dyn Db, definition: Definition<'db>) -> Option<String> {
-    let DefinitionKind::Assignment(assignment) = definition.kind(db) else {
-        return None;
-    };
-    let module = parsed_module(db, definition.python_file(db)).load(db);
-    let mut value = assignment.value(&module);
-    let mut suffix = String::new();
-    while let Expr::BinOp(ast::ExprBinOp {
-        left,
-        op: ast::Operator::Add,
-        right,
-        ..
-    }) = value
-    {
-        let Expr::StringLiteral(string) = &**right else {
-            return None;
-        };
-        suffix.insert_str(0, string.value.to_str());
-        value = left;
-    }
-    let Expr::Attribute(attribute) = value else {
-        return None;
-    };
-    if suffix.is_empty() || attribute.attr.as_str() != "bl_idname" {
-        return None;
-    }
-    let owner =
-        definition_expression_type_in_scope(db, definition, &attribute.value, definition.scope(db));
-    let Type::ClassLiteral(owner) = owner else {
-        return None;
-    };
-    let (_, idname) = class_attribute(db, owner.as_static()?, "bl_idname")?;
-    Some(idname? + &suffix)
-}
-
-/// The operator idname `class` registers under, when it is one Blender accepts: its `bl_idname`
-/// as Blender reads it from the class and the classes it derives from.
-pub(super) fn operator_idname(
-    db: &dyn Db,
-    class: StaticClassLiteral<'_>,
-) -> Option<OperatorIdname> {
-    let (_, idname) = class_attribute(db, class, "bl_idname")?;
-    OperatorIdname::from_bl_idname(&idname?)
 }
