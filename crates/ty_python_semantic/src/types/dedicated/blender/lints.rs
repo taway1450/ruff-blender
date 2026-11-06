@@ -1,8 +1,11 @@
-//! The add-on lints: `blender-invalid-register` and `blender-invalid-addon-metadata`.
+//! The Blender lints, reported by one query per file that `check_types` merges before it checks
+//! suppressions. That keeps `# ty: ignore[...]` working for them, and keeps a manifest edit from
+//! re-inferring the module.
 //!
-//! They describe the add-on as a whole, not one expression, so they are reported by a separate query on
-//! the add-on's root module, which `check_types` merges before it checks suppressions. That keeps
-//! `# ty: ignore[...]` working for them, and keeps a manifest edit from re-inferring the module.
+//! - The add-on lints, `blender-invalid-register` and `blender-invalid-addon-metadata`, describe the
+//!   add-on as a whole, not one expression, and are reported on the add-on's root module.
+//! - The property rules (`blender-invalid-property` and the three warnings about properties Blender
+//!   ignores) are reported on every first-party file, by [`super::rules`].
 
 use ruff_db::parsed::{ParsedModuleRef, parsed_module};
 use ruff_text_size::{Ranged, TextRange, TextSize};
@@ -16,7 +19,9 @@ use crate::types::context::InferContext;
 use crate::types::diagnostic::TypeCheckDiagnostics;
 use crate::{Db, ProgramEnvironment, declare_lint};
 
+use super::addon::is_first_party;
 use super::addon_of_file;
+use super::rules::check_properties;
 
 declare_lint! {
     #[doc = include_str!("../../../../resources/lint_docs/blender-invalid-register.md")]
@@ -36,22 +41,64 @@ declare_lint! {
     }
 }
 
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-invalid-property.md")]
+    pub(crate) static BLENDER_INVALID_PROPERTY = {
+        summary: "detects a Blender property declaration that Blender rejects when it registers the property",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Error,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-unsupported-property-host.md")]
+    pub(crate) static BLENDER_UNSUPPORTED_PROPERTY_HOST = {
+        summary: "detects a Blender property annotation on a class whose annotations Blender ignores",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-legacy-property.md")]
+    pub(crate) static BLENDER_LEGACY_PROPERTY = {
+        summary: "detects a Blender property assigned in a class body instead of annotated",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-unsupported-property-target.md")]
+    pub(crate) static BLENDER_UNSUPPORTED_PROPERTY_TARGET = {
+        summary: "detects a Blender property assigned to a class that does not accept Registered properties",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
 pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
+    registry.register_lint(&BLENDER_INVALID_PROPERTY);
+    registry.register_lint(&BLENDER_UNSUPPORTED_PROPERTY_HOST);
+    registry.register_lint(&BLENDER_LEGACY_PROPERTY);
+    registry.register_lint(&BLENDER_UNSUPPORTED_PROPERTY_TARGET);
 }
 
-/// The add-on lints of `file`. Empty unless `file` is an add-on's root module: the package's
-/// `__init__.py`, or a single-file add-on.
+/// The Blender lints of `file`: the add-on lints when `file` is an add-on's root module (the
+/// package's `__init__.py`, or a single-file add-on), and the property rules when it is a
+/// first-party file, in an add-on or not.
 #[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
-pub(crate) fn addon_diagnostics<'db>(
+pub(crate) fn file_diagnostics<'db>(
     db: &'db dyn Db,
     file: ProgramFile<'db>,
 ) -> TypeCheckDiagnostics {
-    let Some(addon) = addon_of_file(db, file) else {
-        return TypeCheckDiagnostics::default();
-    };
-    if file.file(db).path(db).as_system_path() != Some(addon.root_module().as_path()) {
+    let addon = addon_of_file(db, file).as_ref().filter(|addon| {
+        file.file(db).path(db).as_system_path() == Some(addon.root_module().as_path())
+    });
+    let first_party = is_first_party(db, file);
+    if addon.is_none() && !first_party {
         return TypeCheckDiagnostics::default();
     }
     let module = parsed_module(db, file.python_file(db)).load(db);
@@ -64,8 +111,13 @@ pub(crate) fn addon_diagnostics<'db>(
         file,
         &module,
     );
-    check_metadata(&context, addon);
-    check_entry_points(&context, &env, file, &module);
+    if let Some(addon) = addon {
+        check_metadata(&context, addon);
+        check_entry_points(&context, &env, file, &module);
+    }
+    if first_party {
+        check_properties(&context, &module);
+    }
     context.finish().diagnostics
 }
 

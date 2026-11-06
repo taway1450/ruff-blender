@@ -22,7 +22,9 @@ use crate::types::{KnownClass, KnownUnion, StaticClassLiteral, Type, UnionType};
 use crate::{Db, ProgramEnvironment};
 
 use super::symbols::{blender_function_name, bpy_types_bases};
-use super::vector::{Element, Known, VectorShape, module_class, read_size, read_string};
+use super::vector::{
+    Element, Known, VectorShape, int_literal, module_class, read_size, read_string,
+};
 
 /// The ten functions of `bpy.props` that declare a property.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
@@ -75,20 +77,20 @@ pub(super) fn is_property_function<'db>(db: &'db dyn Db, callee: Type<'db>) -> b
 /// cannot follow, or a `**mapping` that may hold it).
 #[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
 pub(super) struct PropertyDeclaration<'db> {
-    kind: PropertyKind,
-    /// The identifiers of an enum's static `items=`.
-    items: Known<Box<[Name]>>,
+    pub(super) kind: PropertyKind,
+    /// An enum's `items=`.
+    pub(super) items: Known<EnumItems>,
     /// `options={"ENUM_FLAG", "READ_ONLY"}`.
-    options: Known<Box<[Name]>>,
+    pub(super) options: Known<Box<[Name]>>,
     /// Whether `get=` and `set=` are written.
-    get: Known<()>,
-    set: Known<()>,
+    pub(super) get: Known<()>,
+    pub(super) set: Known<()>,
     /// `subtype=`: a vector's shape, or `BYTE_STRING` for a `StringProperty`.
-    subtype: Known<Name>,
-    /// A vector's `size=`, its dimensions.
-    size: Known<Box<[u8]>>,
+    pub(super) subtype: Known<Name>,
+    /// A vector's `size=`, its dimensions. One that Blender rejects is unknown.
+    pub(super) size: Known<Box<[u8]>>,
     /// The inferred type of a pointer's or collection's `type=`.
-    target: Known<Type<'db>>,
+    pub(super) target: Known<Type<'db>>,
 }
 
 impl<'db> PropertyDeclaration<'db> {
@@ -123,13 +125,16 @@ impl<'db> PropertyDeclaration<'db> {
                     return Type::any();
                 };
                 let identifier = match &self.items {
-                    Known::Value(items) if !items.is_empty() => UnionType::from_elements(
-                        db,
-                        env,
-                        items
-                            .iter()
-                            .map(|item| Type::string_literal(db, item.as_str())),
-                    ),
+                    Known::Value(EnumItems::Static(items)) if !items.items.is_empty() => {
+                        UnionType::from_elements(
+                            db,
+                            env,
+                            items
+                                .items
+                                .iter()
+                                .map(|item| Type::string_literal(db, item.identifier.as_str())),
+                        )
+                    }
                     _ => KnownClass::Str.to_instance(db, env),
                 };
                 if options.iter().any(|option| option == "ENUM_FLAG") {
@@ -220,7 +225,10 @@ impl<'db> PropertyDeclaration<'db> {
     }
 
     /// The class `type=` names, when it is an ID or a `PropertyGroup` class.
-    fn target_class(&self, db: &'db dyn Db) -> Option<(StaticClassLiteral<'db>, PointerTarget)> {
+    pub(super) fn target_class(
+        &self,
+        db: &'db dyn Db,
+    ) -> Option<(StaticClassLiteral<'db>, PointerTarget)> {
         let Known::Value(Type::ClassLiteral(class)) = self.target else {
             return None;
         };
@@ -236,9 +244,38 @@ impl<'db> PropertyDeclaration<'db> {
 /// What a pointer property points to: an ID (a data-block, which may be unset) or a
 /// `PropertyGroup` (which Blender creates along with its owner).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum PointerTarget {
+pub(super) enum PointerTarget {
     Id,
     PropertyGroup,
+}
+
+/// An enum's `items=`, as far as the checker reads it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
+pub(super) enum EnumItems {
+    /// A list or tuple of items written out, inline or in a constant of the same module.
+    Static(StaticItems),
+    /// A function that Blender calls for the items: `items=lambda self, context: [...]`, or the name
+    /// of a `def`.
+    Function,
+}
+
+/// Static enum items: `[("A", "A", ""), None, ("B", "B", "", 7)]`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
+pub(super) struct StaticItems {
+    /// The items, without the `None` separators.
+    pub(super) items: Box<[EnumItem]>,
+    /// How many entries the sequence has, separators included, as Blender counts them for its limit
+    /// of 32 `ENUM_FLAG` items.
+    pub(super) length: usize,
+}
+
+/// One static enum item: `(identifier, name, description)`, optionally with an icon and a number.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
+pub(super) struct EnumItem {
+    pub(super) identifier: Name,
+    /// The item's number: the fourth element of a 4-tuple or the fifth of a 5-tuple, else its index
+    /// in the sequence, `None` separators counted. `None` when it is not an int literal.
+    pub(super) number: Option<i64>,
 }
 
 /// Reads the options of a call: `items=` and `options=` from the syntax, because ty widens list and
@@ -253,8 +290,16 @@ pub(super) struct OptionReader<'a, 'db> {
 }
 
 impl<'db> OptionReader<'_, 'db> {
-    fn items(&self, items: &Expr) -> Option<Box<[Name]>> {
-        static_enum_items(self.db, self.scope, items)
+    fn items(&self, items: &Expr) -> Option<EnumItems> {
+        if items.is_lambda_expr()
+            || matches!(
+                (self.argument_type)(items),
+                Type::FunctionLiteral(_) | Type::BoundMethod(_)
+            )
+        {
+            return Some(EnumItems::Function);
+        }
+        enum_items(self.db, self.scope, items)
     }
 
     fn options(&self, options: &Expr) -> Option<Box<[Name]>> {
@@ -321,7 +366,7 @@ impl<T: Clone> Slot<T> {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
 pub(super) struct DeclarationTemplate<'db> {
     kind: PropertyKind,
-    items: Slot<Box<[Name]>>,
+    items: Slot<EnumItems>,
     options: Slot<Box<[Name]>>,
     get: Slot<()>,
     set: Slot<()>,
@@ -533,16 +578,13 @@ fn string_set(expr: &Expr) -> Option<Box<[Name]>> {
     )
 }
 
-/// The identifiers of static enum items: a list or tuple of tuples whose first element is a string
-/// literal, with `None` separators, written inline or through one constant of the same module.
+/// The enum items `items` gives: static items (a list or tuple of 3- to 5-tuples whose first element
+/// is a string literal, with `None` separators) written inline or through one constant of the same
+/// module, or the name of a function of the same module.
 ///
 /// An imported constant is not followed, so that a file's inference never depends on another
 /// file's syntax tree; its items give `str`.
-fn static_enum_items<'db>(
-    db: &'db dyn Db,
-    scope: ScopeId<'db>,
-    items: &Expr,
-) -> Option<Box<[Name]>> {
+fn enum_items<'db>(db: &'db dyn Db, scope: ScopeId<'db>, items: &Expr) -> Option<EnumItems> {
     if let Expr::Name(name) = items {
         let definitions = definitions_for_name(
             db,
@@ -561,27 +603,41 @@ fn static_enum_items<'db>(
         let value = match definition.kind(db) {
             DefinitionKind::Assignment(assignment) => assignment.value(&module),
             DefinitionKind::AnnotatedAssignment(assignment) => assignment.value(&module)?,
+            DefinitionKind::Function(_) => return Some(EnumItems::Function),
             _ => return None,
         };
-        return literal_enum_items(value);
+        return literal_enum_items(value).map(EnumItems::Static);
     }
-    literal_enum_items(items)
+    literal_enum_items(items).map(EnumItems::Static)
 }
 
-fn literal_enum_items(items: &Expr) -> Option<Box<[Name]>> {
+fn literal_enum_items(items: &Expr) -> Option<StaticItems> {
     let elements = match items {
         Expr::List(list) => &list.elts,
         Expr::Tuple(tuple) => &tuple.elts,
         _ => return None,
     };
-    elements
+    let items = elements
         .iter()
-        .filter(|element| !element.is_none_literal_expr())
-        .map(|element| {
-            let identifier = element.as_tuple_expr()?.elts.first()?;
-            Some(Name::new(
-                identifier.as_string_literal_expr()?.value.to_str(),
-            ))
+        .enumerate()
+        .filter(|(_, element)| !element.is_none_literal_expr())
+        .map(|(index, element)| {
+            let elements = &element.as_tuple_expr()?.elts;
+            let identifier = elements.first()?.as_string_literal_expr()?;
+            let number = match elements.len() {
+                3 => i64::try_from(index).ok(),
+                4 => int_literal(&elements[3]),
+                5 => int_literal(&elements[4]),
+                _ => return None,
+            };
+            Some(EnumItem {
+                identifier: Name::new(identifier.value.to_str()),
+                number,
+            })
         })
-        .collect()
+        .collect::<Option<_>>()?;
+    Some(StaticItems {
+        items,
+        length: elements.len(),
+    })
 }

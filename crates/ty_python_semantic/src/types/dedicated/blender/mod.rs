@@ -11,7 +11,9 @@
 //! - [`index`]: the Add-on index, what an add-on's code does to Blender, gathered without inference;
 //! - [`member`]: the property behind an attribute of a Blender instance, of either origin;
 //! - [`callbacks`]: the `self` that a property's callbacks are called with;
-//! - [`vector`]: the value and write types of vector properties.
+//! - [`vector`]: the value and write types of vector properties;
+//! - [`lints`]: the Blender lints and the per-file query that reports them;
+//! - [`rules`]: the property rules, what Blender rejects or ignores in property declarations.
 
 mod addon;
 mod callbacks;
@@ -22,6 +24,7 @@ mod lints;
 mod member;
 mod module_dunders;
 mod properties;
+mod rules;
 mod symbols;
 mod vector;
 
@@ -31,7 +34,7 @@ pub(crate) use evaluate::{
     annotation_value_type, is_opaque_call, is_property_container, reference_value_type,
     subscript_value_type,
 };
-pub(crate) use lints::{addon_diagnostics, register_lints};
+pub(crate) use lints::{file_diagnostics, register_lints};
 pub(in crate::types) use member::on_store;
 pub(crate) use member::{
     check_property_write, completions, exempts_attribute_override, hides_class_member,
