@@ -3,8 +3,8 @@
 //! Which add-on a file belongs to and which files an add-on has, read from `blender_manifest.toml`, a
 //! top-level `bl_info` and `[tool.blender]` in `pyproject.toml`; which classes Blender registers and which
 //! idnames it refuses, and which callbacks it calls on them; what an operator call takes and returns, and which Blender
-//! functions take an operator idname. The type-aware glue lives in
-//! `ty_python_semantic`'s `types/dedicated/blender/`.
+//! functions take an operator idname; which code runs only when Blender reloads an add-on. The
+//! type-aware glue lives in `ty_python_semantic`'s `types/dedicated/blender/`.
 
 mod callbacks;
 mod discovery;
@@ -12,6 +12,7 @@ mod files;
 mod metadata;
 mod operators;
 mod registration;
+mod reload_guard;
 mod source;
 
 pub use callbacks::{
@@ -25,4 +26,5 @@ pub use operators::{
     EXECUTION_CONTEXTS, OPERATOR_RESULTS, OperatorIdname, SINKS, Sink, SinkResult,
 };
 pub use registration::{IdnameFamily, REGISTRABLE_ROOTS};
+pub use reload_guard::in_reload_guard;
 pub use source::{BlInfo, BlInfoDict, BlInfoEntry, bl_info};
