@@ -14,6 +14,8 @@
 //! - [`operators`]: `bpy.ops.<category>.<name>` for an add-on's own operators;
 //! - [`operator_properties`]: what an operator idname given as a string gives
 //!   (`layout.operator("my_addon.run").count`), for add-on and built-in operators;
+//! - [`preferences`]: `addons[KEY].preferences` as an add-on's own preferences class, and
+//!   [`addon_key`], which add-on such a key or a preferences `bl_idname` names;
 //! - [`callbacks`]: the `self` that a property's callbacks are called with;
 //! - [`vector`]: the value and write types of vector properties;
 //! - [`lints`]: the Blender lints and the per-file query that reports them;
@@ -22,6 +24,7 @@
 //!   behind when it runs `register()` and `unregister()`.
 
 mod addon;
+mod addon_key;
 mod callbacks;
 mod evaluate;
 mod follow;
@@ -31,6 +34,7 @@ mod member;
 mod module_dunders;
 mod operator_properties;
 mod operators;
+mod preferences;
 mod properties;
 mod registration_checks;
 mod rules;

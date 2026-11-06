@@ -71,7 +71,10 @@ pub(super) fn blender_function_name<'db>(
 }
 
 /// The name of `class` when it is a class of `bpy.types`.
-fn bpy_types_class_name<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> Option<&'db str> {
+pub(super) fn bpy_types_class_name<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+) -> Option<&'db str> {
     (blender_module_name(db, class.program_file(db))? == "bpy.types")
         .then(|| class.name(db).as_str())
 }

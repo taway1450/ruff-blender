@@ -38,7 +38,7 @@ use super::evaluate::{PropertyValue, property_value};
 use super::index::{RegisteredProperty, registered_properties};
 use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
-use super::{operator_properties, operators};
+use super::{operator_properties, operators, preferences};
 
 /// The property that gives instances of `class` the attribute `name` in `file`.
 ///
@@ -393,6 +393,10 @@ pub(crate) fn exempts_attribute_override<'db>(
 /// the file's add-on gives the attribute its value type. On a class object only `del` is accepted
 /// (`del bpy.types.Scene.my_value` in `unregister()`): a plain read gives the property declaration
 /// at runtime, not the value, and stays unresolved.
+///
+/// It also replaces names ty does find: `preferences.addons[__package__].preferences` is the
+/// add-on's own preferences class ([`preferences`]), and `bpy.ops` and operator idnames give the
+/// add-on's operators.
 pub(crate) fn on_load<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
@@ -402,6 +406,11 @@ pub(crate) fn on_load<'db>(
     place: PlaceAndQualifiers<'db>,
 ) -> PlaceAndQualifiers<'db> {
     let name = attribute.attr.id.as_str();
+    if name == "preferences"
+        && let Some(ty) = preferences::preferences_load(db, env, file, attribute, receiver)
+    {
+        return Place::bound(ty).into();
+    }
     if let Type::ModuleLiteral(module) = receiver
         && let Some(ty) = operators::module_attribute(
             db,

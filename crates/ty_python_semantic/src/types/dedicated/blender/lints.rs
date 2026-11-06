@@ -11,6 +11,8 @@
 //! - `blender-unknown-operator` and the `blender-invalid-operator-property` problems of an operator
 //!   idname's use are reported while a call is inferred, and for `bl_keymap` tuples here, by
 //!   [`super::operator_properties`].
+//! - `blender-preferences-idname` is reported on the file of the add-on's preferences class, by
+//!   [`super::preferences`].
 
 use ruff_db::parsed::{ParsedModuleRef, parsed_module};
 use ruff_text_size::{Ranged, TextRange, TextSize};
@@ -28,6 +30,7 @@ use super::addon::is_first_party;
 use super::addon_of_file;
 use super::index::{AddonInProgram, addon_in_program};
 use super::operator_properties::check_keymaps;
+use super::preferences::addon_preferences;
 use super::registration_checks::{Rule, registration_findings};
 use super::rules::check_properties;
 
@@ -157,6 +160,15 @@ declare_lint! {
     }
 }
 
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-preferences-idname.md")]
+    pub(crate) static BLENDER_PREFERENCES_IDNAME = {
+        summary: "detects an `AddonPreferences` class whose `bl_idname` never makes it the add-on's preferences",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
 pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
@@ -172,6 +184,7 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_UNREACHABLE_REGISTRATION);
     registry.register_lint(&BLENDER_UNREGISTER_MISMATCH);
     registry.register_lint(&BLENDER_UNKNOWN_OPERATOR);
+    registry.register_lint(&BLENDER_PREFERENCES_IDNAME);
 }
 
 /// The Blender lints of `file`: the add-on lints when `file` is an add-on's root module (the
@@ -209,6 +222,7 @@ pub(crate) fn file_diagnostics<'db>(
     }
     if let Some(key) = addon_in_program(db, file) {
         check_registration(&context, key);
+        check_preferences(&context, key);
     }
     context.finish().diagnostics
 }
@@ -230,6 +244,19 @@ fn check_registration(context: &InferContext, key: AddonInProgram) {
         };
         if let Some(builder) = context.report_lint(lint, finding.range) {
             builder.into_diagnostic(finding.message.clone());
+        }
+    }
+}
+
+/// The preferences classes of the add-on in this file that are never its preferences.
+fn check_preferences(context: &InferContext, key: AddonInProgram) {
+    let file = context.file();
+    for problem in &addon_preferences(context.db(), key).problems {
+        if problem.file != file {
+            continue;
+        }
+        if let Some(builder) = context.report_lint(&BLENDER_PREFERENCES_IDNAME, problem.range) {
+            builder.into_diagnostic(problem.message.clone());
         }
     }
 }

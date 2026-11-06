@@ -123,7 +123,7 @@ impl<'db> AddonClasses<'db> {
 }
 
 /// The static classes of the method resolution order of `class`, starting with `class` itself.
-fn mro_classes<'db>(
+pub(super) fn mro_classes<'db>(
     db: &'db dyn Db,
     class: StaticClassLiteral<'db>,
 ) -> impl Iterator<Item = StaticClassLiteral<'db>> {
@@ -628,7 +628,7 @@ fn idname_site(db: &dyn Db, class: StaticClassLiteral<'_>) -> Site {
 }
 
 /// The name a definition binds: the `class` or `def` name, or the assignment target.
-fn definition_site(db: &dyn Db, definition: Definition<'_>) -> Site {
+pub(super) fn definition_site(db: &dyn Db, definition: Definition<'_>) -> Site {
     let module = parsed_module(db, definition.python_file(db)).load(db);
     Site {
         file: definition.file(db),
@@ -666,7 +666,7 @@ pub(super) fn class_string(
 /// The last binding of the class attribute `name` in the nearest class of the add-on's method
 /// resolution order that binds it, with its value when that is a string literal. The `bpy.types`
 /// classes only declare it, so they end the search.
-fn class_attribute<'db>(
+pub(super) fn class_attribute<'db>(
     db: &'db dyn Db,
     class: StaticClassLiteral<'db>,
     name: &str,
