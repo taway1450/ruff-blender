@@ -1,7 +1,7 @@
 //! Blender's property declarations in type expressions.
 //!
 //! `count: IntProperty(min=0)` is a call in an annotation, which the typing spec rejects. Blender
-//! evaluates the annotation and turns the deferred property it gives into a property, so the
+//! evaluates the annotation and turns the Property declaration it gives into a property, so the
 //! annotation means the property's value type (`int`). The same holds for anything that evaluates
 //! to one: `count: COMMON`, `count: PROPS["count"]`, `count: wrapper()`. The Property evaluator
 //! (`types::blender`) reads which declarations these are.
@@ -18,8 +18,8 @@ use crate::types::{Type, TypeContext, blender};
 
 impl<'db> TypeInferenceBuilder<'db, '_> {
     /// The type expression `reference`, a name or dotted name whose value ty inferred as `ty`, when
-    /// that value is a deferred property (`count: COMMON`): the property's value type, or `Any`
-    /// when the evaluator cannot tell which property it is. `None` for every other value.
+    /// that value is a `_PropertyDeferred` value (`count: COMMON`): the property's value type, or
+    /// `Any` when the evaluator cannot tell which property it is. `None` for every other value.
     pub(super) fn blender_reference_type_expression(
         &self,
         ty: Type<'db>,
@@ -34,9 +34,9 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
         )
     }
 
-    /// The type expression `subscript` of a container `value_ty` that holds deferred properties
-    /// (`weight: PROPS["weight"]`): the value type of the property it picks, or `Any` when the
-    /// evaluator cannot tell which. `None` for every other subscript.
+    /// The type expression `subscript` of a container `value_ty` that holds `_PropertyDeferred`
+    /// values (`weight: PROPS["weight"]`): the value type of the property it picks, or `Any` when
+    /// the evaluator cannot tell which. `None` for every other subscript.
     pub(super) fn blender_subscript_type_expression(
         &mut self,
         subscript: &ast::ExprSubscript,
@@ -84,8 +84,8 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
             if let Some(value_type) = value_type {
                 return value_type;
             }
-            // `x: getattr(bpy.props, name)()`: Blender accepts any deferred property, and this
-            // may be one, so the member is a property of any type rather than an error.
+            // `x: getattr(bpy.props, name)()`: Blender accepts any `_PropertyDeferred` value, and
+            // this may be one, so the member is a property of any type rather than an error.
             if self.is_class_member_annotation(call)
                 && let Some(class) = nearest_enclosing_class(self.db(), self.index, self.scope())
                 && blender::is_opaque_call(self.db(), self.program_file(), class, callee)
