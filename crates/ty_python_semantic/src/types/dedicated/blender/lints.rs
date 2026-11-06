@@ -6,6 +6,8 @@
 //!   add-on as a whole, not one expression, and are reported on the add-on's root module.
 //! - The property rules (`blender-invalid-property` and the three warnings about properties Blender
 //!   ignores) are reported on every first-party file, by [`super::rules`].
+//! - The registration checks (`blender-unregistered-class` and five more) are reported on the file of the
+//!   add-on they are in, by [`super::registration_checks`].
 
 use ruff_db::parsed::{ParsedModuleRef, parsed_module};
 use ruff_text_size::{Ranged, TextRange, TextSize};
@@ -21,6 +23,8 @@ use crate::{Db, ProgramEnvironment, declare_lint};
 
 use super::addon::is_first_party;
 use super::addon_of_file;
+use super::index::{AddonInProgram, addon_in_program};
+use super::registration_checks::{Rule, registration_findings};
 use super::rules::check_properties;
 
 declare_lint! {
@@ -77,6 +81,60 @@ declare_lint! {
     }
 }
 
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-register-order.md")]
+    pub(crate) static BLENDER_REGISTER_ORDER = {
+        summary: "detects a Blender class or property registered before the class it points to",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Error,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-duplicate-registration.md")]
+    pub(crate) static BLENDER_DUPLICATE_REGISTRATION = {
+        summary: "detects a Blender class registered twice, or two Blender classes registered with one idname",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Error,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-invalid-idname.md")]
+    pub(crate) static BLENDER_INVALID_IDNAME = {
+        summary: "detects a `bl_idname` that Blender refuses or warns about when it registers the class",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Error,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-unregistered-class.md")]
+    pub(crate) static BLENDER_UNREGISTERED_CLASS = {
+        summary: "detects a Blender class of an add-on that `register()` never registers",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-unreachable-registration.md")]
+    pub(crate) static BLENDER_UNREACHABLE_REGISTRATION = {
+        summary: "detects a function that registers Blender classes but that `register()` never calls",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-unregister-mismatch.md")]
+    pub(crate) static BLENDER_UNREGISTER_MISMATCH = {
+        summary: "detects what `register()` adds and `unregister()` leaves behind, and what `unregister()` removes that was never added",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
 pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
@@ -84,6 +142,12 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_UNSUPPORTED_PROPERTY_HOST);
     registry.register_lint(&BLENDER_LEGACY_PROPERTY);
     registry.register_lint(&BLENDER_UNSUPPORTED_PROPERTY_TARGET);
+    registry.register_lint(&BLENDER_REGISTER_ORDER);
+    registry.register_lint(&BLENDER_DUPLICATE_REGISTRATION);
+    registry.register_lint(&BLENDER_INVALID_IDNAME);
+    registry.register_lint(&BLENDER_UNREGISTERED_CLASS);
+    registry.register_lint(&BLENDER_UNREACHABLE_REGISTRATION);
+    registry.register_lint(&BLENDER_UNREGISTER_MISMATCH);
 }
 
 /// The Blender lints of `file`: the add-on lints when `file` is an add-on's root module (the
@@ -118,7 +182,31 @@ pub(crate) fn file_diagnostics<'db>(
     if first_party {
         check_properties(&context, &module);
     }
+    if let Some(key) = addon_in_program(db, file) {
+        check_registration(&context, key);
+    }
     context.finish().diagnostics
+}
+
+/// The registration mistakes of the add-on that are in this file.
+fn check_registration(context: &InferContext, key: AddonInProgram) {
+    let file = context.file();
+    for finding in registration_findings(context.db(), key) {
+        if finding.file != file {
+            continue;
+        }
+        let lint = match finding.rule {
+            Rule::RegisterOrder => &BLENDER_REGISTER_ORDER,
+            Rule::DuplicateRegistration => &BLENDER_DUPLICATE_REGISTRATION,
+            Rule::InvalidIdname => &BLENDER_INVALID_IDNAME,
+            Rule::UnregisteredClass => &BLENDER_UNREGISTERED_CLASS,
+            Rule::UnreachableRegistration => &BLENDER_UNREACHABLE_REGISTRATION,
+            Rule::UnregisterMismatch => &BLENDER_UNREGISTER_MISMATCH,
+        };
+        if let Some(builder) = context.report_lint(lint, finding.range) {
+            builder.into_diagnostic(finding.message.clone());
+        }
+    }
 }
 
 /// The start of the root module: where problems that have no place in Python code are reported.

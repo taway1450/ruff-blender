@@ -230,13 +230,95 @@ Use instead:
 value = unknown  # ty: ignore[unresolved-reference]
 ```
 
+## `blender-duplicate-registration`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-duplicate-registration%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L93" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for a class that `register()` registers while it is still registered, and for two classes of
+one kind (operators and macros; panels; menus; headers; UI lists) that register under the same
+idname. A panel, menu, header or UI list without a `bl_idname` registers under its class name, and a
+subclass that sets none inherits its parent's.
+
+Registrations in different branches of an `if`, and registrations that Blender runs later (timers,
+handlers), are not compared.
+
+**Why is this bad?**
+
+
+Registering a class twice raises `ValueError`, so the add-on fails to enable. A second class with
+the same idname silently replaces the first: the first operator or panel is gone, and unregistering
+it later fails.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class SimpleOperator(Operator):
+    bl_idname = "object.simple"
+
+
+def register():
+    bpy.utils.register_class(SimpleOperator)
+    bpy.utils.register_class(SimpleOperator)  # error: [blender-duplicate-registration]
+
+
+def unregister():
+    bpy.utils.unregister_class(SimpleOperator)
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
 ## `blender-invalid-addon-metadata`
 
 <small>
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-addon-metadata%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L35" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L39" target="_blank">View source</a>
 </small>
 
 
@@ -277,13 +359,96 @@ def register(): ...
 def unregister(): ...
 ```
 
+## `blender-invalid-idname`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-idname%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L102" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the `bl_idname` of the classes the add-on registers. An operator or macro idname is
+`category.name`: lower-case letters, digits and `_`, with exactly one `.` that is neither first nor
+last, and at most 60 characters. A panel, menu, header or UI list idname is an upper-case prefix,
+`_PT_`, `_MT_`, `_HT_` or `_UL_`, then a suffix (`MYADDON_PT_settings`); without a `bl_idname`, the
+class name is the idname.
+
+An idname that is not a string literal is not checked.
+
+**Why is this bad?**
+
+
+Blender refuses an invalid operator idname, and an operator without one, with `RuntimeError`, so the
+add-on fails to enable. For panels, menus, headers and UI lists it prints a warning, and code that
+looks the class up by the conventional name does not find it.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class SimpleOperator(Operator):
+    bl_idname = "OBJECT_OT_simple"  # error: [blender-invalid-idname]
+
+
+def register():
+    bpy.utils.register_class(SimpleOperator)
+
+
+def unregister():
+    bpy.utils.unregister_class(SimpleOperator)
+```
+
+Use `bl_idname = "object.simple"` instead.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
 ## `blender-invalid-property`
 
 <small>
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-property%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L44" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L48" target="_blank">View source</a>
 </small>
 
 
@@ -370,7 +535,7 @@ class PropertyGroup(bpy_struct): ...
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-register%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L26" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L30" target="_blank">View source</a>
 </small>
 
 
@@ -412,7 +577,7 @@ def register(context):  # error: [blender-invalid-register] "callable with no ar
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-legacy-property%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L62" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L66" target="_blank">View source</a>
 </small>
 
 
@@ -474,13 +639,376 @@ class bpy_struct: ...
 class PropertyGroup(bpy_struct): ...
 ```
 
+## `blender-register-order`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-register-order%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L84" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the order in which `register()` registers classes and adds properties. A class with a
+`PointerProperty` or `CollectionProperty` to a `PropertyGroup` of the add-on, and a property
+assigned to a Blender class with such a `type=`, need that `PropertyGroup` registered first. A
+subpanel (`bl_parent_id`) needs its parent panel registered first.
+
+The check follows `register()` through the functions it calls, the modules it imports, loops over
+class lists and `bpy.utils.register_classes_factory`. Registrations that Blender runs later (timers,
+handlers) have no known order and are not checked.
+
+**Why is this bad?**
+
+
+Blender refuses the registration: a pointer to a `PropertyGroup` that is not registered yet raises
+`ValueError`, and a subpanel before its parent raises `RuntimeError`, so the add-on fails to enable.
+Unregistering in the wrong order works, so it is not reported.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.props import PointerProperty
+from bpy.types import PropertyGroup
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class Leaf(PropertyGroup): ...
+
+
+class Settings(PropertyGroup):
+    leaf: PointerProperty(type=Leaf)
+
+
+def register():
+    bpy.utils.register_class(Settings)  # error: [blender-register-order]
+    bpy.utils.register_class(Leaf)
+
+
+def unregister():
+    bpy.utils.unregister_class(Leaf)
+    bpy.utils.unregister_class(Settings)
+```
+
+Register `Leaf` before `Settings` instead.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def PointerProperty(type: type, **kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class PropertyGroup(bpy_struct): ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-unreachable-registration`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unreachable-registration%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L120" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for a function of the add-on that registers classes (it calls `bpy.utils.register_class`, or
+the register function of `bpy.utils.register_classes_factory`) but that `register()` never calls,
+directly or through other functions. A function that `register()` hands to Blender, such as a timer,
+counts as called.
+
+When `register()` does something the checker cannot follow, nothing is reported. The classes such a
+function registers are not also reported as [`blender-unregistered-class`](#blender-unregistered-class).
+
+**Why is this bad?**
+
+
+Blender only runs `register()`, so the classes the function registers are never registered. Often a
+submodule's `register()` is not called from the add-on's.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class SimpleOperator(Operator):
+    bl_idname = "object.simple"
+
+
+def register_simple():  # error: [blender-unreachable-registration]
+    bpy.utils.register_class(SimpleOperator)
+
+
+def register():
+    pass
+
+
+def unregister():
+    pass
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-unregister-mismatch`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unregister-mismatch%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L129" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Compares `unregister()` with `register()`. It reports a class that `register()` registers and
+`unregister()` never unregisters, a property `register()` adds to a Blender class and `unregister()`
+never deletes, a handler or menu function `register()` appends and `unregister()` never removes, and
+a class `unregister()` unregisters that `register()` never registers.
+
+When either function does something the checker cannot follow, what depends on it is not reported.
+Deleting or removing something that was never added is not reported either.
+
+**Why is this bad?**
+
+
+Whatever `unregister()` leaves behind stays in Blender after the add-on is disabled: its operators
+and panels, its properties, and its handlers, which keep running. Enabling the add-on again then
+registers the classes twice. Unregistering a class that is not registered raises `RuntimeError`, so
+disabling the add-on fails.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.props import IntProperty
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class SimpleOperator(Operator):
+    bl_idname = "object.simple"
+
+
+def register():
+    bpy.utils.register_class(SimpleOperator)
+    bpy.types.Scene.count = IntProperty()  # error: [blender-unregister-mismatch]
+
+
+def unregister():
+    bpy.utils.unregister_class(SimpleOperator)
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class ID(bpy_struct): ...
+class Scene(ID): ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-unregistered-class`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unregistered-class%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L111" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for a class of the add-on that `bpy.utils.register_class` accepts (an operator, panel, menu,
+UI list, `PropertyGroup`, `AddonPreferences`, ...) but that `register()` never registers, in any
+module of the add-on, imported or not.
+
+A class that another class of the add-on derives from is a base and needs no registration, and a
+mixin derives from no Blender class. When `register()` does something the checker cannot follow (a
+class list built at run time, or a call it cannot resolve), nothing is reported.
+
+**Why is this bad?**
+
+
+Blender only knows the classes that are registered: an unregistered operator is not in `bpy.ops`, an
+unregistered panel is never drawn, and unregistered add-on preferences are not the add-on's
+preferences. Often the class was left out of the class list.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class SimpleOperator(Operator):
+    bl_idname = "object.simple"
+
+
+class OtherOperator(Operator):  # error: [blender-unregistered-class]
+    bl_idname = "object.other"
+
+
+def register():
+    bpy.utils.register_class(SimpleOperator)
+
+
+def unregister():
+    bpy.utils.unregister_class(SimpleOperator)
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
 ## `blender-unsupported-property-host`
 
 <small>
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unsupported-property-host%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L53" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L57" target="_blank">View source</a>
 </small>
 
 
@@ -553,7 +1081,7 @@ class Panel(bpy_struct): ...
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unsupported-property-target%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L71" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L75" target="_blank">View source</a>
 </small>
 
 

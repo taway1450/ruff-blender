@@ -23,8 +23,11 @@ use crate::{Db, ProgramEnvironment};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Resolved<'db> {
     Module(ProgramFile<'db>),
-    /// The type of a class or function definition.
+    /// The type of a class definition.
     Value(Type<'db>),
+    /// A function definition, whose type is its `binding_type`. The `register()` walk follows the
+    /// definition into the function's body.
+    Function(Definition<'db>),
     /// An assignment to a name whose value is anything else (`COMMON = IntProperty()`), to be
     /// read by whoever asked.
     Constant(Definition<'db>),
@@ -61,6 +64,44 @@ fn resolve_expression_at_depth<'db>(
             };
             resolve_module_member(db, module, attribute.attr.id.as_str(), depth)
         }
+        _ => None,
+    }
+}
+
+/// Resolve the name `name`, evaluated in `scope`, as [`resolve_expression`] resolves a name.
+pub(super) fn resolve_name_in<'db>(
+    db: &'db dyn Db,
+    scope: ScopeId<'db>,
+    name: &str,
+) -> Option<Resolved<'db>> {
+    resolve_name(db, scope, name, 0)
+}
+
+/// The definitions that the binding `definition` refers to through imports and re-exports: itself
+/// for any other binding.
+pub(super) fn imported_definitions<'db>(
+    db: &'db dyn Db,
+    definition: Definition<'db>,
+    name: &str,
+) -> Vec<ResolvedDefinition<'db>> {
+    let env = ProgramEnvironment::from_file(definition.program_file(db));
+    definition_resolution::resolve_definition(
+        db,
+        &env,
+        definition,
+        Some(name),
+        ImportAliasResolution::ResolveAliases,
+    )
+}
+
+/// The module called `name`, as `importing_file` would import it.
+pub(super) fn module_by_name<'db>(
+    db: &'db dyn Db,
+    importing_file: ProgramFile<'db>,
+    name: &str,
+) -> Option<ProgramFile<'db>> {
+    match resolve_module_file(db, importing_file, &ModuleName::new(name)?)? {
+        Resolved::Module(module) => Some(module),
         _ => None,
     }
 }
@@ -191,9 +232,8 @@ fn resolve_definition<'db>(
         ResolvedDefinition::Definition(definition) => *definition,
     };
     match definition.kind(db) {
-        DefinitionKind::Class(_) | DefinitionKind::Function(_) => {
-            Some(Resolved::Value(binding_type(db, definition)))
-        }
+        DefinitionKind::Class(_) => Some(Resolved::Value(binding_type(db, definition))),
+        DefinitionKind::Function(_) => Some(Resolved::Function(definition)),
         // ty's resolution leaves these as they are, as in `from bpy import types as types` of a
         // `bpy/__init__.pyi` that also has `from bpy.types import Context`.
         DefinitionKind::ImportFromSubmodule(_) => imported_submodule(db, definition),

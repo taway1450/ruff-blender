@@ -8,12 +8,15 @@
 //! - [`evaluate`]: the Property evaluator, which declarations an expression evaluates to
 //!   (`x: COMMON`, `x: wrapper(2)`);
 //! - [`follow`]: the shared follower, what a name refers to by its definitions;
+//! - [`walk`]: the `register()` walk, what `register()` and `unregister()` do, in order;
 //! - [`index`]: the Add-on index, what an add-on's code does to Blender, gathered without inference;
 //! - [`member`]: the property behind an attribute of a Blender instance, of either origin;
 //! - [`callbacks`]: the `self` that a property's callbacks are called with;
 //! - [`vector`]: the value and write types of vector properties;
 //! - [`lints`]: the Blender lints and the per-file query that reports them;
-//! - [`rules`]: the property rules, what Blender rejects or ignores in property declarations.
+//! - [`rules`]: the property rules, what Blender rejects or ignores in property declarations;
+//! - [`registration_checks`]: the registration checks, what Blender refuses, ignores or leaves
+//!   behind when it runs `register()` and `unregister()`.
 
 mod addon;
 mod callbacks;
@@ -24,9 +27,11 @@ mod lints;
 mod member;
 mod module_dunders;
 mod properties;
+mod registration_checks;
 mod rules;
 mod symbols;
 mod vector;
+mod walk;
 
 pub(crate) use addon::addon_of_file;
 pub(crate) use callbacks::declaration_callee;
