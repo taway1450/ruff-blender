@@ -169,6 +169,7 @@ mod annotation_expression;
 mod attribute_assignment;
 mod awaitable;
 mod binary_expressions;
+mod blender;
 mod class;
 mod dict;
 mod dynamic_class;
@@ -10795,12 +10796,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
 
         let ty = resolved.unwrap_with_diagnostic(db, env, |lookup_error| match lookup_error {
             LookupError::Undefined(qualifiers) => {
-                if let Some(ty) = crate::types::blender::reload_guard_type(
-                    db,
-                    self.scope(),
-                    self.module(),
-                    name_node,
-                ) {
+                if let Some(ty) = self.blender_reload_guard_type(name_node) {
                     return TypeAndQualifiers::new(ty, TypeOrigin::Inferred, qualifiers);
                 }
                 self.report_unresolved_reference(name_node);

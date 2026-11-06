@@ -412,8 +412,8 @@ impl<'db> Checks<'db> {
     }
 
     /// `blender-registered-base`: a registered class that derives from another registered class,
-    /// in either order, unless both are `PropertyGroup`s (they have no callbacks to lose) or they
-    /// are registered in different branches of an `if`. Blender detaches the base's Python class
+    /// in either order, unless the subclass derives from `PropertyGroup` (property groups have no
+    /// callbacks to lose) or they are registered in different branches of an `if`. Blender detaches the base's Python class
     /// when it registers the subclass after it, and warns about either order.
     fn registered_bases(&mut self, register: &Walk<'db>) {
         let db = self.db;

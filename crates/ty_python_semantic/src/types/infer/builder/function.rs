@@ -1159,12 +1159,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 &DeclaredAndInferredType::are_the_same_type(declared_ty),
             );
         } else {
-            let ty = if let Some(ty) = crate::types::blender::override_parameter_type(
-                db,
-                env,
-                definition,
-                default_expr.map(|default| self.file_expression_type(default)),
-            ) {
+            let ty = if let Some(ty) = self.blender_parameter_type(definition, default.as_deref()) {
                 ty
             } else if let Some(default_expr) = default_expr {
                 let default_ty = self.file_expression_type(default_expr);

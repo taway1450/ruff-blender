@@ -19,7 +19,8 @@
 //!   declare: every registrable Blender class has a metaclass of Blender's and a C base with its
 //!   own layout, so a mixin with another metaclass (`ABC`) or with `__slots__` makes Blender raise
 //!   `TypeError` when the class is created. Reported only while ty sees neither on the Blender
-//!   base, so a stub that declares them takes over.
+//!   base, so a stub that declares them takes over, and only on the class whose own bases
+//!   conflict, not on its subclasses.
 //!
 //! The rules hold for every class of a first-party file deriving from a `bpy.types` class,
 //! registered or not.
@@ -72,7 +73,7 @@ pub(super) fn check_class_rules<'db>(
             ));
         }
     }
-    check_metaclass_and_layout(context, class, blender_base, name);
+    check_metaclass_and_layout(context, class, name);
 }
 
 /// Whether `class` has two unrelated `bpy.types` bases (`class MY_OT_run(Operator, Panel)`).
@@ -136,23 +137,99 @@ fn lost_mixin_name<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> Opti
     None
 }
 
-/// Report ty's own `conflicting-metaclass` and `instance-layout-conflict` for a base of `class`
-/// that is not one of Blender's and has a metaclass other than `type`, or a layout of its own,
-/// while ty sees neither on `blender_base`, the first `bpy.types` class in its method resolution
-/// order.
+/// Why Python refuses to create a class that derives from a `bpy.types` class and a mixin.
+#[derive(Clone, Copy)]
+enum Conflict {
+    /// The mixin has a metaclass other than `type` (`ABC`), while Blender's class has Blender's.
+    Metaclass,
+    /// The mixin has a layout of its own (`__slots__`), while Blender's class has its C layout.
+    Layout,
+}
+
+/// Report ty's own `conflicting-metaclass` and `instance-layout-conflict` on `class` when one of
+/// its bases is not one of Blender's and conflicts with its Blender base ([`conflicting_mixin`]).
+///
+/// Only the class whose own bases conflict is reported: Python refuses to create it, so its
+/// subclasses never exist.
+///
+/// ```python
+/// class Base(AbcMixin, Operator):  # error: [conflicting-metaclass]
+///     ...
+///
+/// class Sub(Base):  # no error: `Base` is never created
+///     ...
+/// ```
 fn check_metaclass_and_layout<'db>(
     context: &InferContext<'db, '_>,
     class: StaticClassLiteral<'db>,
-    blender_base: StaticClassLiteral<'db>,
     name: &ast::Identifier,
 ) {
     let db = context.db();
+    let has_conflict =
+        |class: StaticClassLiteral<'db>, conflict| conflicting_mixin(db, class, conflict).is_some();
+    let introduces = |conflict| {
+        let inherited = class.explicit_bases(db).iter().any(|base| {
+            matches!(base, Type::ClassLiteral(base)
+                if base.as_static().is_some_and(|base| has_conflict(base, conflict)))
+        });
+        conflicting_mixin(db, class, conflict).filter(|_| !inherited)
+    };
+    if let Some((mixin, blender_base)) = introduces(Conflict::Metaclass)
+        && let Some(builder) = context.report_lint(&CONFLICTING_METACLASS, name.range())
+    {
+        builder.into_diagnostic(format_args!(
+            "The metaclass of base class `{}` conflicts with Blender's metaclass of `{}`",
+            mixin.name(db),
+            blender_base.name(db),
+        ));
+    }
+    if let Some((mixin, blender_base)) = introduces(Conflict::Layout)
+        && let Some(builder) = context.report_lint(&INSTANCE_LAYOUT_CONFLICT, name.range())
+    {
+        builder.into_diagnostic(format_args!(
+            "Base class `{}` has an instance layout of its own, which conflicts with Blender's C layout of `{}`",
+            mixin.name(db),
+            blender_base.name(db),
+        ));
+    }
+}
+
+/// The first class in the method resolution order of `class` that is not one of Blender's and has
+/// `conflict` with the first `bpy.types` class there, with that class: a metaclass other than
+/// `type`, or a layout of its own. `None` while ty sees Blender's metaclass or layout on the
+/// `bpy.types` class, since a stub that declares them lets ty's own checks report the conflict.
+fn conflicting_mixin<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+    conflict: Conflict,
+) -> Option<(ClassType<'db>, StaticClassLiteral<'db>)> {
+    let blender_base = mro_classes(db, class).find(|base| is_bpy_types_class(db, *base))?;
     let is_type = |metaclass: Type<'db>| {
         metaclass
             .to_class_type(db)
             .is_some_and(|metaclass| metaclass.is_known(db, KnownClass::Type))
     };
-    let mixins: Vec<ClassType<'db>> = class
+    // Every class has `object`'s layout, which typeshed marks as a disjoint base.
+    let has_own_layout = |class: ClassType<'db>| {
+        class
+            .nearest_disjoint_base(db)
+            .is_some_and(|base| !base.class.is_known(db, KnownClass::Object))
+    };
+    let blender_declares_it = match conflict {
+        Conflict::Metaclass => !is_type(blender_base.metaclass(db)),
+        Conflict::Layout => has_own_layout(blender_base.default_specialization(db)),
+    };
+    if blender_declares_it {
+        return None;
+    }
+    let conflicts = |mixin: ClassType<'db>| match conflict {
+        Conflict::Metaclass => {
+            let metaclass = mixin.metaclass(db);
+            !metaclass.is_dynamic() && !is_type(metaclass)
+        }
+        Conflict::Layout => has_own_layout(mixin),
+    };
+    class
         .iter_mro(db, None)
         .skip(1)
         .filter_map(|base| match base {
@@ -164,33 +241,6 @@ fn check_metaclass_and_layout<'db>(
                 .as_static()
                 .is_some_and(|base| !mro_classes(db, base).any(|c| is_bpy_types_class(db, c)))
         })
-        .collect();
-    let blender_name = blender_base.name(db);
-    if is_type(blender_base.metaclass(db))
-        && let Some(mixin) = mixins.iter().find(|mixin| {
-            let metaclass = mixin.metaclass(db);
-            !metaclass.is_dynamic() && !is_type(metaclass)
-        })
-        && let Some(builder) = context.report_lint(&CONFLICTING_METACLASS, name.range())
-    {
-        builder.into_diagnostic(format_args!(
-            "The metaclass of base class `{}` conflicts with Blender's metaclass of `{blender_name}`",
-            mixin.name(db),
-        ));
-    }
-    // Every class has `object`'s layout, which typeshed marks as a disjoint base.
-    let has_own_layout = |class: ClassType<'db>| {
-        class
-            .nearest_disjoint_base(db)
-            .is_some_and(|base| !base.class.is_known(db, KnownClass::Object))
-    };
-    if !has_own_layout(blender_base.default_specialization(db))
-        && let Some(mixin) = mixins.iter().find(|mixin| has_own_layout(**mixin))
-        && let Some(builder) = context.report_lint(&INSTANCE_LAYOUT_CONFLICT, name.range())
-    {
-        builder.into_diagnostic(format_args!(
-            "Base class `{}` has an instance layout of its own, which conflicts with Blender's C layout of `{blender_name}`",
-            mixin.name(db),
-        ));
-    }
+        .find(|mixin| conflicts(*mixin))
+        .map(|mixin| (mixin, blender_base))
 }

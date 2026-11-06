@@ -39,12 +39,11 @@ use ty_python_core::{ProgramFile, semantic_index};
 
 use crate::types::class_base::ClassBase;
 use crate::types::context::InferContext;
-use crate::types::function::FunctionDecorators;
-use crate::types::infer::{function_known_decorator_flags, nearest_enclosing_class};
+use crate::types::infer::{function_known_decorators, nearest_enclosing_class};
 use crate::types::signatures::CallableSignature;
 use crate::types::{
     ClassType, KnownClass, MemberLookupPolicy, Parameter, Parameters, Signature,
-    StaticClassLiteral, Type, UnionType, binding_type,
+    StaticClassLiteral, Type, UnionType,
 };
 use crate::{Db, ProgramEnvironment};
 
@@ -65,9 +64,9 @@ pub(super) fn callback_root<'db>(
     bpy_types_bases(db, class).find(|base| is_callback_root(base))
 }
 
-/// The name and shape of the method `definition`: a `def` in the body of a module-level class,
-/// bound to a function whose decorators ty knows (`classmethod`, `staticmethod` or none). Any other
-/// decorator, and any other binding (`poll = shared_poll`), gives `None`.
+/// The name and shape of the method `definition`: a `def` in the body of a module-level class whose
+/// decorators are `classmethod`, `staticmethod` or none ([`method_kind`]). Any other decorator, and
+/// any other binding (`poll = shared_poll`), gives `None`.
 #[salsa::tracked(
     returns(ref),
     cycle_initial=|_, _, _| None,
@@ -88,18 +87,9 @@ fn method_shape<'db>(
     {
         return None;
     }
-    let Type::FunctionLiteral(function_type) = binding_type(db, definition) else {
-        return None;
-    };
-    let kind = if function_type.has_known_decorator(db, FunctionDecorators::CLASSMETHOD) {
-        MethodKind::ClassMethod
-    } else if function_type.has_known_decorator(db, FunctionDecorators::STATICMETHOD) {
-        MethodKind::StaticMethod
-    } else {
-        MethodKind::Function
-    };
     let module = parsed_module(db, definition.python_file(db)).load(db);
     let function = function.node(&module);
+    let kind = method_kind(db, definition, function)?;
     let parameters = &function.parameters;
     Some((
         function.name.id.clone(),
@@ -108,6 +98,32 @@ fn method_shape<'db>(
             positional: parameters.posonlyargs.len() + parameters.args.len(),
         },
     ))
+}
+
+/// The kind of the method `definition`, whose `def` is `function`, from its decorators: `None` when
+/// one of them is neither `classmethod` nor `staticmethod`. Blender then gets whatever that
+/// decorator returns, which may take other parameters than the `def`, even where its annotations say
+/// it gives back the function itself.
+fn method_kind<'db>(
+    db: &'db dyn Db,
+    definition: Definition<'db>,
+    function: &ast::StmtFunctionDef,
+) -> Option<MethodKind> {
+    let decorators = function_known_decorators(db, definition);
+    let mut kind = MethodKind::Function;
+    // The outermost decorator, listed first, decides.
+    for decorator in function.decorator_list.iter().rev() {
+        let Some(Type::ClassLiteral(class)) = decorators.expression_type(&decorator.expression)
+        else {
+            return None;
+        };
+        kind = match class.known(db)? {
+            KnownClass::Classmethod => MethodKind::ClassMethod,
+            KnownClass::Staticmethod => MethodKind::StaticMethod,
+            _ => return None,
+        };
+    }
+    Some(kind)
 }
 
 /// The class whose body defines `definition`.
@@ -327,8 +343,8 @@ impl<'db> OverrideTypes<'db> {
 /// The parent is the first class after the method's class in its method resolution order that
 /// defines the method and is a `bpy.types` class or derives from one. A plain mixin is skipped: it
 /// is no Blender class, so it has no types of Blender's to give, and its own methods get no answer
-/// either. An overloaded parent, a parent that is no function and a `staticmethod` override give
-/// none.
+/// either. An overloaded parent, a parent that is no function, a `staticmethod` override and one
+/// with any other decorator but `classmethod` ([`method_kind`]) give none.
 ///
 /// The parent's types are taken as they are, `X | None` included, with the parent's `Self` bound
 /// to the overriding class. Registration plays no part: an unregistered base is typed too.
@@ -345,7 +361,8 @@ pub(crate) fn override_types<'db>(
         return None;
     };
     let module = parsed_module(db, definition.python_file(db)).load(db);
-    let name = function.node(&module).name.id.clone();
+    let function = function.node(&module);
+    let name = function.name.id.clone();
     // `raw_signature` asks for every method: rule most of them out by their name alone, before
     // any method resolution order is looked at.
     if !is_callback_name(&name) {
@@ -353,7 +370,10 @@ pub(crate) fn override_types<'db>(
     }
     let class = defining_class(db, definition)?;
     let callback = callback_of(callback_root(db, class)?, &name)?;
-    if function_known_decorator_flags(db, definition).contains(FunctionDecorators::STATICMETHOD) {
+    if !matches!(
+        method_kind(db, definition, function),
+        Some(MethodKind::Function | MethodKind::ClassMethod)
+    ) {
         return None;
     }
 
