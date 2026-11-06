@@ -18,3 +18,14 @@ pub(crate) fn addon_of_file<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Opt
         .min_by_key(|root| root.components().count())?;
     addon_for_path(db, path, bound)
 }
+
+/// Whether `file` is in one of the program's first-party roots: the project's own code, not
+/// typeshed, site-packages or the stubs.
+pub(super) fn is_first_party<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> bool {
+    file.file(db).path(db).as_system_path().is_some_and(|path| {
+        file.program(db)
+            .search_paths(db)
+            .first_party_roots()
+            .any(|root| path.starts_with(root))
+    })
+}
