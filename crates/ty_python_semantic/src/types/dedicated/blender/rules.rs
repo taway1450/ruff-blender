@@ -39,6 +39,7 @@ use crate::types::context::InferContext;
 use crate::types::infer::{infer_complete_scope_types, nearest_enclosing_class};
 use crate::types::{StaticClassLiteral, Type, definition_expression_type_in_scope};
 
+use super::class_rules::check_class_rules;
 use super::evaluate::{property_value, with_member_annotation};
 use super::index::{RegisteredProperty, file_facts};
 use super::lints::{
@@ -429,6 +430,7 @@ impl<'ast> Visitor<'ast> for Checker<'_, '_, '_> {
                 let class = nearest_enclosing_class(self.db(), self.index, scope);
                 if let Some(class) = class {
                     self.check_operator_mixins(class, &class_def.name);
+                    check_class_rules(self.context, class, &class_def.name);
                 }
                 self.visit_scope(scope, class, &class_def.body);
             }

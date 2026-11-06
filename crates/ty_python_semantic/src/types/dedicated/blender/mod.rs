@@ -17,6 +17,8 @@
 //! - [`preferences`]: `addons[KEY].preferences` as an add-on's own preferences class, and
 //!   [`addon_key`], which add-on such a key or a preferences `bl_idname` names;
 //! - [`callbacks`]: the `self` that a property's callbacks are called with;
+//! - [`class_rules`]: the class-shape rules, what Blender does with a class's bases that its stubs
+//!   don't show;
 //! - [`classes`]: the classes of an add-on, their attributes as Blender reads them and which of them
 //!   may be registered;
 //! - [`vector`]: the value and write types of vector properties;
@@ -30,6 +32,7 @@
 mod addon;
 mod addon_key;
 mod callbacks;
+mod class_rules;
 mod classes;
 mod evaluate;
 mod follow;
@@ -50,6 +53,7 @@ mod walk;
 
 pub(crate) use addon::addon_of_file;
 pub(crate) use callbacks::declaration_callee;
+pub(crate) use class_rules::has_invalid_bases;
 pub(crate) use evaluate::{
     annotation_value_type, is_opaque_call, is_property_container, reference_value_type,
     subscript_value_type,
