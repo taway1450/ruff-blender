@@ -128,6 +128,11 @@ pub(super) enum Event<'db> {
         /// The `append(f)` call.
         site: Site,
     },
+    /// `macro_class.define(idname)`: a step of a macro, in either idname form.
+    DefineMacroStep {
+        macro_class: StaticClassLiteral<'db>,
+        idname: Name,
+    },
 }
 
 /// The result of a walk.
@@ -1977,6 +1982,21 @@ impl<'db> Walker<'db> {
                         function,
                         added,
                         site: frame.site(db, range),
+                    });
+                }
+                return Value::Foreign(None);
+            }
+            // `MyMacro.define("my.step")`: a step of the macro, which its call takes as a keyword.
+            if method.as_str() == "define"
+                && let Value::Class(class, _) = &base
+                && !is_bpy_types_class(db, *class)
+                && bpy_types_bases(db, *class).any(|base| base == "Macro")
+                && let [argument] = arguments
+            {
+                if let Value::Str(idname) = self.eval(argument, frame) {
+                    self.record(Event::DefineMacroStep {
+                        macro_class: *class,
+                        idname,
                     });
                 }
                 return Value::Foreign(None);
