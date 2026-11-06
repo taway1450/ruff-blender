@@ -8,7 +8,9 @@
 //! submodule both name the root package, whatever the repository.
 //!
 //! Names are followed through their definitions, never by inferring add-on code, so the evaluator
-//! is safe to call from attribute inference and from the Add-on index.
+//! is safe to call from attribute inference and from the Add-on index. The key of each definition is
+//! a query of its own ([`definition_key`]), so reading another module's syntax for it does not tie
+//! the caller to that module's syntax tree.
 
 use ruff_db::parsed::parsed_module;
 use ruff_python_ast::{self as ast, Expr};
@@ -16,16 +18,15 @@ use ty_blender::{Addon, AddonKind};
 use ty_module_resolver::{ImportingFile, ModuleName};
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::scope::ScopeId;
-use ty_python_core::{ProgramFile, global_scope, semantic_index};
+use ty_python_core::{ProgramFile, global_scope};
 
 use crate::Db;
-use crate::types::definition_resolution::find_symbol_in_scope;
 
 use super::addon_of_file;
-use super::follow::{Resolved, module_by_name, resolve_expression};
+use super::follow::{Resolved, agreed, module_by_name, nearest_definitions, resolve_expression};
 
 /// What a key evaluates to.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize)]
 pub(super) enum AddonKey {
     /// A module name, as a path below an add-on's root: `[]` is the root package itself,
     /// `["helpers"]` is `<root>.helpers`.
@@ -50,43 +51,20 @@ impl AddonKey {
     }
 }
 
-/// How many names and imports are followed at most, which also stops cycles.
-const MAX_DEPTH: usize = 16;
-
 /// The key `expression` evaluates to in `scope`.
 pub(super) fn expression_key<'db>(
     db: &'db dyn Db,
     scope: ScopeId<'db>,
     expression: &Expr,
 ) -> AddonKey {
-    expression_key_at_depth(db, scope, expression, 0)
-}
-
-/// The key the name that `definition` binds gives (`bl_idname = __package__`).
-pub(super) fn definition_key<'db>(db: &'db dyn Db, definition: Definition<'db>) -> AddonKey {
-    definition_key_at_depth(db, definition, 0)
-}
-
-fn expression_key_at_depth<'db>(
-    db: &'db dyn Db,
-    scope: ScopeId<'db>,
-    expression: &Expr,
-    depth: usize,
-) -> AddonKey {
-    if depth > MAX_DEPTH {
-        return AddonKey::Unknown;
-    }
     match expression {
         Expr::StringLiteral(string) => AddonKey::Literal(string.value.to_str().to_string()),
-        Expr::Name(name) => name_key(db, scope, name.id.as_str(), depth),
+        Expr::Name(name) => name_key(db, scope, name.id.as_str()),
         // `module.NAME`, with `module` a module.
         Expr::Attribute(attribute) => match resolve_expression(db, scope, &attribute.value) {
-            Some(Resolved::Module(module)) => name_key(
-                db,
-                global_scope(db, module),
-                attribute.attr.as_str(),
-                depth + 1,
-            ),
+            Some(Resolved::Module(module)) => {
+                name_key(db, global_scope(db, module), attribute.attr.as_str())
+            }
             _ => AddonKey::Unknown,
         },
         // `e.rpartition(".")[0]`: the package of the module `e` names.
@@ -94,7 +72,7 @@ fn expression_key_at_depth<'db>(
             let Some(partitioned) = rpartition_base(subscript) else {
                 return AddonKey::Unknown;
             };
-            match expression_key_at_depth(db, scope, partitioned, depth + 1) {
+            match expression_key(db, scope, partitioned) {
                 AddonKey::Module { addon, mut path } if !path.is_empty() => {
                     path.pop();
                     AddonKey::Module { addon, path }
@@ -135,41 +113,31 @@ fn rpartition_base(subscript: &ast::ExprSubscript) -> Option<&Expr> {
 
 /// The key the name `name` gives in `scope`: its bindings in the nearest enclosing scope that has
 /// any, which must all agree. `__name__` and `__package__` with no binding are the module's own.
-fn name_key<'db>(db: &'db dyn Db, scope: ScopeId<'db>, name: &str, depth: usize) -> AddonKey {
-    let file = scope.program_file(db);
-    let index = semantic_index(db, file);
-    let definitions = index
-        .visible_ancestor_scopes(scope.file_scope_id(db))
-        .map(|(ancestor, _)| find_symbol_in_scope(db, ancestor.to_scope_id(db, file), name))
-        .find(|definitions| !definitions.is_empty());
-    let Some(definitions) = definitions else {
-        return dunder_key(db, file, name);
+fn name_key<'db>(db: &'db dyn Db, scope: ScopeId<'db>, name: &str) -> AddonKey {
+    let Some(definitions) = nearest_definitions(db, scope, name) else {
+        return dunder_key(db, scope.program_file(db), name);
     };
-    let mut keys = definitions
-        .iter()
-        .map(|definition| definition_key_at_depth(db, *definition, depth + 1));
-    let Some(first) = keys.next() else {
-        return AddonKey::Unknown;
-    };
-    if keys.all(|key| key == first) {
-        first
-    } else {
-        AddonKey::Unknown
-    }
+    agreed(
+        definitions
+            .iter()
+            .map(|definition| definition_key(db, *definition)),
+    )
+    .cloned()
+    .unwrap_or(AddonKey::Unknown)
 }
 
-fn definition_key_at_depth<'db>(
-    db: &'db dyn Db,
-    definition: Definition<'db>,
-    depth: usize,
-) -> AddonKey {
-    if depth > MAX_DEPTH {
-        return AddonKey::Unknown;
-    }
+/// The key the name that `definition` binds gives (`bl_idname = __package__`). A cycle of names
+/// (`A = B`, `B = A`) gives `Unknown`.
+#[salsa::tracked(
+    returns(ref),
+    cycle_initial=|_, _, _| AddonKey::Unknown,
+    heap_size=ruff_memory_usage::heap_size
+)]
+pub(super) fn definition_key<'db>(db: &'db dyn Db, definition: Definition<'db>) -> AddonKey {
     let module = parsed_module(db, definition.python_file(db)).load(db);
     match definition.kind(db) {
         DefinitionKind::Assignment(assignment) if assignment.target(&module).is_name_expr() => {
-            expression_key_at_depth(db, definition.scope(db), assignment.value(&module), depth)
+            expression_key(db, definition.scope(db), assignment.value(&module))
         }
         DefinitionKind::AnnotatedAssignment(assignment)
             if assignment.target(&module).is_name_expr() =>
@@ -177,7 +145,7 @@ fn definition_key_at_depth<'db>(
             assignment
                 .value(&module)
                 .map_or(AddonKey::Unknown, |value| {
-                    expression_key_at_depth(db, definition.scope(db), value, depth)
+                    expression_key(db, definition.scope(db), value)
                 })
         }
         // `from . import ADDON_ID`, `from .. import __package__ as base_package`: the name as the
@@ -197,7 +165,6 @@ fn definition_key_at_depth<'db>(
                 db,
                 global_scope(db, source),
                 import.alias(&module).name.as_str(),
-                depth,
             )
         }
         _ => AddonKey::Unknown,

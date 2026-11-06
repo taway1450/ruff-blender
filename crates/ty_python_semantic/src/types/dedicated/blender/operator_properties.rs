@@ -29,7 +29,7 @@ use ruff_python_ast::name::Name;
 use ruff_python_ast::visitor::source_order::{SourceOrderVisitor, walk_expr};
 use ruff_python_ast::{self as ast, Expr};
 use ruff_text_size::{Ranged, TextRange, TextSize};
-use ty_blender::OperatorIdname;
+use ty_blender::{OperatorIdname, SINKS, Sink, SinkResult};
 use ty_module_resolver::{ModuleName, file_to_module, resolve_module_confident};
 use ty_python_core::scope::NodeWithScopeRef;
 use ty_python_core::{ProgramFile, global_scope, place_table, semantic_index};
@@ -47,13 +47,14 @@ use crate::types::{
 };
 use crate::{Db, ProgramEnvironment};
 
+use super::classes::{class_string, operator_idname};
 use super::index::addon_in_program;
 use super::lints::{BLENDER_INVALID_OPERATOR_PROPERTY, BLENDER_UNKNOWN_OPERATOR};
 use super::operators::{
-    AddonOperator, addon_operators, is_macro_class, is_operator_class, operator_properties,
+    AddonOperator, addon_operators, is_macro_class, is_operator_class, operator_call_hover,
+    operator_properties,
 };
 use super::properties::PropertyKind;
-use super::registration_checks::{class_string, operator_idname};
 use super::symbols::{blender_module_name, bpy_types_bases};
 use super::vector::module_class;
 
@@ -62,72 +63,6 @@ const IDENTITY: &str = "__blender_operator__";
 
 /// How deep macros in macros are followed.
 const MAX_MACRO_DEPTH: u32 = 4;
-
-/// What a sink gives for a known idname.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum SinkResult {
-    /// The properties, never `None`.
-    Properties,
-    /// The stub's return type with `K` (a key-map item, a macro step).
-    Holder,
-    /// The stub's return type (`None`).
-    Unchanged,
-}
-
-/// A Blender function that takes an operator idname.
-#[derive(Copy, Clone, Debug)]
-struct Sink {
-    /// The `bpy.types` class that defines it.
-    class: &'static str,
-    method: &'static str,
-    /// The name of its idname parameter (always the first).
-    parameter: &'static str,
-    result: SinkResult,
-    /// Whether its second argument, `property`, names an enum property of the operator.
-    enum_property: bool,
-}
-
-const SINKS: [Sink; 9] = [
-    Sink::new("UILayout", "operator", SinkResult::Properties),
-    Sink::new("UILayout", "operator_menu_hold", SinkResult::Properties),
-    Sink::new("UILayout", "operator_menu_enum", SinkResult::Properties).with_enum_property(),
-    Sink::new("UILayout", "operator_enum", SinkResult::Unchanged).with_enum_property(),
-    Sink::new(
-        "WindowManager",
-        "operator_properties_last",
-        SinkResult::Properties,
-    ),
-    Sink::new("Gizmo", "target_set_operator", SinkResult::Properties),
-    Sink::new(
-        "WorkSpaceTool",
-        "operator_properties",
-        SinkResult::Properties,
-    ),
-    Sink {
-        parameter: "idname",
-        ..Sink::new("KeyMapItems", "new", SinkResult::Holder)
-    },
-    Sink::new("Macro", "define", SinkResult::Holder),
-];
-
-impl Sink {
-    const fn new(class: &'static str, method: &'static str, result: SinkResult) -> Self {
-        Sink {
-            class,
-            method,
-            parameter: "operator",
-            result,
-            enum_property: false,
-        }
-    }
-
-    const fn with_enum_property(self) -> Self {
-        Sink {
-            enum_property: true,
-            ..self
-        }
-    }
-}
 
 /// The sink `callable` is: a bound method defined in `bpy.types` with a name of the table, on a
 /// receiver whose class derives from the table's class.
@@ -844,7 +779,8 @@ pub(super) fn completions<'db>(
 }
 
 /// The sink call in `file` whose idname argument is the string literal that `matches` accepts,
-/// with that string.
+/// with that string. The call is found by the string first (as its first argument or a keyword),
+/// then kept only when its callee is a sink that takes the idname there.
 fn idname_string_at<'db, 'm>(
     db: &'db dyn Db,
     file: ProgramFile<'db>,
@@ -861,17 +797,13 @@ fn idname_string_at<'db, 'm>(
                 return;
             }
             if let Expr::Call(call) = expr {
-                let argument = call
-                    .arguments
-                    .find_argument_value("operator", 0)
-                    .or_else(|| {
-                        call.arguments
-                            .find_keyword("idname")
-                            .map(|keyword| &keyword.value)
-                    });
-                if let Some(Expr::StringLiteral(string)) = argument
-                    && (self.matches)(string)
-                {
+                let first = call.arguments.args.first();
+                let keywords = call.arguments.keywords.iter().map(|keyword| &keyword.value);
+                if let Some(string) = first.into_iter().chain(keywords).find_map(|argument| {
+                    argument
+                        .as_string_literal_expr()
+                        .filter(|string| (self.matches)(string))
+                }) {
                     self.found = Some((call, string));
                     return;
                 }
@@ -898,7 +830,8 @@ fn idname_string_at<'db, 'm>(
             .find_map(|element| sink_of(db, &env, *element)),
         callee => sink_of(db, &env, callee),
     }?;
-    Some((string, sink))
+    let argument = call.arguments.find_argument_value(sink.parameter, 0)?;
+    (argument.range() == string.range()).then_some((string, sink))
 }
 
 /// The operator idnames that complete the string `string` when it is the idname argument of a
@@ -991,18 +924,31 @@ fn builtin_idnames<'db>(
 /// What hovering an operator idname string shows: the operator's two idname forms, its label and
 /// its description. `None` when the string at `offset` is not the idname argument of a sink, or
 /// names no operator.
+///
+/// Hovering the name of an add-on operator in `bpy.ops.<category>.<name>` shows the same, then the
+/// call with its keywords.
 pub fn blender_idname_hover<'db>(
     db: &'db dyn Db,
     file: ProgramFile<'db>,
     offset: TextSize,
 ) -> Option<(TextRange, String)> {
     let module = parsed_module(db, file.python_file(db)).load(db);
-    let (string, _) = idname_string_at(db, file, &module, |candidate| {
-        candidate.range().contains_inclusive(offset)
-    })?;
     let env = ProgramEnvironment::from_file(file);
-    let idname = OperatorIdname::from_lookup(string.value.to_str())?;
+    if let Some((string, _)) = idname_string_at(db, file, &module, |candidate| {
+        candidate.range().contains_inclusive(offset)
+    }) {
+        let idname = OperatorIdname::from_lookup(string.value.to_str())?;
+        let operator = find_operator(db, &env, file, &idname)?;
+        return Some((string.range(), operator_summary(db, &idname, &operator)));
+    }
+    let (range, idname, call) = operator_call_hover(db, file, &module, offset)?;
     let operator = find_operator(db, &env, file, &idname)?;
+    let summary = operator_summary(db, &idname, &operator);
+    Some((range, format!("{summary}\n\n```python\n{call}\n```")))
+}
+
+/// An operator's two idname forms, its label and its description.
+fn operator_summary(db: &dyn Db, idname: &OperatorIdname, operator: &FoundOperator<'_>) -> String {
     let (label, description) = match operator.origin {
         OperatorOrigin::Addon(class) => (
             class_string(db, class, "bl_label"),
@@ -1029,7 +975,7 @@ pub fn blender_idname_hover<'db>(
         text.push_str("\n\n");
         text.push_str(description.trim());
     }
-    Some((string.range(), text))
+    text
 }
 
 /// Check the `bl_keymap` tuples of the `WorkSpaceTool` classes in a file: each item's idname, and

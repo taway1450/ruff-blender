@@ -14,12 +14,19 @@
 //!   built-in ones, and replaces a built-in operator with the same idname, as it does at runtime.
 //! - A macro takes one dict per step, named by the step's `CATEGORY_OT_name` idname.
 
+use std::fmt::Write as _;
+
+use ruff_db::parsed::ParsedModuleRef;
 use ruff_python_ast::name::Name;
+use ruff_python_ast::visitor::source_order::{SourceOrderVisitor, walk_expr};
+use ruff_python_ast::{self as ast, Expr};
+use ruff_text_size::{Ranged, TextRange, TextSize};
 use ty_blender::{EXECUTION_CONTEXTS, OPERATOR_RESULTS, OperatorIdname};
 use ty_module_resolver::Module;
-use ty_python_core::{ProgramFile, place_table};
+use ty_python_core::{ProgramFile, place_table, semantic_index};
 
 use crate::types::callable::CallableTypeKind;
+use crate::types::infer::infer_complete_scope_types;
 use crate::types::list_members::Member;
 use crate::types::signatures::CallableSignature;
 use crate::types::typed_dict::{TypedDictFieldBuilder, TypedDictSchema};
@@ -29,13 +36,13 @@ use crate::types::{
 };
 use crate::{Db, ProgramEnvironment};
 
+use super::classes::{derives_from, maybe_registered_classes, operator_idname};
 use super::evaluate::PropertyValue;
-use super::index::{AddonInProgram, addon_in_program, addon_index, file_facts};
+use super::index::{AddonInProgram, addon_in_program, addon_index};
 use super::member::{annotated_property, decorator_properties};
 use super::operator_properties::builtin_operator;
 use super::properties::{PointerTarget, PropertyDeclaration, PropertyKind};
-use super::registration_checks::operator_idname;
-use super::symbols::{blender_module_name, bpy_types_bases, is_bpy_types_class};
+use super::symbols::{blender_module_name, bpy_types_bases};
 use super::vector::module_class;
 use super::walk::{Event, register_walk};
 
@@ -96,8 +103,7 @@ impl AddonOperator<'_> {
 
 /// Whether `class` is an operator or a macro of an add-on.
 pub(super) fn is_operator_class<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool {
-    !is_bpy_types_class(db, class)
-        && bpy_types_bases(db, class).any(|base| matches!(base, "Operator" | "Macro"))
+    derives_from(db, class, &["Operator", "Macro"])
 }
 
 pub(super) fn is_macro_class<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool {
@@ -116,17 +122,7 @@ pub(super) fn addon_operators<'db>(
     db: &'db dyn Db,
     key: AddonInProgram<'db>,
 ) -> AddonOperators<'db> {
-    let index = addon_index(db, key);
-    let mut classes: Vec<StaticClassLiteral<'db>> = index.registered_classes.to_vec();
-    if !index.complete {
-        for file in key.files(db) {
-            for class in &file_facts(db, file).classes {
-                if !classes.contains(&class.class) {
-                    classes.push(class.class);
-                }
-            }
-        }
-    }
+    let classes = maybe_registered_classes(db, key);
     let walk = register_walk(db, key);
     let mut operators: Vec<AddonOperator<'db>> = Vec::new();
     for class in classes {
@@ -165,7 +161,7 @@ pub(super) fn addon_operators<'db>(
     }
     AddonOperators {
         operators: operators.into_boxed_slice(),
-        complete: index.complete,
+        complete: addon_index(db, key).complete,
     }
 }
 
@@ -608,6 +604,69 @@ fn typed_dict<'db>(
 
 /// The categories and operators of `file`'s add-on that complete `receiver.`: the new categories
 /// under `bpy.ops`, the add-on's operators under a category module or a new category.
+/// The add-on operator whose name the cursor is on in `bpy.ops.<category>.<name>`, with the range
+/// of the name and how the call is spelled with its keywords, for hover. The synthesised operator
+/// type itself only shows its member names.
+pub(super) fn operator_call_hover<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    module: &ParsedModuleRef,
+    offset: TextSize,
+) -> Option<(TextRange, OperatorIdname, String)> {
+    struct Finder<'m> {
+        offset: TextSize,
+        found: Option<&'m ast::ExprAttribute>,
+    }
+    impl<'m> SourceOrderVisitor<'m> for Finder<'m> {
+        fn visit_expr(&mut self, expr: &'m Expr) {
+            if self.found.is_some() || !expr.range().contains_inclusive(self.offset) {
+                return;
+            }
+            if let Expr::Attribute(attribute) = expr
+                && attribute.attr.range.contains_inclusive(self.offset)
+            {
+                self.found = Some(attribute);
+                return;
+            }
+            walk_expr(self, expr);
+        }
+    }
+    let mut finder = Finder {
+        offset,
+        found: None,
+    };
+    finder.visit_body(module.suite());
+    let attribute = finder.found?;
+    let env = ProgramEnvironment::from_file(file);
+    let operators = operators_of(db, file)?;
+    let scope = semantic_index(db, file)
+        .try_expression_scope_id(&*attribute.value)?
+        .to_scope_id(db, file);
+    let receiver = infer_complete_scope_types(db, scope).try_expression_type(&*attribute.value)?;
+    let category = match receiver {
+        Type::ModuleLiteral(module) => bpy_ops_module(db, &env, module.module(db))?
+            .strip_prefix("bpy.ops.")?
+            .to_string(),
+        Type::ProtocolInstance(_) => operators
+            .categories()
+            .find(|category| category_type(db, &env, operators, category) == receiver)?
+            .to_string(),
+        _ => return None,
+    };
+    let operator = operators.get(&category, attribute.attr.as_str())?;
+    let mut call = format!(
+        "bpy.ops.{category}.{}(execution_context, undo, *",
+        operator.name
+    );
+    for keyword in call_keywords(db, &env, operators, operator) {
+        let name = keyword.name().map(Name::as_str).unwrap_or_default();
+        let ty = keyword.annotated_type().display(db, &env);
+        let _ = write!(call, ", {name}: {ty}");
+    }
+    call.push(')');
+    Some((attribute.attr.range, operator.idname(), call))
+}
+
 pub(super) fn completions<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
