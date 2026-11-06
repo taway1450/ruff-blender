@@ -32,6 +32,7 @@ use crate::{Db, ProgramEnvironment};
 use super::evaluate::PropertyValue;
 use super::index::{AddonInProgram, addon_in_program, addon_index, file_facts};
 use super::member::{annotated_property, decorator_properties};
+use super::operator_properties::builtin_operator;
 use super::properties::{PointerTarget, PropertyDeclaration, PropertyKind};
 use super::registration_checks::operator_idname;
 use super::symbols::{blender_module_name, bpy_types_bases, is_bpy_types_class};
@@ -57,7 +58,7 @@ impl<'db> AddonOperators<'db> {
             .filter(move |operator| operator.category == category)
     }
 
-    fn get(&self, category: &str, name: &str) -> Option<&AddonOperator<'db>> {
+    pub(super) fn get(&self, category: &str, name: &str) -> Option<&AddonOperator<'db>> {
         self.operators
             .iter()
             .find(|operator| operator.category == category && operator.name == name)
@@ -85,7 +86,7 @@ pub(super) struct AddonOperator<'db> {
 }
 
 impl AddonOperator<'_> {
-    fn idname(&self) -> OperatorIdname {
+    pub(super) fn idname(&self) -> OperatorIdname {
         OperatorIdname {
             category: self.category.to_string(),
             name: self.name.to_string(),
@@ -99,7 +100,7 @@ pub(super) fn is_operator_class<'db>(db: &'db dyn Db, class: StaticClassLiteral<
         && bpy_types_bases(db, class).any(|base| matches!(base, "Operator" | "Macro"))
 }
 
-fn is_macro_class<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool {
+pub(super) fn is_macro_class<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool {
     bpy_types_bases(db, class).any(|base| base == "Macro")
 }
 
@@ -354,13 +355,28 @@ fn call_keywords<'db>(
             let ty = OperatorIdname::from_either(step)
                 .and_then(|idname| operators.get(&idname.category, &idname.name))
                 .map_or_else(
-                    // A built-in step: typed loosely until its properties are read from the stubs.
+                    // A built-in step takes the arguments of its `bpy.ops` call.
                     || {
-                        KnownClass::Dict.to_specialized_instance(
-                            db,
-                            env,
-                            &[KnownClass::Str.to_instance(db, env), Type::any()],
-                        )
+                        OperatorIdname::from_either(step)
+                            .and_then(|idname| builtin_operator(db, env, &idname))
+                            .map_or_else(
+                                || {
+                                    KnownClass::Dict.to_specialized_instance(
+                                        db,
+                                        env,
+                                        &[KnownClass::Str.to_instance(db, env), Type::any()],
+                                    )
+                                },
+                                |step| {
+                                    typed_dict(
+                                        db,
+                                        step.properties.into_iter().filter_map(|property| {
+                                            Some((property.name, property.write?))
+                                        }),
+                                        false,
+                                    )
+                                },
+                            )
                     },
                     |step| {
                         typed_dict(

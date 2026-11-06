@@ -146,6 +146,7 @@ mod context_manager;
 mod cyclic;
 mod dedicated;
 pub(crate) use self::dedicated::blender;
+pub use self::dedicated::blender::blender_idname_hover;
 mod diagnostic;
 mod dict;
 mod display;

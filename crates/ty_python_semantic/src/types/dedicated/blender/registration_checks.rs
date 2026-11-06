@@ -655,7 +655,11 @@ fn class_idname_binding(db: &dyn Db, class: StaticClassLiteral<'_>) -> Idname {
 }
 
 /// The string value of the class attribute `name`, when it is a string literal.
-fn class_string(db: &dyn Db, class: StaticClassLiteral<'_>, name: &str) -> Option<String> {
+pub(super) fn class_string(
+    db: &dyn Db,
+    class: StaticClassLiteral<'_>,
+    name: &str,
+) -> Option<String> {
     class_attribute(db, class, name)?.1
 }
 

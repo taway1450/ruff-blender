@@ -10140,6 +10140,9 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         }
 
         let db = self.db();
+        crate::types::blender::on_call(&self.context, call_expression, &mut bindings, &|expr| {
+            self.try_expression_type(expr)
+        });
         let return_ty = bindings.return_type(db, env);
         let return_ty = match collection_initializer_class {
             Some(collection_class @ (KnownClass::List | KnownClass::Set))

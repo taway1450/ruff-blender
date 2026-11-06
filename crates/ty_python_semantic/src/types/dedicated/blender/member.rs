@@ -36,9 +36,9 @@ use crate::{Db, ProgramEnvironment};
 
 use super::evaluate::{PropertyValue, property_value};
 use super::index::{RegisteredProperty, registered_properties};
-use super::operators;
 use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
+use super::{operator_properties, operators};
 
 /// The property that gives instances of `class` the attribute `name` in `file`.
 ///
@@ -414,6 +414,16 @@ pub(crate) fn on_load<'db>(
     {
         return Place::bound(ty).into();
     }
+    // `layout.operator("my_addon.run").count`: the operator's properties, also where the stub's
+    // `__getattr__` accepts any name.
+    if let Some(member) = operator_properties::member(db, env, receiver, name) {
+        return member;
+    }
+    if name == "properties"
+        && let Some(ty) = operator_properties::own_properties(db, env, file, receiver)
+    {
+        return Place::bound(ty).into();
+    }
     if place.place.is_definitely_bound() {
         return place;
     }
@@ -447,6 +457,26 @@ pub(in crate::types) fn on_store<'db>(
     attribute: &str,
     requirement: AttributeWriteRequirement<'db>,
 ) -> AttributeWriteRequirement<'db> {
+    // `layout.operator("my_addon.run").count = 1` writes an operator property.
+    if let AttributeWriteRequirement::Any { object_ty, .. }
+    | AttributeWriteRequirement::All { object_ty, .. } = requirement
+        && let Some(write) = operator_properties::write_type(db, env, file, object_ty, attribute)
+    {
+        return match write {
+            Some(ty) => AttributeWriteRequirement::Instance {
+                object_ty,
+                receiver: None,
+                member: InstanceAttributeWriteMember::Explicit {
+                    member: ExplicitAttributeWriteRequirement::AssignableTo {
+                        ty,
+                        qualifiers: TypeQualifiers::empty(),
+                    },
+                    fallback: None,
+                },
+            },
+            None => AttributeWriteRequirement::CannotAssign,
+        };
+    }
     match requirement {
         AttributeWriteRequirement::Instance {
             object_ty,
@@ -540,6 +570,7 @@ pub(crate) fn completions<'db>(
     receiver: Type<'db>,
 ) -> Vec<Member<'db>> {
     let mut members: Vec<Member<'db>> = operators::completions(db, env, file, receiver);
+    members.extend(operator_properties::completions(db, env, file, receiver));
     let axes = ORIENTATION_AXES.map(Name::new_static);
     let names = registered_properties(db, file)
         .iter()

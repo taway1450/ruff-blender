@@ -57,6 +57,15 @@ pub fn hover<'db>(
         });
     }
 
+    if let Some((range, docs)) = ty_python_semantic::types::blender_idname_hover(db, file, offset) {
+        return Some(RangedValue {
+            range: FileRange::new(file.file(db), range),
+            value: Hover {
+                program_file: file,
+                contents: vec![HoverContent::Docstring(Docstring::new(docs))],
+            },
+        });
+    }
     if let GotoTarget::Expression(expr) = goto_target {
         if expr.is_literal_expr() {
             return None;

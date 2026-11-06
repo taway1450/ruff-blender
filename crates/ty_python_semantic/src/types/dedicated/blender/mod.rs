@@ -12,6 +12,8 @@
 //! - [`index`]: the Add-on index, what an add-on's code does to Blender, gathered without inference;
 //! - [`member`]: the property behind an attribute of a Blender instance, of either origin;
 //! - [`operators`]: `bpy.ops.<category>.<name>` for an add-on's own operators;
+//! - [`operator_properties`]: what an operator idname given as a string gives
+//!   (`layout.operator("my_addon.run").count`), for add-on and built-in operators;
 //! - [`callbacks`]: the `self` that a property's callbacks are called with;
 //! - [`vector`]: the value and write types of vector properties;
 //! - [`lints`]: the Blender lints and the per-file query that reports them;
@@ -27,6 +29,7 @@ mod index;
 mod lints;
 mod member;
 mod module_dunders;
+mod operator_properties;
 mod operators;
 mod properties;
 mod registration_checks;
@@ -48,5 +51,7 @@ pub(crate) use member::{
     hides_instance_member, on_load,
 };
 pub(crate) use module_dunders::package_type;
+pub use operator_properties::blender_idname_hover;
+pub(crate) use operator_properties::{idname_completions, on_call};
 pub(crate) use properties::may_be_property_call;
 pub(crate) use symbols::hides_star_import;
