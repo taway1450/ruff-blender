@@ -15,12 +15,9 @@ use ruff_db::source::source_text;
 use ruff_python_ast::helpers::any_over_expr;
 use ruff_python_ast::name::Name;
 use ruff_python_ast::{self as ast, Expr};
-use ty_module_resolver::{ModuleName, resolve_module_confident};
-use ty_python_core::ProgramFile;
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::scope::{ScopeId, ScopeKind};
 
-use crate::place::imported_symbol;
 use crate::types::definition_resolution::{ImportAliasResolution, definitions_for_name};
 use crate::types::infer::infer_definition_types;
 use crate::types::{
@@ -30,6 +27,7 @@ use crate::types::{
 use crate::{Db, ProgramEnvironment};
 
 use super::symbols::{blender_function_name, bpy_types_bases};
+use super::vector::{Element, Known, VectorShape, module_class, read_size, read_string};
 
 /// The ten functions of `bpy.props` that declare a property.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
@@ -85,8 +83,12 @@ pub(super) struct PropertyDeclaration<'db> {
     enum_flag: bool,
     /// `options={"READ_ONLY"}`: the property cannot be written.
     read_only_option: bool,
+    /// `get=` without `set=`: Blender makes the property read-only.
+    get_without_set: bool,
     /// `StringProperty(subtype="BYTE_STRING")`: the value is `bytes`.
     byte_string: bool,
+    /// The `size=` and `subtype=` of a vector property, or `None` for any other kind.
+    vector: Option<VectorShape>,
     /// The inferred type of a pointer's or collection's `type=`, or `None` when it is missing.
     target: Option<Type<'db>>,
 }
@@ -95,11 +97,12 @@ impl<'db> PropertyDeclaration<'db> {
     /// Describe the property that `call` declares, or `None` when `callee` (the inferred type of
     /// the call's function) is not one of the ten `bpy.props` functions.
     ///
-    /// `items=`, `options=` and `subtype=` are read from the syntax, because ty widens list and set
-    /// literals to `list[tuple[str, str, str]]` and `set[str]`. Only keyword arguments are read, as
-    /// Blender only accepts them for these parameters. `scope` is where a module constant passed as
-    /// `items=` is looked up. `type=` is read from its inferred type, which `argument_type` gives,
-    /// so that aliases and forward references to the target class work.
+    /// `items=` and `options=` are read from the syntax, because ty widens list and set literals to
+    /// `list[tuple[str, str, str]]` and `set[str]`. `size=` and `subtype=` are read from the syntax,
+    /// else from literal types. Only keyword arguments are read, as Blender only accepts them for
+    /// these parameters. `scope` is where a module constant passed as `items=` is looked up.
+    /// `type=` is read from its inferred type, which `argument_type` gives, so that aliases and
+    /// forward references to the target class work.
     pub(super) fn from_call(
         db: &'db dyn Db,
         scope: ScopeId<'db>,
@@ -110,6 +113,16 @@ impl<'db> PropertyDeclaration<'db> {
         let kind = PropertyKind::of_callee(db, callee)?;
         let keyword = |name: &str| call.arguments.find_keyword(name).map(|kw| &kw.value);
         let options = keyword("options").map(string_set).unwrap_or_default();
+        let unpacks_mapping = call.arguments.keywords.iter().any(|kw| kw.arg.is_none());
+        let subtype = Known::read(keyword("subtype"), unpacks_mapping, |subtype| {
+            read_string(db, subtype, &argument_type)
+        });
+        let element = match kind {
+            PropertyKind::BoolVector => Some(Element::Bool),
+            PropertyKind::FloatVector => Some(Element::Float),
+            PropertyKind::IntVector => Some(Element::Int),
+            _ => None,
+        };
 
         Some(PropertyDeclaration {
             kind,
@@ -118,9 +131,16 @@ impl<'db> PropertyDeclaration<'db> {
                 .flatten(),
             enum_flag: options.iter().any(|option| option == "ENUM_FLAG"),
             read_only_option: options.iter().any(|option| option == "READ_ONLY"),
-            byte_string: keyword("subtype")
-                .and_then(Expr::as_string_literal_expr)
-                .is_some_and(|subtype| subtype.value.to_str() == "BYTE_STRING"),
+            get_without_set: keyword("get").is_some() && keyword("set").is_none(),
+            byte_string: kind == PropertyKind::String
+                && subtype == Known::Value(Name::new_static("BYTE_STRING")),
+            vector: element.map(|element| VectorShape {
+                element,
+                size: Known::read(keyword("size"), unpacks_mapping, |size| {
+                    read_size(db, size, &argument_type)
+                }),
+                subtype,
+            }),
             target: matches!(kind, PropertyKind::Pointer | PropertyKind::Collection)
                 .then(|| keyword("type").map(argument_type))
                 .flatten(),
@@ -172,7 +192,7 @@ impl<'db> PropertyDeclaration<'db> {
                     return Type::unknown();
                 };
                 let item = Type::instance(db, env, item.default_specialization(db));
-                bpy_types_class(db, env, "bpy_prop_collection_idprop").map_or_else(
+                module_class(db, env, "bpy.types", "bpy_prop_collection_idprop").map_or_else(
                     Type::unknown,
                     // Only a generic stub class can say what the collection holds; a
                     // non-generic one is used as it is.
@@ -184,16 +204,29 @@ impl<'db> PropertyDeclaration<'db> {
                     },
                 )
             }
-            PropertyKind::BoolVector | PropertyKind::FloatVector | PropertyKind::IntVector => {
-                Type::unknown()
-            }
+            PropertyKind::BoolVector | PropertyKind::FloatVector | PropertyKind::IntVector => self
+                .vector
+                .as_ref()
+                .map_or_else(Type::unknown, |vector| vector.value_type(db, env)),
+        }
+    }
+
+    /// The type that a write to the attribute accepts. It is the value type, except for a vector,
+    /// which also accepts a nested sequence (`s.location = (0.0, 0.0, 1.0)` where `s.location` is a
+    /// `Vector`).
+    pub(super) fn write_type(&self, db: &'db dyn Db, env: &ProgramEnvironment<'db>) -> Type<'db> {
+        match &self.vector {
+            Some(vector) => vector.write_type(db, env),
+            None => self.value_type(db, env),
         }
     }
 
     /// Whether writing the attribute is an error: a collection, a pointer to a `PropertyGroup`
-    /// (Blender creates the group with its owner), or any property with `options={"READ_ONLY"}`.
+    /// (Blender creates the group with its owner), or any property with `options={"READ_ONLY"}` or
+    /// with a `get=` and no `set=`.
     pub(super) fn is_read_only(&self, db: &'db dyn Db) -> bool {
         self.read_only_option
+            || self.get_without_set
             || match self.kind {
                 PropertyKind::Collection => true,
                 PropertyKind::Pointer => matches!(
@@ -224,27 +257,6 @@ impl<'db> PropertyDeclaration<'db> {
 enum PointerTarget {
     Id,
     PropertyGroup,
-}
-
-/// The class `name` of `bpy.types`, as the stubs define it.
-fn bpy_types_class<'db>(
-    db: &'db dyn Db,
-    env: &ProgramEnvironment<'db>,
-    name: &str,
-) -> Option<StaticClassLiteral<'db>> {
-    let module = resolve_module_confident(
-        db,
-        env.resolver_environment(db),
-        &ModuleName::new_static("bpy.types")?,
-    )?;
-    let file = ProgramFile::new(db, module.file(db)?, env.program(db));
-    let Type::ClassLiteral(class) = imported_symbol(db, env, Some(file), name, None)
-        .place
-        .ignore_possibly_undefined()?
-    else {
-        return None;
-    };
-    class.as_static()
 }
 
 /// Whether the call in a quoted annotation may declare a property and should be inferred.
