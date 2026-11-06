@@ -8,6 +8,9 @@
 //!   warnings about properties Blender ignores) are reported on every first-party file, by [`super::rules`].
 //! - The registration checks (`blender-unregistered-class` and five more) are reported on the file of the
 //!   add-on they are in, by [`super::registration_checks`].
+//! - `blender-unknown-operator` and the `blender-invalid-operator-property` problems of an operator
+//!   idname's use are reported while a call is inferred, and for `bl_keymap` tuples here, by
+//!   [`super::operator_properties`].
 
 use ruff_db::parsed::{ParsedModuleRef, parsed_module};
 use ruff_text_size::{Ranged, TextRange, TextSize};
@@ -24,6 +27,7 @@ use crate::{Db, ProgramEnvironment, declare_lint};
 use super::addon::is_first_party;
 use super::addon_of_file;
 use super::index::{AddonInProgram, addon_in_program};
+use super::operator_properties::check_keymaps;
 use super::registration_checks::{Rule, registration_findings};
 use super::rules::check_properties;
 
@@ -144,6 +148,15 @@ declare_lint! {
     }
 }
 
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-unknown-operator.md")]
+    pub(crate) static BLENDER_UNKNOWN_OPERATOR = {
+        summary: "detects an operator idname that names neither an operator of the add-on nor one of Blender's",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
 pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
@@ -158,6 +171,7 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_UNREGISTERED_CLASS);
     registry.register_lint(&BLENDER_UNREACHABLE_REGISTRATION);
     registry.register_lint(&BLENDER_UNREGISTER_MISMATCH);
+    registry.register_lint(&BLENDER_UNKNOWN_OPERATOR);
 }
 
 /// The Blender lints of `file`: the add-on lints when `file` is an add-on's root module (the
@@ -191,6 +205,7 @@ pub(crate) fn file_diagnostics<'db>(
     }
     if first_party {
         check_properties(&context, &module);
+        check_keymaps(&context, &module);
     }
     if let Some(key) = addon_in_program(db, file) {
         check_registration(&context, key);
