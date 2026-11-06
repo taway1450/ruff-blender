@@ -699,7 +699,12 @@ impl<'db, 'a> PossiblyNarrowedPlacesBuilder<'db, 'a> {
 
         let can_narrow_tagged_union_base = matches!(
             &*expr_compare.ops,
-            [ast::CmpOp::Eq | ast::CmpOp::NotEq | ast::CmpOp::Is | ast::CmpOp::IsNot]
+            [ast::CmpOp::Eq
+                | ast::CmpOp::NotEq
+                | ast::CmpOp::Is
+                | ast::CmpOp::IsNot
+                | ast::CmpOp::In
+                | ast::CmpOp::NotIn]
         );
 
         // Tagged-union checks can also narrow the base of a subscript or attribute on either side.

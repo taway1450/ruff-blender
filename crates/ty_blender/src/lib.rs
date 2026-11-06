@@ -4,7 +4,7 @@
 //! top-level `bl_info` and `[tool.blender]` in `pyproject.toml`; which classes Blender registers and which
 //! idnames it refuses, and which callbacks it calls on them; what an operator call takes and returns, and which Blender
 //! functions take an operator idname; which code runs only when Blender reloads an add-on, and which
-//! never runs in one. The
+//! never runs in one; which Type tags a test may not narrow by. The
 //! type-aware glue lives in `ty_python_semantic`'s `types/dedicated/blender/`.
 
 mod callbacks;
@@ -17,6 +17,7 @@ mod registration;
 mod reload_guard;
 mod script_guard;
 mod source;
+mod type_tags;
 
 pub use callbacks::{
     CALLBACKS, Callback, CallbackKind, CallbackShape, MethodKind, PYTHON_BASE_NAMES, callback_of,
@@ -33,3 +34,4 @@ pub use registration::{IdnameFamily, REGISTRABLE_ROOTS};
 pub use reload_guard::in_reload_guard;
 pub use script_guard::is_script_test;
 pub use source::{BlInfo, BlInfoDict, BlInfoEntry, bl_info};
+pub use type_tags::{ADDON_TYPE_TAG, excludes_on_mismatch};

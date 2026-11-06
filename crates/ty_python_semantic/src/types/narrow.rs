@@ -4265,7 +4265,12 @@ impl<'db> NarrowingConstraintsBuilder<'db, '_> {
 
         if let Some((
             left,
-            operator @ (ast::CmpOp::Eq | ast::CmpOp::NotEq | ast::CmpOp::Is | ast::CmpOp::IsNot),
+            operator @ (ast::CmpOp::Eq
+            | ast::CmpOp::NotEq
+            | ast::CmpOp::Is
+            | ast::CmpOp::IsNot
+            | ast::CmpOp::In
+            | ast::CmpOp::NotIn),
             right,
         )) = expr_compare.as_single()
         {
@@ -4290,7 +4295,13 @@ impl<'db> NarrowingConstraintsBuilder<'db, '_> {
                         != PlaceExpr::try_from_expr(&attribute.value)
                 })
             {
-                narrow_attribute(attribute, inference.expression_type(right));
+                narrow_attribute(
+                    attribute,
+                    matches!(operator, ast::CmpOp::In | ast::CmpOp::NotIn)
+                        .then(|| self.inline_membership_rhs_type(right, inference))
+                        .flatten()
+                        .unwrap_or_else(|| inference.expression_type(right)),
+                );
             }
 
             if let ast::Expr::Attribute(attribute) = right {
@@ -5405,6 +5416,20 @@ impl<'db> NarrowingConstraintsBuilder<'db, '_> {
         is_positive: bool,
     ) -> Option<(ScopedPlaceId, NarrowingConstraint<'db>)> {
         let db = self.db;
+        if let Some(narrowed) = crate::types::blender::narrow_type_tag(
+            db,
+            &self.env,
+            attribute_value_type,
+            attribute_name,
+            rhs_type,
+            operator,
+            is_positive,
+        ) {
+            return Some((
+                self.expect_place(&PlaceExpr::try_from_expr(attribute_value_expr)?),
+                NarrowingConstraint::replacement(narrowed),
+            ));
+        }
         let Type::Union(union) = attribute_value_type.resolve_type_alias(db) else {
             return None;
         };
