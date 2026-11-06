@@ -36,6 +36,7 @@ use crate::{Db, ProgramEnvironment};
 
 use super::evaluate::{PropertyValue, property_value};
 use super::index::{RegisteredProperty, registered_properties};
+use super::operators;
 use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
 
@@ -91,6 +92,22 @@ fn decorator_property<'db>(
         return None;
     }
     orientation_axis_property(db, class).as_ref()
+}
+
+/// The properties that the decorators of `class` add to its annotations, in their order.
+pub(super) fn decorator_properties<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+) -> Vec<(Name, Option<PropertyValue<'db>>)> {
+    orientation_axis_property(db, class)
+        .as_ref()
+        .map(|property| {
+            ORIENTATION_AXES
+                .iter()
+                .map(|axis| (Name::new_static(axis), Some(property.clone())))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// The six-axis enum property of `axis_forward` and `axis_up`, when `class` is decorated with
@@ -174,7 +191,7 @@ fn body_binds<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>, name: &str) 
 }
 
 /// The property that the class body of `class` declares as `name: SomeProperty(...)`.
-fn annotated_property<'db>(
+pub(super) fn annotated_property<'db>(
     db: &'db dyn Db,
     class: StaticClassLiteral<'db>,
     name: &str,
@@ -384,10 +401,22 @@ pub(crate) fn on_load<'db>(
     receiver: Type<'db>,
     place: PlaceAndQualifiers<'db>,
 ) -> PlaceAndQualifiers<'db> {
+    let name = attribute.attr.id.as_str();
+    if let Type::ModuleLiteral(module) = receiver
+        && let Some(ty) = operators::module_attribute(
+            db,
+            env,
+            file,
+            module.module(db),
+            name,
+            place.place.is_definitely_bound(),
+        )
+    {
+        return Place::bound(ty).into();
+    }
     if place.place.is_definitely_bound() {
         return place;
     }
-    let name = attribute.attr.id.as_str();
     if let Some(class) = class_receiver(db, receiver) {
         return if attribute.ctx.is_del()
             && place.is_undefined()
@@ -510,7 +539,7 @@ pub(crate) fn completions<'db>(
     file: ProgramFile<'db>,
     receiver: Type<'db>,
 ) -> Vec<Member<'db>> {
-    let mut members: Vec<Member<'db>> = Vec::new();
+    let mut members: Vec<Member<'db>> = operators::completions(db, env, file, receiver);
     let axes = ORIENTATION_AXES.map(Name::new_static);
     let names = registered_properties(db, file)
         .iter()

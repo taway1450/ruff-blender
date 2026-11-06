@@ -11,8 +11,8 @@ that Blender rejects when it registers the property:
 - a `size=` outside 1 to 32, or with more than three dimensions;
 - `set=` without `get=`;
 - a property name that starts with `_`;
-- a pointer to a data-block (`PointerProperty(type=Object)`) on a class that cannot hold one, such as
-  `AddonPreferences`.
+- a pointer to a data-block (`PointerProperty(type=Object)`), or to a group that holds one, on a class that
+  cannot hold one, such as `AddonPreferences` (on an operator or a macro, this is `blender-invalid-operator-property`).
 
 ## Why is this bad?
 
