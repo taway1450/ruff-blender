@@ -22,22 +22,28 @@
 //!   nothing where `blender-invalid-override` reports, otherwise the parent's signature with
 //!   positional-only parameters, so a renamed parameter or a short `UIList.draw_item` is accepted
 //!   while a parameter or return type that does not fit still is not.
+//! - [`override_types`] is what an override takes from its parent where it has no annotation: the
+//!   parent's parameter types by position and its return type. [`apply_override_types`] puts them
+//!   in the override's signature, for callers, and [`override_parameter_type`] gives them to the
+//!   parameters in its body.
 
 use ruff_db::parsed::parsed_module;
 use ruff_python_ast as ast;
 use ruff_python_ast::name::Name;
 use ruff_text_size::Ranged;
-use ty_blender::{CallbackShape, MethodKind, callback_of, is_callback_root};
+use ty_blender::{CallbackShape, MethodKind, callback_of, is_callback_name, is_callback_root};
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::scope::FileScopeId;
 use ty_python_core::{ProgramFile, semantic_index};
 
+use crate::types::class_base::ClassBase;
 use crate::types::context::InferContext;
 use crate::types::function::FunctionDecorators;
-use crate::types::infer::nearest_enclosing_class;
+use crate::types::infer::{function_known_decorator_flags, nearest_enclosing_class};
 use crate::types::signatures::CallableSignature;
 use crate::types::{
-    ClassType, Parameter, Parameters, Signature, StaticClassLiteral, Type, binding_type,
+    ClassType, MemberLookupPolicy, Parameter, Parameters, Signature, StaticClassLiteral, Type,
+    binding_type,
 };
 use crate::{Db, ProgramEnvironment};
 
@@ -248,4 +254,207 @@ fn positional_only_signature<'db>(
         signature.return_ty,
     )
     .with_definition(signature.definition)
+}
+
+/// What an override of a Blender callback takes from its parent where it has no annotation.
+///
+/// Blender passes a callback's arguments by position and with the parent's types, so an
+/// unannotated parameter takes the type of the parent's parameter at the same position, whatever
+/// its name, and an unannotated return the parent's return type:
+///
+/// ```python
+/// class MY_OT_run(Operator):
+///     def invoke(self, ctx, event):  # `ctx: Context`, `event: Event`, `-> set[Literal[...]]`
+///         ...
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
+pub(crate) struct OverrideTypes<'db> {
+    /// The types of the parent's positional parameters after `self` / `cls`, in order.
+    positional: Box<[Type<'db>]>,
+    /// The parent's return type.
+    pub(crate) return_ty: Type<'db>,
+}
+
+impl<'db> OverrideTypes<'db> {
+    /// The type of the positional parameter at `index`, `self` / `cls` being 0, or `None` when the
+    /// parent has no parameter there.
+    pub(crate) fn positional(&self, index: usize) -> Option<Type<'db>> {
+        self.positional.get(index.checked_sub(1)?).copied()
+    }
+}
+
+/// What the method `definition` takes from the method it overrides, when it is a Blender callback
+/// of its class's registrable root.
+///
+/// The parent is the first class after the method's class in its method resolution order that
+/// defines the method and is a `bpy.types` class or derives from one. A plain mixin is skipped: it
+/// is no Blender class, so it has no types of Blender's to give, and its own methods get no answer
+/// either. An overloaded parent, a parent that is no function and a `staticmethod` override give
+/// none.
+///
+/// The parent's types are taken as they are, `X | None` included, with the parent's `Self` bound
+/// to the overriding class. Registration plays no part: an unregistered base is typed too.
+#[salsa::tracked(
+    returns(ref),
+    cycle_initial=|_, _, _| None,
+    heap_size=ruff_memory_usage::heap_size
+)]
+pub(crate) fn override_types<'db>(
+    db: &'db dyn Db,
+    definition: Definition<'db>,
+) -> Option<OverrideTypes<'db>> {
+    let DefinitionKind::Function(function) = definition.kind(db) else {
+        return None;
+    };
+    let module = parsed_module(db, definition.python_file(db)).load(db);
+    let name = function.node(&module).name.id.clone();
+    // `raw_signature` asks for every method: rule most of them out by their name alone, before
+    // any method resolution order is looked at.
+    if !is_callback_name(&name) {
+        return None;
+    }
+    let class = defining_class(db, definition)?;
+    callback_of(callback_root(db, class)?, &name)?;
+    if function_known_decorator_flags(db, definition).contains(FunctionDecorators::STATICMETHOD) {
+        return None;
+    }
+
+    let env = ProgramEnvironment::from_file(definition.program_file(db));
+    for base in class.iter_mro(db, None).skip(1) {
+        let ClassBase::Class(base_class) = base else {
+            continue;
+        };
+        let Some(base_literal) = base_class.class_literal(db).as_static() else {
+            continue;
+        };
+        if bpy_types_bases(db, base_literal).next().is_none() {
+            continue;
+        }
+        let member = class.class_member_from_mro(
+            db,
+            &env,
+            &name,
+            MemberLookupPolicy::default(),
+            std::iter::once(base),
+        );
+        let Some(member) = member.place.ignore_possibly_undefined() else {
+            continue;
+        };
+        let Type::FunctionLiteral(parent) = member else {
+            return None;
+        };
+        let [signature] = parent.signature(db).overloads.as_slice() else {
+            return None;
+        };
+        let instance = Type::instance(db, &env, class.default_specialization(db));
+        let bound = signature.bind_self(db, &env, Some(instance));
+        if !bound.parameters().is_standard() {
+            return None;
+        }
+        return Some(OverrideTypes {
+            positional: bound
+                .parameters()
+                .iter()
+                .filter(|parameter| parameter.is_positional())
+                .map(Parameter::annotated_type)
+                .collect(),
+            return_ty: bound.return_ty,
+        });
+    }
+    None
+}
+
+/// Gives the unannotated parameters and return of `signature`, the raw signature of the method
+/// `definition`, the types of the Blender callback it overrides ([`override_types`]), so callers,
+/// signature help and ty's override checks see them. An unannotated keyword-only parameter with a
+/// default, which Blender never passes, takes its default's promoted type (`verbose=False` gives
+/// `bool`); `*args` and `**kwargs` keep theirs.
+pub(crate) fn apply_override_types<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    definition: Definition<'db>,
+    signature: &mut Signature<'db>,
+) {
+    let Some(types) = override_types(db, definition) else {
+        return;
+    };
+    if !signature.parameters().is_standard() {
+        return;
+    }
+    let mut position = 0;
+    let parameters = signature
+        .parameters()
+        .iter()
+        .map(|parameter| {
+            let ty = if parameter.is_positional() {
+                position += 1;
+                types.positional(position - 1)
+            } else if parameter.is_keyword_only() {
+                parameter
+                    .default_type(db)
+                    .map(|default| default.promote(db, env))
+            } else {
+                None
+            };
+            match ty {
+                Some(ty) if parameter.inferred_annotation => {
+                    parameter.clone().with_annotated_type(ty)
+                }
+                _ => parameter.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+    let return_annotated = match definition.kind(db) {
+        DefinitionKind::Function(function) => {
+            let module = parsed_module(db, definition.python_file(db)).load(db);
+            function.node(&module).returns.is_some()
+        }
+        _ => true,
+    };
+    let return_ty = if return_annotated {
+        signature.return_ty
+    } else {
+        types.return_ty
+    };
+    *signature = Signature::new_generic(
+        signature.generic_context,
+        Parameters::standard(parameters),
+        return_ty,
+    )
+    .with_definition(signature.definition);
+}
+
+/// The type of the unannotated parameter `parameter` in the body of a method that overrides a
+/// Blender callback ([`override_types`]): the parent's parameter type at its position, or for a
+/// keyword-only parameter the promoted type of its default `default`. `None` when the method
+/// overrides no callback or the parent has no parameter at that position.
+pub(crate) fn override_parameter_type<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    parameter: Definition<'db>,
+    default: Option<Type<'db>>,
+) -> Option<Type<'db>> {
+    let file = parameter.program_file(db);
+    let index = semantic_index(db, file);
+    let function = index.scope(parameter.file_scope(db)).node().as_function()?;
+    let types = override_types(db, index.expect_single_definition(function)).as_ref()?;
+    let module = parsed_module(db, parameter.python_file(db)).load(db);
+    let name_range = parameter.kind(db).target_range(&module);
+    let parameters = &function.node(&module).parameters;
+    if let Some(position) = parameters
+        .posonlyargs
+        .iter()
+        .chain(&parameters.args)
+        .position(|candidate| candidate.parameter.name.range() == name_range)
+    {
+        return types.positional(position);
+    }
+    if parameters
+        .kwonlyargs
+        .iter()
+        .any(|candidate| candidate.parameter.name.range() == name_range)
+    {
+        return default.map(|default| default.promote(db, env));
+    }
+    None
 }

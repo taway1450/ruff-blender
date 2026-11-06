@@ -22,8 +22,8 @@
 //! - [`vector`]: the value and write types of vector properties;
 //! - [`lints`]: the Blender lints and the per-file query that reports them;
 //! - [`rules`]: the property rules, what Blender rejects or ignores in property declarations;
-//! - [`overrides`]: overrides of Blender callbacks, what Blender refuses and what ty's override
-//!   checks compare them with;
+//! - [`overrides`]: overrides of Blender callbacks, what Blender refuses, what ty's override
+//!   checks compare them with and the types they take from their parent;
 //! - [`registration_checks`]: the registration checks, what Blender refuses, ignores or leaves
 //!   behind when it runs `register()` and `unregister()`.
 
@@ -63,6 +63,6 @@ pub(crate) use member::{
 pub(crate) use module_dunders::package_type;
 pub use operator_properties::blender_idname_hover;
 pub(crate) use operator_properties::{idname_completions, on_call};
-pub(crate) use overrides::override_contract;
+pub(crate) use overrides::{apply_override_types, override_contract, override_parameter_type};
 pub(crate) use properties::may_be_property_call;
 pub(crate) use symbols::hides_star_import;
