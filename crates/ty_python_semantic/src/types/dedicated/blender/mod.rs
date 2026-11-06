@@ -63,6 +63,8 @@ pub(crate) use member::{
 pub(crate) use module_dunders::package_type;
 pub use operator_properties::blender_idname_hover;
 pub(crate) use operator_properties::{idname_completions, on_call};
-pub(crate) use overrides::{apply_override_types, override_contract, override_parameter_type};
+pub(crate) use overrides::{
+    apply_override_types, override_contract, override_parameter_type, override_return_type,
+};
 pub(crate) use properties::may_be_property_call;
 pub(crate) use symbols::hides_star_import;

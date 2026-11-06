@@ -25,7 +25,8 @@
 //! - [`override_types`] is what an override takes from its parent where it has no annotation: the
 //!   parent's parameter types by position and its return type. [`apply_override_types`] puts them
 //!   in the override's signature, for callers, and [`override_parameter_type`] gives them to the
-//!   parameters in its body.
+//!   parameters in its body. [`override_return_type`] is what its `return` values are inferred
+//!   with and checked against when it has no return annotation.
 
 use ruff_db::parsed::parsed_module;
 use ruff_python_ast as ast;
@@ -42,14 +43,14 @@ use crate::types::function::FunctionDecorators;
 use crate::types::infer::{function_known_decorator_flags, nearest_enclosing_class};
 use crate::types::signatures::CallableSignature;
 use crate::types::{
-    ClassType, MemberLookupPolicy, Parameter, Parameters, Signature, StaticClassLiteral, Type,
-    binding_type,
+    ClassType, KnownClass, MemberLookupPolicy, Parameter, Parameters, Signature,
+    StaticClassLiteral, Type, UnionType, binding_type,
 };
 use crate::{Db, ProgramEnvironment};
 
 use super::index::file_facts;
 use super::lints::BLENDER_INVALID_OVERRIDE;
-use super::symbols::{bpy_types_bases, is_bpy_types_class};
+use super::symbols::{bpy_types_bases, bpy_types_class_name, is_bpy_types_class};
 
 /// The root whose callbacks `class` has: the first `bpy.types` class in its method resolution
 /// order that has callbacks (`Node` for a `ShaderNode` subclass). `None` for a `bpy.types` class
@@ -215,7 +216,7 @@ fn with_positional_only_parameters<'db>(
             let overloads = callable
                 .signatures(db)
                 .iter()
-                .map(|signature| positional_only_signature(db, signature, kept));
+                .map(|signature| positional_only_signature(db, env, signature, kept));
             Type::Callable(
                 callable.with_signatures(db, CallableSignature::from_overloads(overloads)),
             )
@@ -226,6 +227,7 @@ fn with_positional_only_parameters<'db>(
 
 fn positional_only_signature<'db>(
     db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
     signature: &Signature<'db>,
     kept: Option<usize>,
 ) -> Signature<'db> {
@@ -251,9 +253,39 @@ fn positional_only_signature<'db>(
     Signature::new_generic(
         signature.generic_context,
         Parameters::standard(parameters.collect::<Vec<_>>()),
-        signature.return_ty,
+        widen_array_outputs(db, env, signature.return_ty),
     )
     .with_definition(signature.definition)
+}
+
+/// `ty` with each `bpy_prop_array[T]` in it widened to `bpy_prop_array[T] | Sequence[T]`.
+///
+/// Blender accepts any sequence of the right length where a callback returns an array, so this
+/// is what an override's return values and return annotation are checked with. The stubs'
+/// `bpy_prop_array` is no `Sequence`, so it is kept beside it. Callers of the override still see
+/// the parent's array type:
+///
+/// ```python
+/// class MY_Socket(NodeSocket):
+///     def draw_color(self, context, node):  # `-> bpy_prop_array[float]` for callers
+///         return (1.0, 1.0, 1.0, 1.0)  # fine: a `Sequence[float]`
+/// ```
+fn widen_array_outputs<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    ty: Type<'db>,
+) -> Type<'db> {
+    if let Type::Union(union) = ty {
+        return union.map(db, env, |element| widen_array_outputs(db, env, *element));
+    }
+    if let Some((class, specialization)) = ty.class_specialization(db, env)
+        && bpy_types_class_name(db, class) == Some("bpy_prop_array")
+        && let [item] = specialization.types(db)
+    {
+        let sequence = KnownClass::Sequence.to_specialized_instance(db, env, &[*item]);
+        return UnionType::from_two_elements(db, env, ty, sequence);
+    }
+    ty
 }
 
 /// What an override of a Blender callback takes from its parent where it has no annotation.
@@ -273,6 +305,9 @@ pub(crate) struct OverrideTypes<'db> {
     positional: Box<[Type<'db>]>,
     /// The parent's return type.
     pub(crate) return_ty: Type<'db>,
+    /// Whether Blender converts the callback's result with `bool()` (`poll`, `check`, ...), so it
+    /// accepts any return value.
+    bool_result: bool,
 }
 
 impl<'db> OverrideTypes<'db> {
@@ -314,7 +349,7 @@ pub(crate) fn override_types<'db>(
         return None;
     }
     let class = defining_class(db, definition)?;
-    callback_of(callback_root(db, class)?, &name)?;
+    let callback = callback_of(callback_root(db, class)?, &name)?;
     if function_known_decorator_flags(db, definition).contains(FunctionDecorators::STATICMETHOD) {
         return None;
     }
@@ -359,6 +394,7 @@ pub(crate) fn override_types<'db>(
                 .map(Parameter::annotated_type)
                 .collect(),
             return_ty: bound.return_ty,
+            bool_result: callback.bool_result,
         });
     }
     None
@@ -457,4 +493,23 @@ pub(crate) fn override_parameter_type<'db>(
         return default.map(|default| default.promote(db, env));
     }
     None
+}
+
+/// What the return values of the method `definition` must fit when it overrides a Blender callback
+/// without a return annotation ([`override_types`]): the parent's return type, an array return
+/// also accepting a sequence. `None` when the method overrides no callback, and for a callback
+/// whose result Blender converts with `bool()` (`poll`, `check`, ...), which accepts any value.
+///
+/// It gives the values of `return` statements their type context, so `{"FINISHED"}` in `execute`
+/// is a set of literals, and `check_blender_override_returns` checks the returns against it.
+pub(crate) fn override_return_type<'db>(
+    db: &'db dyn Db,
+    definition: Definition<'db>,
+) -> Option<Type<'db>> {
+    let types = override_types(db, definition).as_ref()?;
+    if types.bool_result {
+        return None;
+    }
+    let env = ProgramEnvironment::from_file(definition.program_file(db));
+    Some(widen_array_outputs(db, &env, types.return_ty))
 }
