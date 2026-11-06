@@ -40,7 +40,7 @@ use super::evaluate::{PropertyValue, property_value};
 use super::index::{RegisteredProperty, registered_properties};
 use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
-use super::{operator_properties, operators, preferences};
+use super::{context_members, operator_properties, operators, preferences};
 
 /// The property that gives instances of `class` the attribute `name` in `file`.
 ///
@@ -438,6 +438,10 @@ pub(crate) fn on_load<'db>(
     if name == "layout" && is_drawn_layout(db, file, attribute) {
         return place.map_type(|ty| without_none(db, ty));
     }
+    // `context.scene` inside a Blender callback.
+    if let Some(member) = context_members::on_load(db, env, file, attribute, receiver, place) {
+        return member;
+    }
     if place.place.is_definitely_bound() {
         return place;
     }
@@ -523,7 +527,7 @@ fn is_draw_callback<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> bool {
 }
 
 /// `ty` without `None`.
-fn without_none<'db>(db: &'db dyn Db, ty: Type<'db>) -> Type<'db> {
+pub(super) fn without_none<'db>(db: &'db dyn Db, ty: Type<'db>) -> Type<'db> {
     match ty {
         Type::Union(union) => union.filter(db, |element| !element.is_none(db)),
         _ => ty,
