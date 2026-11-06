@@ -11,6 +11,7 @@
 //! - [`walk`]: the `register()` walk, what `register()` and `unregister()` do, in order;
 //! - [`index`]: the Add-on index, what an add-on's code does to Blender, gathered without inference;
 //! - [`member`]: the property behind an attribute of a Blender instance, of either origin;
+//! - [`context_members`]: the Guaranteed context members, non-None inside a Blender callback;
 //! - [`operators`]: `bpy.ops.<category>.<name>` for an add-on's own operators;
 //! - [`operator_properties`]: what an operator idname given as a string gives
 //!   (`layout.operator("my_addon.run").count`), for add-on and built-in operators;
@@ -35,6 +36,7 @@ mod addon_key;
 mod callbacks;
 mod class_rules;
 mod classes;
+mod context_members;
 mod evaluate;
 mod follow;
 mod index;
