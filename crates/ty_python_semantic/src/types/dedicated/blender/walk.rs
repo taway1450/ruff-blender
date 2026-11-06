@@ -29,6 +29,7 @@ use ruff_python_ast::name::Name;
 use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_text_size::{Ranged, TextRange, TextSize};
 use rustc_hash::{FxHashMap, FxHashSet};
+use ty_blender::is_script_test;
 use ty_module_resolver::{ImportingFile, ModuleName, file_to_module};
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::place::ScopedPlaceId;
@@ -630,11 +631,21 @@ impl<'db> IrBuilder<'db, '_> {
             Stmt::If(if_statement) => {
                 steps.push(Step::Eval(self.expression(&if_statement.test, scope)));
                 let offset = if_statement.start();
-                let mut arms = vec![self.arm(&if_statement.body, scope, module_level, offset, 0)];
+                // An add-on is imported as a module, so an arm under `__name__ == "__main__"`
+                // never runs (`if __name__ == "__main__": register()` would register twice).
+                let mut arms = vec![if is_script_test(&if_statement.test) {
+                    Box::default()
+                } else {
+                    self.arm(&if_statement.body, scope, module_level, offset, 0)
+                }];
                 let mut has_else = false;
                 for (clause, arm) in if_statement.elif_else_clauses.iter().zip(1u8..) {
                     has_else |= clause.test.is_none();
-                    arms.push(self.arm(&clause.body, scope, module_level, offset, arm));
+                    arms.push(if clause.test.as_ref().is_some_and(is_script_test) {
+                        Box::default()
+                    } else {
+                        self.arm(&clause.body, scope, module_level, offset, arm)
+                    });
                 }
                 if !has_else {
                     arms.push(Box::default());
