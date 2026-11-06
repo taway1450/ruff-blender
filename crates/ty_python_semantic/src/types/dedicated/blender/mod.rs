@@ -12,6 +12,7 @@
 //! - [`index`]: the Add-on index, what an add-on's code does to Blender, gathered without inference;
 //! - [`member`]: the property behind an attribute of a Blender instance, of either origin;
 //! - [`context_members`]: the Guaranteed context members, non-None inside a Blender callback;
+//! - [`type_tags`]: narrowing by a Type tag, `md.type == 'SUBSURF'` makes `md` a `SubsurfModifier`;
 //! - [`operators`]: `bpy.ops.<category>.<name>` for an add-on's own operators;
 //! - [`operator_properties`]: what an operator idname given as a string gives
 //!   (`layout.operator("my_addon.run").count`), for add-on and built-in operators;
@@ -52,6 +53,7 @@ mod registration_checks;
 mod reload_guard;
 mod rules;
 mod symbols;
+mod type_tags;
 mod vector;
 mod walk;
 
@@ -77,3 +79,4 @@ pub(crate) use overrides::{
 pub(crate) use properties::may_be_property_call;
 pub(crate) use reload_guard::reload_guard_type;
 pub(crate) use symbols::hides_star_import;
+pub(crate) use type_tags::narrow_type_tag;
