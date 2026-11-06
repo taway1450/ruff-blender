@@ -794,6 +794,7 @@ impl<'db> OverloadLiteral<'db> {
                 }
             }
         });
+        crate::types::blender::apply_override_types(db, env, definition, &mut raw_signature);
 
         raw_signature
     }
