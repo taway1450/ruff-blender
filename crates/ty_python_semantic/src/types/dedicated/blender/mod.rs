@@ -42,3 +42,4 @@ pub(crate) use member::{
 };
 pub(crate) use module_dunders::package_type;
 pub(crate) use properties::may_be_property_call;
+pub(crate) use symbols::hides_star_import;

@@ -1,6 +1,7 @@
 //! Recognising Blender's own symbols by what they resolve to, never by how they are spelled.
 //!
-//! A symbol is Blender's when it is defined in a Blender module (`bpy.props`, `bpy.types`, ...)
+//! A symbol is Blender's when it is defined in a Blender module (`bpy.props`, `bpy.types`,
+//! `bpy_extras.io_utils`, ...)
 //! that ty found on a search path other than a first-party root, which is where the bpy stubs live.
 //! So `from bpy.props import IntProperty as IP`, `import bpy.props as p` and a star import all
 //! resolve to the same function, while an add-on's own `def IntProperty(**kwargs)` or a
@@ -13,7 +14,7 @@ use crate::types::class_base::ClassBase;
 use crate::types::{StaticClassLiteral, Type};
 use crate::{Db, ProgramEnvironment};
 
-/// The name of the module `file` is, when it is a `bpy` module of Blender's stubs.
+/// The name of the module `file` is, when it is a `bpy` or `bpy_extras` module of Blender's stubs.
 #[salsa::tracked(returns(as_deref), heap_size=ruff_memory_usage::heap_size)]
 fn blender_module_name<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Option<Box<str>> {
     let module = file_to_module(db, file.resolver_file(db))?;
@@ -21,7 +22,35 @@ fn blender_module_name<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Option<B
         return None;
     }
     let name = module.name(db).as_str();
-    (name == "bpy" || name.starts_with("bpy.")).then(|| Box::from(name))
+    ["bpy", "bpy_extras"]
+        .iter()
+        .any(|package| {
+            name.strip_prefix(package)
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
+        })
+        .then(|| Box::from(name))
+}
+
+/// The types that `bpy.types` holds in its `__dict__` from the start. Every other class of the
+/// module is looked up in RNA by a module-level `__getattr__` when it is first used, and the module
+/// has no `__all__`, so `from bpy.types import *` binds only these.
+const BPY_TYPES_STAR_EXPORTS: [&str; 7] = [
+    "bpy_struct_meta_idprop",
+    "bpy_struct",
+    "bpy_prop",
+    "bpy_prop_array",
+    "bpy_prop_collection",
+    "bpy_prop_collection_idprop",
+    "bpy_func",
+];
+
+/// Whether `from <file> import *` leaves `name` unbound although the stub defines it: true for
+/// every name of Blender's `bpy.types` but its base types.
+///
+/// The stubs can't say this themselves. An `__all__` would also be what auto-import offers, and
+/// `PropertyGroup` or `Operator` would no longer be suggested from `bpy.types`.
+pub(crate) fn hides_star_import<'db>(db: &'db dyn Db, file: ProgramFile<'db>, name: &str) -> bool {
+    blender_module_name(db, file) == Some("bpy.types") && !BPY_TYPES_STAR_EXPORTS.contains(&name)
 }
 
 /// The name of the function `ty` is, when it is a function defined in the Blender module
