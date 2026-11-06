@@ -70,6 +70,11 @@ impl PropertyKind {
     }
 }
 
+/// Whether `callee` is one of the ten `bpy.props` functions that declare a property.
+pub(super) fn is_property_function<'db>(db: &'db dyn Db, callee: Type<'db>) -> bool {
+    PropertyKind::of_callee(db, callee).is_some()
+}
+
 /// What a property declaration says about the property Blender creates from it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
 pub(super) struct PropertyDeclaration<'db> {
