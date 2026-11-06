@@ -22,9 +22,7 @@ use crate::types::{KnownClass, KnownUnion, StaticClassLiteral, Type, UnionType};
 use crate::{Db, ProgramEnvironment};
 
 use super::symbols::{blender_function_name, bpy_types_bases};
-use super::vector::{
-    Element, Known, VectorShape, int_literal, module_class, read_size, read_string,
-};
+use super::vector::{Element, VectorShape, int_literal, module_class, read_size, read_string};
 
 /// The ten functions of `bpy.props` that declare a property.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
@@ -68,6 +66,31 @@ impl PropertyKind {
 /// Whether `callee` is one of the ten `bpy.props` functions that declare a property.
 pub(super) fn is_property_function<'db>(db: &'db dyn Db, callee: Type<'db>) -> bool {
     PropertyKind::of_callee(db, callee).is_some()
+}
+
+/// What a declaration says about an option that decides the value type: it is not written, it is
+/// written with a value the checker reads, or it is written with a value the checker cannot read.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
+pub(super) enum Known<T> {
+    Absent,
+    Value(T),
+    Unknown,
+}
+
+impl<T> Known<T> {
+    /// The value that `read` gives, or unknown when it gives none.
+    pub(super) fn from_read(value: Option<T>) -> Self {
+        value.map_or(Known::Unknown, Known::Value)
+    }
+
+    /// The value, `default` when the option is absent, or `None` when it is unreadable.
+    pub(super) fn or_default(self, default: T) -> Option<T> {
+        match self {
+            Known::Absent => Some(default),
+            Known::Value(value) => Some(value),
+            Known::Unknown => None,
+        }
+    }
 }
 
 /// What a property declaration says about the property Blender creates from it.
@@ -181,15 +204,15 @@ impl<'db> PropertyDeclaration<'db> {
                         Type::none(db, env),
                     ],
                 ),
-                None => Type::unknown(),
+                None => Type::any(),
             },
             PropertyKind::Collection => {
                 let Some((item, _)) = self.target_class(db) else {
-                    return Type::unknown();
+                    return Type::any();
                 };
                 let item = Type::instance(db, env, item.default_specialization(db));
                 module_class(db, env, "bpy.types", "bpy_prop_collection_idprop").map_or_else(
-                    Type::unknown,
+                    Type::any,
                     // Only a generic stub class can say what the collection holds; a
                     // non-generic one is used as it is.
                     |collection| {
@@ -202,7 +225,7 @@ impl<'db> PropertyDeclaration<'db> {
             }
             PropertyKind::BoolVector | PropertyKind::FloatVector | PropertyKind::IntVector => self
                 .vector()
-                .map_or_else(Type::unknown, |vector| vector.value_type(db, env)),
+                .map_or_else(Type::any, |vector| vector.value_type(db, env)),
         }
     }
 
