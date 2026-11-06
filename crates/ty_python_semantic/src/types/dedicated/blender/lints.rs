@@ -201,6 +201,24 @@ declare_lint! {
     }
 }
 
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-registered-base.md")]
+    pub(crate) static BLENDER_REGISTERED_BASE = {
+        summary: "detects a registered Blender class that derives from another registered class",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Error,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-missing-callback.md")]
+    pub(crate) static BLENDER_MISSING_CALLBACK = {
+        summary: "detects a registered Blender class without a callback Blender requires, such as a panel's `draw`",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Error,
+    }
+}
+
 pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
@@ -220,6 +238,8 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_OVERRIDE);
     registry.register_lint(&BLENDER_MIXIN_ORDER);
     registry.register_lint(&BLENDER_INVALID_BASE);
+    registry.register_lint(&BLENDER_REGISTERED_BASE);
+    registry.register_lint(&BLENDER_MISSING_CALLBACK);
 }
 
 /// The Blender lints of `file`: the add-on lints when `file` is an add-on's root module (the
@@ -278,6 +298,8 @@ fn report_findings(context: &InferContext, findings: &[Finding]) {
             Rule::UnreachableRegistration => &BLENDER_UNREACHABLE_REGISTRATION,
             Rule::UnregisterMismatch => &BLENDER_UNREGISTER_MISMATCH,
             Rule::PreferencesIdname => &BLENDER_PREFERENCES_IDNAME,
+            Rule::RegisteredBase => &BLENDER_REGISTERED_BASE,
+            Rule::MissingCallback => &BLENDER_MISSING_CALLBACK,
         };
         if let Some(builder) = context.report_lint(lint, finding.range) {
             builder.into_diagnostic(finding.message.clone());
