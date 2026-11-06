@@ -435,7 +435,7 @@ pub(crate) fn on_load<'db>(
     {
         return Place::bound(ty).into();
     }
-    if name == "layout" && in_draw_callback(db, file, attribute) {
+    if name == "layout" && is_drawn_layout(db, file, attribute) {
         return place.map_type(|ty| without_none(db, ty));
     }
     if place.place.is_definitely_bound() {
@@ -466,22 +466,32 @@ const DRAW_CALLBACKS: [(&str, &[&str]); 4] = [
     ("Operator", &["draw"]),
 ];
 
-/// Whether `attribute` is read in the body of a draw callback ([`is_draw_callback`]), or in a
-/// comprehension or lambda inside it.
-fn in_draw_callback<'db>(
+/// Whether `attribute` reads the layout of the instance being drawn: its receiver is the first
+/// parameter (`self`) of a draw callback ([`is_draw_callback`]), in its body or in a comprehension
+/// or lambda inside it. Another instance's `layout` (`other.layout`) may still be `None`.
+fn is_drawn_layout<'db>(
     db: &'db dyn Db,
     file: ProgramFile<'db>,
     attribute: &ast::ExprAttribute,
 ) -> bool {
+    let ast::Expr::Name(receiver) = &*attribute.value else {
+        return false;
+    };
     let index = semantic_index(db, file);
-    index
-        .try_expression_scope_id(&*attribute.value)
-        .and_then(|scope| {
-            index
-                .ancestor_scopes(scope)
-                .find(|(_, ancestor)| ancestor.node().as_function().is_some())
-        })
-        .is_some_and(|(function, _)| *is_draw_callback(db, function.to_scope_id(db, file)))
+    let Some(scope) = index.try_expression_scope_id(&*attribute.value) else {
+        return false;
+    };
+    let Some((function, node)) = index
+        .ancestor_scopes(scope)
+        .find_map(|(id, ancestor)| Some((id, ancestor.node().as_function()?)))
+    else {
+        return false;
+    };
+    let module = parsed_module(db, file.python_file(db)).load(db);
+    let parameters = &node.node(&module).parameters;
+    let first = parameters.posonlyargs.iter().chain(&parameters.args).next();
+    first.is_some_and(|first| first.parameter.name.id == receiver.id)
+        && *is_draw_callback(db, function.to_scope_id(db, file))
 }
 
 /// Whether the function scope `function` is a draw callback: a method, in the body of a class
