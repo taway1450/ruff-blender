@@ -18,7 +18,8 @@ use ruff_python_ast as ast;
 use ruff_python_ast::name::Name;
 use ty_python_core::ProgramFile;
 use ty_python_core::definition::{Definition, DefinitionState};
-use ty_python_core::{place_table, use_def_map};
+use ty_python_core::scope::ScopeId;
+use ty_python_core::{place_table, semantic_index, use_def_map};
 
 use crate::place::{Definedness, Place, PlaceAndQualifiers};
 use crate::types::attribute_write::{
@@ -27,6 +28,7 @@ use crate::types::attribute_write::{
 };
 use crate::types::context::InferContext;
 use crate::types::diagnostic::INVALID_ASSIGNMENT;
+use crate::types::infer::nearest_enclosing_class;
 use crate::types::list_members::Member;
 use crate::types::{
     ClassBase, ClassType, IntersectionType, StaticClassLiteral, SubclassOfInner, Type,
@@ -433,6 +435,9 @@ pub(crate) fn on_load<'db>(
     {
         return Place::bound(ty).into();
     }
+    if name == "layout" && in_draw_callback(db, file, attribute) {
+        return place.map_type(|ty| without_none(db, ty));
+    }
     if place.place.is_definitely_bound() {
         return place;
     }
@@ -449,6 +454,69 @@ pub(crate) fn on_load<'db>(
     match instance_value_type(db, env, file, receiver, name) {
         Some(ty) => Place::bound(ty).into(),
         None => place,
+    }
+}
+
+/// The callbacks in which Blender gives `self.layout` a layout, by the `bpy.types` class that
+/// declares them. Elsewhere (`poll`, a timer, `AddonPreferences.draw`) it may be `None`.
+const DRAW_CALLBACKS: [(&str, &[&str]); 4] = [
+    ("Panel", &["draw", "draw_header", "draw_header_preset"]),
+    ("Menu", &["draw"]),
+    ("Header", &["draw"]),
+    ("Operator", &["draw"]),
+];
+
+/// Whether `attribute` is read in the body of a draw callback ([`is_draw_callback`]), or in a
+/// comprehension or lambda inside it.
+fn in_draw_callback<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    attribute: &ast::ExprAttribute,
+) -> bool {
+    let index = semantic_index(db, file);
+    index
+        .try_expression_scope_id(&*attribute.value)
+        .and_then(|scope| {
+            index
+                .ancestor_scopes(scope)
+                .find(|(_, ancestor)| ancestor.node().as_function().is_some())
+        })
+        .is_some_and(|(function, _)| *is_draw_callback(db, function.to_scope_id(db, file)))
+}
+
+/// Whether the function scope `function` is a draw callback: a method, in the body of a class
+/// deriving from the `bpy.types` class that declares the callback ([`DRAW_CALLBACKS`]).
+///
+/// The callback is found by its name, not by registration: an unregistered base's `draw` is
+/// inherited by the registered subclass that Blender calls it on. Since the hook changes the type
+/// of the expression, `layout = self.layout` is a `UILayout` too.
+#[salsa::tracked(cycle_initial=|_, _, _| false, heap_size=ruff_memory_usage::heap_size)]
+fn is_draw_callback<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> bool {
+    let file = function.program_file(db);
+    let index = semantic_index(db, file);
+    let in_class_body = index
+        .parent_scope_id(function.file_scope_id(db))
+        .is_some_and(|parent| index.scope(parent).node().as_class().is_some());
+    let Some(node) = function.node(db).as_function().filter(|_| in_class_body) else {
+        return false;
+    };
+    let module = parsed_module(db, file.python_file(db)).load(db);
+    let name = node.node(&module).name.as_str();
+    let Some(class) = nearest_enclosing_class(db, index, function) else {
+        return false;
+    };
+    bpy_types_bases(db, class).any(|base| {
+        DRAW_CALLBACKS
+            .iter()
+            .any(|(root, callbacks)| *root == base && callbacks.contains(&name))
+    })
+}
+
+/// `ty` without `None`.
+fn without_none<'db>(db: &'db dyn Db, ty: Type<'db>) -> Type<'db> {
+    match ty {
+        Type::Union(union) => union.filter(db, |element| !element.is_none(db)),
+        _ => ty,
     }
 }
 
