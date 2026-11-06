@@ -27,7 +27,8 @@
 //! - [`overrides`]: overrides of Blender callbacks, what Blender refuses, what ty's override
 //!   checks compare them with and the types they take from their parent;
 //! - [`registration_checks`]: the registration checks, what Blender refuses, ignores or leaves
-//!   behind when it runs `register()` and `unregister()`.
+//!   behind when it runs `register()` and `unregister()`;
+//! - [`reload_guard`]: the names an add-on's reload guard (`if "bpy" in locals():`) uses.
 
 mod addon;
 mod addon_key;
@@ -46,6 +47,7 @@ mod overrides;
 mod preferences;
 mod properties;
 mod registration_checks;
+mod reload_guard;
 mod rules;
 mod symbols;
 mod vector;
@@ -71,4 +73,5 @@ pub(crate) use overrides::{
     apply_override_types, override_contract, override_parameter_type, override_return_type,
 };
 pub(crate) use properties::may_be_property_call;
+pub(crate) use reload_guard::reload_guard_type;
 pub(crate) use symbols::hides_star_import;
