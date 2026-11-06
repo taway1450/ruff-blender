@@ -1,0 +1,251 @@
+//! Overrides of Blender callbacks: what Blender refuses when it registers a class, and what ty's own
+//! override checks compare a callback with.
+//!
+//! Blender looks up each callback of a class's registrable root on the class when it registers it
+//! (the table in `ty_blender::callbacks`), and refuses the class when the callback is a plain method
+//! where it needs a classmethod or the reverse, or has the wrong number of positional parameters.
+//! It calls a callback with positional arguments only, as many as the callback has parameters:
+//!
+//! ```python
+//! class MY_OT_run(Operator):
+//!     def execute(self, ctx):  # fine: Blender passes `context` by position
+//!         ...
+//!
+//!     def invoke(self, context):  # error: [blender-invalid-override] Blender passes an event too
+//!         ...
+//! ```
+//!
+//! - [`check_overrides`] reports `blender-invalid-override` on each `def` of a callback that Blender
+//!   refuses, in a module-level class deriving from a registrable `bpy.types` class, registered or
+//!   not: a registered subclass inherits the `def`.
+//! - [`override_contract`] is what ty's `invalid-method-override` compares such an override with:
+//!   nothing where `blender-invalid-override` reports, otherwise the parent's signature with
+//!   positional-only parameters, so a renamed parameter or a short `UIList.draw_item` is accepted
+//!   while a parameter or return type that does not fit still is not.
+
+use ruff_db::parsed::parsed_module;
+use ruff_python_ast as ast;
+use ruff_python_ast::name::Name;
+use ruff_text_size::Ranged;
+use ty_blender::{CallbackShape, MethodKind, callback_of, is_callback_root};
+use ty_python_core::definition::{Definition, DefinitionKind};
+use ty_python_core::scope::FileScopeId;
+use ty_python_core::{ProgramFile, semantic_index};
+
+use crate::types::context::InferContext;
+use crate::types::function::FunctionDecorators;
+use crate::types::infer::nearest_enclosing_class;
+use crate::types::signatures::CallableSignature;
+use crate::types::{
+    ClassType, Parameter, Parameters, Signature, StaticClassLiteral, Type, binding_type,
+};
+use crate::{Db, ProgramEnvironment};
+
+use super::index::file_facts;
+use super::lints::BLENDER_INVALID_OVERRIDE;
+use super::symbols::{bpy_types_bases, is_bpy_types_class};
+
+/// The root whose callbacks `class` has: the first `bpy.types` class in its method resolution
+/// order that has callbacks (`Node` for a `ShaderNode` subclass). `None` for a `bpy.types` class
+/// itself.
+fn callback_root<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> Option<&'db str> {
+    if is_bpy_types_class(db, class) {
+        return None;
+    }
+    bpy_types_bases(db, class).find(|base| is_callback_root(base))
+}
+
+/// The name and shape of the method `definition`: a `def` in the body of a module-level class,
+/// bound to a function whose decorators ty knows (`classmethod`, `staticmethod` or none). Any other
+/// decorator, and any other binding (`poll = shared_poll`), gives `None`.
+#[salsa::tracked(
+    returns(ref),
+    cycle_initial=|_, _, _| None,
+    heap_size=ruff_memory_usage::heap_size
+)]
+fn method_shape<'db>(
+    db: &'db dyn Db,
+    definition: Definition<'db>,
+) -> Option<(Name, CallbackShape)> {
+    let DefinitionKind::Function(function) = definition.kind(db) else {
+        return None;
+    };
+    let file = definition.program_file(db);
+    let index = semantic_index(db, file);
+    let scope = definition.file_scope(db);
+    if index.scope(scope).node().as_class().is_none()
+        || index.parent_scope_id(scope) != Some(FileScopeId::global())
+    {
+        return None;
+    }
+    let Type::FunctionLiteral(function_type) = binding_type(db, definition) else {
+        return None;
+    };
+    let kind = if function_type.has_known_decorator(db, FunctionDecorators::CLASSMETHOD) {
+        MethodKind::ClassMethod
+    } else if function_type.has_known_decorator(db, FunctionDecorators::STATICMETHOD) {
+        MethodKind::StaticMethod
+    } else {
+        MethodKind::Function
+    };
+    let module = parsed_module(db, definition.python_file(db)).load(db);
+    let function = function.node(&module);
+    let parameters = &function.parameters;
+    Some((
+        function.name.id.clone(),
+        CallbackShape {
+            kind,
+            positional: parameters.posonlyargs.len() + parameters.args.len(),
+        },
+    ))
+}
+
+/// The class whose body defines `definition`.
+fn defining_class<'db>(
+    db: &'db dyn Db,
+    definition: Definition<'db>,
+) -> Option<StaticClassLiteral<'db>> {
+    let file = definition.program_file(db);
+    nearest_enclosing_class(db, semantic_index(db, file), definition.scope(db))
+}
+
+/// Why Blender refuses the method `definition` when it registers its class (or a subclass), or
+/// `None` when it accepts it or the method is no Blender callback.
+///
+/// Both [`check_overrides`] and [`override_contract`] read it, so `blender-invalid-override` and
+/// ty's `invalid-method-override` never report the same `def`.
+#[salsa::tracked(
+    returns(ref),
+    cycle_initial=|_, _, _| None,
+    heap_size=ruff_memory_usage::heap_size
+)]
+pub(super) fn callback_problem<'db>(
+    db: &'db dyn Db,
+    definition: Definition<'db>,
+) -> Option<String> {
+    let (name, shape) = method_shape(db, definition).as_ref()?;
+    let root = callback_root(db, defining_class(db, definition)?)?;
+    callback_of(root, name.as_str())?.problem(*shape)
+}
+
+/// Reports `blender-invalid-override` on the callbacks that Blender refuses, in the module-level
+/// classes of `file` that `register_class` accepts.
+pub(super) fn check_overrides(context: &InferContext, file: ProgramFile) {
+    let db = context.db();
+    let module = parsed_module(db, file.python_file(db)).load(db);
+    let index = semantic_index(db, file);
+    for class in &file_facts(db, file).classes {
+        let DefinitionKind::Class(class_node) = class.class.definition(db).kind(db) else {
+            continue;
+        };
+        for statement in &class_node.node(&module).body {
+            let ast::Stmt::FunctionDef(function) = statement else {
+                continue;
+            };
+            let Some(definition) = index.try_definition(function) else {
+                continue;
+            };
+            if let Some(problem) = callback_problem(db, definition)
+                && let Some(builder) =
+                    context.report_lint(&BLENDER_INVALID_OVERRIDE, function.name.range())
+            {
+                builder.into_diagnostic(problem.clone());
+            }
+        }
+    }
+}
+
+/// What ty's override checks compare the method `name` of `class`, defined by `definition`, with,
+/// given `contract`, the parent's callable bound to `class`.
+///
+/// - `contract` itself when `name` is no Blender callback of `class`;
+/// - `None` when `blender-invalid-override` reports `definition`: Blender's verdict replaces ty's;
+/// - otherwise `contract` with every positional parameter made positional-only, since Blender
+///   passes arguments by position. For `UIList.draw_item`, which Blender calls with as many
+///   arguments as it has parameters, the parameters beyond the override's are dropped. Parameter
+///   and return types are kept, so an annotation that does not fit is still reported.
+///
+/// `definition` is in the body of `class`, or of a mixin that `class` inherits it from.
+pub(crate) fn override_contract<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    class: ClassType<'db>,
+    name: &str,
+    definition: Definition<'db>,
+    contract: Type<'db>,
+) -> Option<Type<'db>> {
+    let Some(callback) = class
+        .class_literal(db)
+        .as_static()
+        .and_then(|class| callback_root(db, class))
+        .and_then(|root| callback_of(root, name))
+    else {
+        return Some(contract);
+    };
+    if callback_problem(db, definition).is_some() {
+        return None;
+    }
+    // A bound contract has no `self` / `cls`.
+    let kept = (callback.positional.start() != callback.positional.end())
+        .then(|| method_shape(db, definition).as_ref())
+        .flatten()
+        .map(|(_, shape)| shape.positional.saturating_sub(1));
+    Some(with_positional_only_parameters(db, env, contract, kept))
+}
+
+/// `contract` with its positional parameters made positional-only, keeping the first `kept` of them
+/// when that is given.
+fn with_positional_only_parameters<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    contract: Type<'db>,
+    kept: Option<usize>,
+) -> Type<'db> {
+    match contract {
+        Type::Union(union) => union.map(db, env, |element| {
+            with_positional_only_parameters(db, env, *element, kept)
+        }),
+        Type::Callable(callable) => {
+            let overloads = callable
+                .signatures(db)
+                .iter()
+                .map(|signature| positional_only_signature(db, signature, kept));
+            Type::Callable(
+                callable.with_signatures(db, CallableSignature::from_overloads(overloads)),
+            )
+        }
+        _ => contract,
+    }
+}
+
+fn positional_only_signature<'db>(
+    db: &'db dyn Db,
+    signature: &Signature<'db>,
+    kept: Option<usize>,
+) -> Signature<'db> {
+    if !signature.parameters().is_standard() {
+        return signature.clone();
+    }
+    let mut positional = 0;
+    let parameters = signature.parameters().iter().filter_map(|parameter| {
+        if !parameter.is_positional() {
+            return Some(parameter.clone());
+        }
+        positional += 1;
+        if kept.is_some_and(|kept| positional > kept) {
+            return None;
+        }
+        Some(
+            Parameter::positional_only(parameter.name().cloned())
+                .with_annotated_type(parameter.annotated_type())
+                .with_optional_default_type(parameter.default_type(db))
+                .with_definition(parameter.definition()),
+        )
+    });
+    Signature::new_generic(
+        signature.generic_context,
+        Parameters::standard(parameters.collect::<Vec<_>>()),
+        signature.return_ty,
+    )
+    .with_definition(signature.definition)
+}
