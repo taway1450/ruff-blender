@@ -259,7 +259,7 @@ pub fn check_types(db: &dyn Db, file: ProgramFile<'_>) -> Vec<Diagnostic> {
         legacy_aliases.extend_from_slice(&inference.legacy_aliases);
     }
 
-    diagnostics.extend(blender::addon_diagnostics(db, file));
+    diagnostics.extend(blender::file_diagnostics(db, file));
 
     diagnostics.extend_diagnostics(
         index

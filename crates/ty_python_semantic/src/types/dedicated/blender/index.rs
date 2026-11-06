@@ -23,6 +23,7 @@ use ruff_db::parsed::parsed_module;
 use ruff_python_ast::name::Name;
 use ruff_python_ast::statement_visitor::{StatementVisitor, walk_stmt};
 use ruff_python_ast::{self as ast, Expr};
+use ruff_text_size::{Ranged, TextRange};
 use ty_blender::{Addon, addon_source_files};
 use ty_python_core::{Program, ProgramFile, semantic_index};
 
@@ -32,7 +33,7 @@ use crate::types::{StaticClassLiteral, Type};
 use super::addon_of_file;
 use super::evaluate::{Evaluator, PropertyValue};
 use super::follow::{Resolved, resolve_expression};
-use super::symbols::is_bpy_types_class;
+use super::symbols::{bpy_types_bases, is_bpy_types_class};
 
 /// What the code of one add-on does to Blender.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
@@ -46,8 +47,53 @@ pub(super) struct AddonIndex<'db> {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
 pub(super) struct RegisteredProperty<'db> {
     pub(super) owner: StaticClassLiteral<'db>,
+    /// The owner expression (`bpy.types.Scene`), in the file that registers the property.
+    pub(super) owner_range: TextRange,
+    /// Whether the owner accepts Registered properties. Blender keeps an assignment to any other
+    /// class (`bpy.types.Area.x = IntProperty()`) as a plain class attribute and creates no property.
+    pub(super) accepted: bool,
     pub(super) name: Name,
     pub(super) value: PropertyValue<'db>,
+}
+
+/// The `bpy.types` classes whose subclasses accept Registered properties: the classes Blender gives
+/// a metaclass that turns an attribute assignment into a property (`bpy_struct_meta_idprop`).
+/// Blender's own `UIList` and `AddonPreferences` have ID properties, but not that metaclass.
+///
+/// An allowlist rather than a denylist: when a Blender version adds a struct, a missed warning costs
+/// less than a false one. A `check:load` probe in the feature tests compares it with Blender.
+const ACCEPTING_ROOTS: [&str; 26] = [
+    "ID",
+    "PropertyGroup",
+    "Node",
+    "NodeSocket",
+    "NodeTreeInterfaceSocket",
+    "Bone",
+    "EditBone",
+    "PoseBone",
+    "BoneCollection",
+    "ViewLayer",
+    "Strip",
+    "TimelineMarker",
+    "View3DShading",
+    "IDPropertyWrapPtr",
+    "OperatorProperties",
+    "GizmoProperties",
+    "GizmoGroupProperties",
+    "KeyConfigPreferences",
+    "NodesModifierProperties",
+    "NodesModifierPropertiesEmpty",
+    "SceneCompositorEffectProperties",
+    "SceneCompositorEffectPropertiesEmpty",
+    "SequencerCompositorEffectProperties",
+    "SequencerCompositorEffectPropertiesEmpty",
+    "SequencerCompositorModifierProperties",
+    "SequencerCompositorModifierPropertiesEmpty",
+];
+
+/// Whether the `bpy.types` class `owner` accepts Registered properties.
+fn accepts_registered_properties<'db>(db: &'db dyn Db, owner: StaticClassLiteral<'db>) -> bool {
+    bpy_types_bases(db, owner).any(|base| ACCEPTING_ROOTS.contains(&base))
 }
 
 /// The index of the add-on `file` belongs to, or `None` for a file in no add-on.
@@ -113,7 +159,7 @@ fn addon_index<'db>(db: &'db dyn Db, key: AddonInProgram<'db>) -> AddonIndex<'db
 /// whose owner is a `bpy.types` class is kept when the Property evaluator reads its value as a
 /// property: a `bpy.props` call, or a constant, wrapper or `functools.partial` of one.
 #[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
-fn file_facts<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> AddonIndex<'db> {
+pub(super) fn file_facts<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> AddonIndex<'db> {
     // Every file of an add-on is parsed on the first lookup; do not keep the syntax trees of closed
     // files around for that.
     let module = parsed_module(db, file.python_file(db)).load_then_clear_on_drop(db);
@@ -146,6 +192,8 @@ fn file_facts<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> AddonIndex<'db> {
             let value = Evaluator::new(db, scope, &argument_type).evaluate(candidate.value)?;
             Some(RegisteredProperty {
                 owner,
+                owner_range: candidate.owner.range(),
+                accepted: accepts_registered_properties(db, owner),
                 name: candidate.name,
                 value,
             })

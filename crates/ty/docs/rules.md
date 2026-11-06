@@ -236,7 +236,7 @@ value = unknown  # ty: ignore[unresolved-reference]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-addon-metadata%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L30" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L35" target="_blank">View source</a>
 </small>
 
 
@@ -277,13 +277,100 @@ def register(): ...
 def unregister(): ...
 ```
 
+## `blender-invalid-property`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-property%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L44" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the `bpy.props` calls of a Blender add-on (`IntProperty(...)`, `EnumProperty(...)`, ...) for arguments
+that Blender rejects when it registers the property:
+
+- an enum default that is not one of the static items, by identifier or by number;
+- with `options={"ENUM_FLAG"}`, a default that is not a set of item identifiers, or more than 32 items;
+- a set default without `ENUM_FLAG`;
+- a `str` default with function `items=`;
+- a vector default whose length or nesting differs from `size=` (3 when it is not given);
+- a `size=` outside 1 to 32, or with more than three dimensions;
+- `set=` without `get=`;
+- a property name that starts with `_`;
+- a pointer to a data-block (`PointerProperty(type=Object)`) on a class that cannot hold one, such as
+  `AddonPreferences`.
+
+**Why is this bad?**
+
+
+Blender reads a declaration only when it registers the property: when `register_class` registers the class that
+annotates it, or at the assignment `bpy.types.Scene.x = IntProperty(...)`. A declaration Blender rejects raises a
+`ValueError` there, so the add-on fails to enable.
+
+A call is checked where it is written, so a shared declaration (`COMMON = IntProperty(...)`) is reported once, at
+its definition. Each problem is reported on the offending argument, or on the name for a name that starts with `_`.
+Arguments the checker cannot read (a name it cannot follow, a `**mapping`) are not reported. Annotations on a class
+whose annotations Blender ignores (a `Panel`) are not checked, as Blender never evaluates them.
+
+Arguments that the stubs already reject, such as `IntProperty(default=1.5)` or a `type=` of the wrong kind, are
+left to [`invalid-argument-type`](#invalid-argument-type). `min` and `max` are not checked: Blender accepts any of them.
+
+**Examples**
+
+
+```py
+from bpy.props import EnumProperty, FloatVectorProperty, IntProperty
+from bpy.types import PropertyGroup
+
+class Settings(PropertyGroup):
+    mode: EnumProperty(items=[("A", "A", ""), ("B", "B", "")], default="C")  # error: [blender-invalid-property]
+    offset: FloatVectorProperty(size=3, default=(1.0, 2.0))  # error: [blender-invalid-property]
+    count: IntProperty(set=lambda self, value: None)  # error: [blender-invalid-property]
+```
+
+The examples use these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def EnumProperty(**kwargs: Any) -> _PropertyDeferred: ...
+def FloatVectorProperty(**kwargs: Any) -> _PropertyDeferred: ...
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class PropertyGroup(bpy_struct): ...
+```
+
 ## `blender-invalid-register`
 
 <small>
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-register%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L21" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L26" target="_blank">View source</a>
 </small>
 
 
@@ -317,6 +404,226 @@ bl_info = {"name": "My add-on", "blender": (4, 2, 0)}  # error: [blender-invalid
 
 def register(context):  # error: [blender-invalid-register] "callable with no arguments"
     ...
+```
+
+## `blender-legacy-property`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-legacy-property%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L62" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for a property declaration assigned in the body of a class with a Blender base class (`value =
+IntProperty()`), instead of annotated (`value: IntProperty()`).
+
+**Why is this bad?**
+
+
+Before Blender 2.80, properties were declared as class attributes. Since then Blender only reads a class's
+annotations: an assigned declaration stays a plain class attribute, no property is created, and Blender prints no
+warning. Reading `self.value` then gives the declaration object, not the property's value.
+
+Classes without a Blender base are not reported: a plain class may hold declarations on purpose, for example to
+register them later with `setattr(bpy.types.Scene, name, Holder.value)`.
+
+**Examples**
+
+
+```py
+from bpy.props import IntProperty
+from bpy.types import PropertyGroup
+
+class Settings(PropertyGroup):
+    value = IntProperty()  # error: [blender-legacy-property]
+    count: IntProperty()  # what Blender reads
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class PropertyGroup(bpy_struct): ...
+```
+
+## `blender-unsupported-property-host`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unsupported-property-host%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L53" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for property annotations (`value: IntProperty()`) in the body of a Blender class whose annotations Blender
+ignores: a `Panel`, `Menu`, `Header`, `KeyingSetInfo`, `RenderEngine`, `FileHandler`, `AssetShelf` and the
+like. Only `PropertyGroup`, `Operator`, `Macro`, `AddonPreferences`, `UIList`, `Node`, `NodeSocket`, `NodeTree`,
+`NodeTreeInterfaceSocket`, `KeyConfigPreferences` and `Gizmo` turn their annotations into properties.
+
+**Why is this bad?**
+
+
+Blender registers such a class without an error, but creates no property from the annotation, so reading
+`self.value` raises `AttributeError`. To store a setting for a panel, declare it on a `PropertyGroup` (or as a
+Registered property of the scene) and draw that.
+
+A plain class that is used as a mixin is not reported: its annotations become properties of the hosts that
+inherit them.
+
+**Examples**
+
+
+```py
+from bpy.props import IntProperty
+from bpy.types import Panel
+
+class VIEW3D_PT_settings(Panel):
+    bl_label = "Settings"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+
+    value: IntProperty()  # error: [blender-unsupported-property-host]
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class Panel(bpy_struct): ...
+```
+
+## `blender-unsupported-property-target`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unsupported-property-target%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L71" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for a property declaration assigned to a Blender class that does not accept Registered properties
+(`bpy.types.Area.value = IntProperty()`).
+
+Every ID type (`Scene`, `Object`, `Material`, ...) accepts them, and so do `PropertyGroup`, nodes and sockets,
+bones, `BoneCollection`, `ViewLayer`, strips, `TimelineMarker`, `View3DShading` and a few structs that hold
+operator, gizmo and modifier settings. Other classes, such as `Area`, `Modifier`, `Window`, `Preferences`,
+`Context`, `Operator` and `Panel`, do not.
+
+**Why is this bad?**
+
+
+Blender turns an assignment to an accepting class into a property of every instance. On any other class the
+assignment silently stores the declaration as a plain class attribute: no property is created, no error is raised,
+and `area.value` raises `AttributeError` on an instance.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.props import IntProperty
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+def register():
+    bpy.types.Scene.value = IntProperty()
+    bpy.types.Area.value = IntProperty()  # error: [blender-unsupported-property-target]
+
+def unregister():
+    del bpy.types.Scene.value
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class ID(bpy_struct): ...
+class Scene(ID): ...
+class Area(bpy_struct): ...
 ```
 
 ## `call-abstract-method`

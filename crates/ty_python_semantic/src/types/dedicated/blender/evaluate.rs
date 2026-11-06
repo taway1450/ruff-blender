@@ -28,11 +28,12 @@
 //! A wrapper or a `functools.partial` is a [`DeclarationTemplate`], filled with the arguments of
 //! each call.
 
-use ruff_db::parsed::{parsed_module, parsed_string_annotation};
+use ruff_db::parsed::{ParsedModuleRef, parsed_module, parsed_string_annotation};
 use ruff_db::source::source_text;
 use ruff_python_ast::name::Name;
 use ruff_python_ast::statement_visitor::{StatementVisitor, walk_stmt};
 use ruff_python_ast::{self as ast, Expr};
+use ruff_text_size::{Ranged, TextRange};
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::scope::{NodeWithScopeRef, ScopeId, ScopeKind};
 use ty_python_core::{ProgramFile, semantic_index};
@@ -628,52 +629,63 @@ pub(super) fn property_value<'db>(
     db: &'db dyn Db,
     definition: Definition<'db>,
 ) -> Option<PropertyValue<'db>> {
-    let DefinitionKind::AnnotatedAssignment(assignment) = definition.kind(db) else {
-        return None;
-    };
     let scope = definition.scope(db);
-    if scope.scope(db).kind() != ScopeKind::Class {
-        return None;
-    }
     let file = definition.program_file(db);
     let module = parsed_module(db, definition.python_file(db)).load(db);
-    let annotation = assignment.annotation(&module);
     let argument_type =
         |expression: &Expr| definition_expression_type_in_scope(db, definition, expression, scope);
     let evaluator = Evaluator::new(db, scope, &argument_type);
-    let parsed;
-    let quoted = annotation.is_string_literal_expr();
-    let annotation = match annotation {
-        Expr::StringLiteral(string) => {
-            let literal = string.as_single_part_string()?;
-            let source = source_text(db, definition.file(db));
-            parsed = parsed_string_annotation(&source, literal).ok()?;
-            let expression = parsed.expr();
-            if let Expr::Call(call) = expression
-                && !(may_be_property_call(call)
-                    && infer_definition_types(db, definition).is_string_annotation(annotation))
-            {
-                return None;
+    with_member_annotation(db, definition, &module, |annotation, quoted| {
+        match annotation {
+            Expr::Call(call) => {
+                let callee = argument_type(&call.func);
+                evaluator.evaluate_call(call, callee).or_else(|| {
+                    // As in the takeover, only an unquoted annotation can be opaque.
+                    let class = nearest_enclosing_class(db, semantic_index(db, file), scope)?;
+                    (quoted.is_none() && is_opaque_call(db, file, class, callee))
+                        .then_some(PropertyValue::Opaque)
+                })
             }
-            expression
+            // Only a project's own classes can name a constant property; this keeps the classes
+            // of typeshed and the stubs from following every annotation's name.
+            Expr::Name(_) | Expr::Attribute(_) | Expr::Subscript(_) if is_first_party(db, file) => {
+                evaluator.evaluate(annotation)
+            }
+            _ => None,
         }
-        annotation => annotation,
+    })
+}
+
+/// Read the annotation of the class member `definition` (`count: IntProperty()` in a class body)
+/// with `read`, which also gets the range of the string literal when the annotation is quoted
+/// (`count: "IntProperty()"`). The expressions of a quoted annotation have ranges within the
+/// string, not within the file. A quoted call is only read when it may declare a property and ty
+/// inferred it (see [`may_be_property_call`]), so that its parts have types.
+pub(super) fn with_member_annotation<R>(
+    db: &dyn Db,
+    definition: Definition<'_>,
+    module: &ParsedModuleRef,
+    read: impl FnOnce(&Expr, Option<TextRange>) -> Option<R>,
+) -> Option<R> {
+    let DefinitionKind::AnnotatedAssignment(assignment) = definition.kind(db) else {
+        return None;
     };
-    match annotation {
-        Expr::Call(call) => {
-            let callee = argument_type(&call.func);
-            evaluator.evaluate_call(call, callee).or_else(|| {
-                // As in the takeover, only an unquoted annotation can be opaque.
-                let class = nearest_enclosing_class(db, semantic_index(db, file), scope)?;
-                (!quoted && is_opaque_call(db, file, class, callee))
-                    .then_some(PropertyValue::Opaque)
-            })
-        }
-        // Only a project's own classes can name a constant property; this keeps the classes of
-        // typeshed and the stubs from following every annotation's name.
-        Expr::Name(_) | Expr::Attribute(_) | Expr::Subscript(_) if is_first_party(db, file) => {
-            evaluator.evaluate(annotation)
-        }
-        _ => None,
+    if definition.scope(db).scope(db).kind() != ScopeKind::Class {
+        return None;
     }
+    let annotation = assignment.annotation(module);
+    let Expr::StringLiteral(string) = annotation else {
+        return read(annotation, None);
+    };
+    let literal = string.as_single_part_string()?;
+    let source = source_text(db, definition.file(db));
+    let parsed = parsed_string_annotation(&source, literal).ok()?;
+    let expression = parsed.expr();
+    if let Expr::Call(call) = expression
+        && !(may_be_property_call(call)
+            && infer_definition_types(db, definition).is_string_annotation(annotation))
+    {
+        return None;
+    }
+    read(expression, Some(string.range()))
 }

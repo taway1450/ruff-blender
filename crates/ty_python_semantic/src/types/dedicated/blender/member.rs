@@ -57,9 +57,12 @@ fn instance_property<'db>(
         if body_binds(db, base, name) {
             return Some(annotated_property(db, base, name).filter(|_| !is_ignored_host(db, base)));
         }
+        // A registration on a class that doesn't accept one (`bpy.types.Area.x = IntProperty()`)
+        // creates no property.
         registered
             .then(|| registered_on(db, file, base, name))
             .flatten()
+            .filter(|property| property.accepted)
             .map(|property| Some(&property.value))
     })?
 }
@@ -129,8 +132,8 @@ fn annotated_property<'db>(
 /// Whether Blender ignores the annotations of `class`: it derives from a `bpy.types` class, but
 /// from none of the Property hosts (a Panel or a Menu, not a `PropertyGroup` or an Operator). A
 /// plain class keeps its annotations, as it may be a mixin of a Property host.
-fn is_ignored_host<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool {
-    const PROPERTY_HOSTS: [&str; 9] = [
+pub(super) fn is_ignored_host<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool {
+    const PROPERTY_HOSTS: [&str; 11] = [
         "PropertyGroup",
         "Operator",
         "Macro",
@@ -139,7 +142,9 @@ fn is_ignored_host<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool
         "Node",
         "NodeSocket",
         "NodeTree",
+        "NodeTreeInterfaceSocket",
         "Gizmo",
+        "KeyConfigPreferences",
     ];
     let mut bases = bpy_types_bases(db, class)
         .filter(|base| *base != "bpy_struct")
