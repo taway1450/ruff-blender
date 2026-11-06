@@ -10795,6 +10795,14 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
 
         let ty = resolved.unwrap_with_diagnostic(db, env, |lookup_error| match lookup_error {
             LookupError::Undefined(qualifiers) => {
+                if let Some(ty) = crate::types::blender::reload_guard_type(
+                    db,
+                    self.scope(),
+                    self.module(),
+                    name_node,
+                ) {
+                    return TypeAndQualifiers::new(ty, TypeOrigin::Inferred, qualifiers);
+                }
                 self.report_unresolved_reference(name_node);
                 TypeAndQualifiers::new(Type::unknown(), TypeOrigin::Inferred, qualifiers)
             }
