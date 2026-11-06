@@ -13,7 +13,9 @@
 
 use std::ops::RangeInclusive;
 
-use self::CallbackKind::{ClassMethod as CM, Function as FN};
+use self::CallbackKind::{ClassMethod, Function};
+use self::Presence::{Optional, Required};
+use self::Returns::{Truth, Value};
 
 /// What a callback must be on the class.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -63,23 +65,27 @@ pub struct Callback {
 impl Callback {
     /// Why Blender refuses `shape` for this callback, or `None` when it accepts it.
     pub fn problem(&self, shape: CallbackShape) -> Option<String> {
+        let mistake = self.mistake(shape)?;
+        Some(format!(
+            "{mistake}; Blender refuses the class when it registers it"
+        ))
+    }
+
+    /// What is wrong with `shape` for this callback, or `None` when nothing is.
+    fn mistake(&self, shape: CallbackShape) -> Option<String> {
         let name = self.name;
         let root = self.root;
         match (self.kind, shape.kind) {
             (CallbackKind::ClassMethod, MethodKind::Function) => {
-                return Some(format!(
-                    "`{root}.{name}` must be a classmethod; Blender refuses the class when it registers it"
-                ));
+                return Some(format!("`{root}.{name}` must be a classmethod"));
             }
             (CallbackKind::ClassMethod, MethodKind::StaticMethod) => {
                 return Some(format!(
-                    "`{root}.{name}` must be a classmethod, not a staticmethod; Blender refuses the class when it registers it"
+                    "`{root}.{name}` must be a classmethod, not a staticmethod"
                 ));
             }
             (CallbackKind::Function, MethodKind::ClassMethod) => {
-                return Some(format!(
-                    "`{root}.{name}` must not be a classmethod; Blender refuses the class when it registers it"
-                ));
+                return Some(format!("`{root}.{name}` must not be a classmethod"));
             }
             _ => {}
         }
@@ -101,9 +107,27 @@ impl Callback {
         };
         let found = shape.positional;
         Some(format!(
-            "`{root}.{name}` must take {expected} positional parameters ({first} and parameters with defaults included), found {found}; Blender refuses the class when it registers it"
+            "`{root}.{name}` must take {expected} positional parameters ({first} and parameters with defaults included), found {found}"
         ))
     }
+}
+
+/// Whether Blender refuses a class that does not define a callback.
+#[derive(Copy, Clone)]
+enum Presence {
+    /// `FUNC_REGISTER`.
+    Required,
+    /// `FUNC_REGISTER_OPTIONAL`.
+    Optional,
+}
+
+/// What Blender does with a callback's result.
+#[derive(Copy, Clone)]
+enum Returns {
+    /// Converts it with `bool()`, so any value is accepted.
+    Truth,
+    /// Converts it to the RNA return type, which may fail.
+    Value,
 }
 
 const fn callback(
@@ -111,114 +135,105 @@ const fn callback(
     name: &'static str,
     kind: CallbackKind,
     positional: usize,
-    required: bool,
-    bool_result: bool,
+    presence: Presence,
+    returns: Returns,
 ) -> Callback {
     Callback {
         root,
         name,
         kind,
         positional: positional..=positional,
-        required,
-        bool_result,
+        required: matches!(presence, Presence::Required),
+        bool_result: matches!(returns, Returns::Truth),
     }
 }
 
-/// Whether a callback is required, and whether its result goes through `bool()`.
-const REQ: bool = true;
-const OPT: bool = false;
-const BOOL: bool = true;
-const ANY: bool = false;
-
 /// Every Blender callback, by registrable root. Positional counts include `self` / `cls`.
+#[rustfmt::skip]
 pub const CALLBACKS: [Callback; 74] = [
-    callback("Operator", "poll", CM, 2, OPT, BOOL),
-    callback("Operator", "execute", FN, 2, OPT, ANY),
-    callback("Operator", "check", FN, 2, OPT, BOOL),
-    callback("Operator", "invoke", FN, 3, OPT, ANY),
-    callback("Operator", "modal", FN, 3, OPT, ANY),
-    callback("Operator", "draw", FN, 2, OPT, ANY),
-    callback("Operator", "cancel", FN, 2, OPT, ANY),
-    callback("Operator", "description", CM, 3, OPT, ANY),
-    callback("Macro", "poll", CM, 2, OPT, BOOL),
-    callback("Macro", "draw", FN, 2, OPT, ANY),
-    callback("Panel", "poll", CM, 2, OPT, BOOL),
-    callback("Panel", "draw", FN, 2, REQ, ANY),
-    callback("Panel", "draw_header", FN, 2, OPT, ANY),
-    callback("Panel", "draw_header_preset", FN, 2, OPT, ANY),
+    callback("Operator", "poll", ClassMethod, 2, Optional, Truth),
+    callback("Operator", "execute", Function, 2, Optional, Value),
+    callback("Operator", "check", Function, 2, Optional, Truth),
+    callback("Operator", "invoke", Function, 3, Optional, Value),
+    callback("Operator", "modal", Function, 3, Optional, Value),
+    callback("Operator", "draw", Function, 2, Optional, Value),
+    callback("Operator", "cancel", Function, 2, Optional, Value),
+    callback("Operator", "description", ClassMethod, 3, Optional, Value),
+    callback("Macro", "poll", ClassMethod, 2, Optional, Truth),
+    callback("Macro", "draw", Function, 2, Optional, Value),
+    callback("Panel", "poll", ClassMethod, 2, Optional, Truth),
+    callback("Panel", "draw", Function, 2, Required, Value),
+    callback("Panel", "draw_header", Function, 2, Optional, Value),
+    callback("Panel", "draw_header_preset", Function, 2, Optional, Value),
     Callback {
-        root: "UIList",
-        name: "draw_item",
-        kind: FN,
         // `active_property` and the parameters after it are optional
         // (`PARM_PYFUNC_REGISTER_OPTIONAL`).
         positional: 7..=10,
-        required: OPT,
-        bool_result: ANY,
+        ..callback("UIList", "draw_item", Function, 7, Optional, Value)
     },
-    callback("UIList", "draw_filter", FN, 3, OPT, ANY),
-    callback("UIList", "filter_items", FN, 4, OPT, ANY),
-    callback("Header", "draw", FN, 2, REQ, ANY),
-    callback("Menu", "poll", CM, 2, OPT, BOOL),
-    callback("Menu", "draw", FN, 2, REQ, ANY),
-    callback("AssetShelf", "poll", CM, 2, OPT, BOOL),
-    callback("AssetShelf", "asset_poll", CM, 2, OPT, BOOL),
-    callback("AssetShelf", "get_active_asset", CM, 1, OPT, ANY),
-    callback("AssetShelf", "draw_context_menu", CM, 4, OPT, ANY),
-    callback("FileHandler", "poll_drop", CM, 2, OPT, BOOL),
+    callback("UIList", "draw_filter", Function, 3, Optional, Value),
+    callback("UIList", "filter_items", Function, 4, Optional, Value),
+    callback("Header", "draw", Function, 2, Required, Value),
+    callback("Menu", "poll", ClassMethod, 2, Optional, Truth),
+    callback("Menu", "draw", Function, 2, Required, Value),
+    callback("AssetShelf", "poll", ClassMethod, 2, Optional, Truth),
+    callback("AssetShelf", "asset_poll", ClassMethod, 2, Optional, Truth),
+    callback("AssetShelf", "get_active_asset", ClassMethod, 1, Optional, Value),
+    callback("AssetShelf", "draw_context_menu", ClassMethod, 4, Optional, Value),
+    callback("FileHandler", "poll_drop", ClassMethod, 2, Optional, Truth),
     // Unlike every other `poll`, an instance method (`FUNC_REGISTER` without `FUNC_NO_SELF`).
-    callback("KeyingSetInfo", "poll", FN, 2, REQ, BOOL),
-    callback("KeyingSetInfo", "iterator", FN, 3, REQ, ANY),
-    callback("KeyingSetInfo", "generate", FN, 4, REQ, ANY),
+    callback("KeyingSetInfo", "poll", Function, 2, Required, Truth),
+    callback("KeyingSetInfo", "iterator", Function, 3, Required, Value),
+    callback("KeyingSetInfo", "generate", Function, 4, Required, Value),
     // Required, and met by Blender's own `_bpy_types.Node.poll`.
-    callback("Node", "poll", CM, 2, REQ, BOOL),
-    callback("Node", "poll_instance", FN, 2, OPT, BOOL),
-    callback("Node", "update", FN, 1, OPT, ANY),
-    callback("Node", "insert_link", FN, 2, OPT, ANY),
-    callback("Node", "init", FN, 2, OPT, ANY),
-    callback("Node", "copy", FN, 2, OPT, ANY),
-    callback("Node", "free", FN, 1, OPT, ANY),
-    callback("Node", "draw_buttons", FN, 3, OPT, ANY),
-    callback("Node", "draw_buttons_ext", FN, 3, OPT, ANY),
-    callback("Node", "draw_label", FN, 1, OPT, ANY),
-    callback("NodeTree", "poll", CM, 2, OPT, BOOL),
-    callback("NodeTree", "update", FN, 1, OPT, ANY),
-    callback("NodeTree", "get_from_context", CM, 2, OPT, ANY),
-    callback("NodeTree", "valid_socket_type", CM, 2, OPT, BOOL),
-    callback("NodeSocket", "draw", FN, 5, REQ, ANY),
-    callback("NodeSocket", "draw_color", FN, 3, OPT, ANY),
-    callback("NodeSocket", "draw_color_simple", CM, 1, OPT, ANY),
-    callback("NodeTreeInterfaceSocket", "draw", FN, 3, OPT, ANY),
-    callback("NodeTreeInterfaceSocket", "init_socket", FN, 4, OPT, ANY),
-    callback("NodeTreeInterfaceSocket", "from_socket", FN, 3, OPT, ANY),
-    callback("Gizmo", "draw", FN, 2, REQ, ANY),
-    callback("Gizmo", "draw_select", FN, 3, OPT, ANY),
-    callback("Gizmo", "test_select", FN, 3, OPT, ANY),
-    callback("Gizmo", "modal", FN, 4, OPT, ANY),
-    callback("Gizmo", "setup", FN, 1, OPT, ANY),
-    callback("Gizmo", "invoke", FN, 3, OPT, ANY),
-    callback("Gizmo", "exit", FN, 3, OPT, ANY),
-    callback("Gizmo", "select_refresh", FN, 1, OPT, ANY),
-    callback("GizmoGroup", "poll", CM, 2, OPT, BOOL),
-    callback("GizmoGroup", "setup_keymap", CM, 2, OPT, ANY),
-    callback("GizmoGroup", "setup", FN, 2, REQ, ANY),
-    callback("GizmoGroup", "refresh", FN, 2, OPT, ANY),
-    callback("GizmoGroup", "draw_prepare", FN, 2, OPT, ANY),
-    callback("GizmoGroup", "invoke_prepare", FN, 3, OPT, ANY),
-    callback("RenderEngine", "update", FN, 3, OPT, ANY),
-    callback("RenderEngine", "render", FN, 2, OPT, ANY),
-    callback("RenderEngine", "render_frame_finish", FN, 1, OPT, ANY),
-    callback("RenderEngine", "draw", FN, 3, OPT, ANY),
-    callback("RenderEngine", "bake", FN, 7, OPT, ANY),
-    callback("RenderEngine", "view_update", FN, 3, OPT, ANY),
-    callback("RenderEngine", "view_draw", FN, 3, OPT, ANY),
+    callback("Node", "poll", ClassMethod, 2, Required, Truth),
+    callback("Node", "poll_instance", Function, 2, Optional, Truth),
+    callback("Node", "update", Function, 1, Optional, Value),
+    callback("Node", "insert_link", Function, 2, Optional, Value),
+    callback("Node", "init", Function, 2, Optional, Value),
+    callback("Node", "copy", Function, 2, Optional, Value),
+    callback("Node", "free", Function, 1, Optional, Value),
+    callback("Node", "draw_buttons", Function, 3, Optional, Value),
+    callback("Node", "draw_buttons_ext", Function, 3, Optional, Value),
+    callback("Node", "draw_label", Function, 1, Optional, Value),
+    callback("NodeTree", "poll", ClassMethod, 2, Optional, Truth),
+    callback("NodeTree", "update", Function, 1, Optional, Value),
+    callback("NodeTree", "get_from_context", ClassMethod, 2, Optional, Value),
+    callback("NodeTree", "valid_socket_type", ClassMethod, 2, Optional, Truth),
+    callback("NodeSocket", "draw", Function, 5, Required, Value),
+    callback("NodeSocket", "draw_color", Function, 3, Optional, Value),
+    callback("NodeSocket", "draw_color_simple", ClassMethod, 1, Optional, Value),
+    callback("NodeTreeInterfaceSocket", "draw", Function, 3, Optional, Value),
+    callback("NodeTreeInterfaceSocket", "init_socket", Function, 4, Optional, Value),
+    callback("NodeTreeInterfaceSocket", "from_socket", Function, 3, Optional, Value),
+    callback("Gizmo", "draw", Function, 2, Required, Value),
+    callback("Gizmo", "draw_select", Function, 3, Optional, Value),
+    callback("Gizmo", "test_select", Function, 3, Optional, Value),
+    callback("Gizmo", "modal", Function, 4, Optional, Value),
+    callback("Gizmo", "setup", Function, 1, Optional, Value),
+    callback("Gizmo", "invoke", Function, 3, Optional, Value),
+    callback("Gizmo", "exit", Function, 3, Optional, Value),
+    callback("Gizmo", "select_refresh", Function, 1, Optional, Value),
+    callback("GizmoGroup", "poll", ClassMethod, 2, Optional, Truth),
+    callback("GizmoGroup", "setup_keymap", ClassMethod, 2, Optional, Value),
+    callback("GizmoGroup", "setup", Function, 2, Required, Value),
+    callback("GizmoGroup", "refresh", Function, 2, Optional, Value),
+    callback("GizmoGroup", "draw_prepare", Function, 2, Optional, Value),
+    callback("GizmoGroup", "invoke_prepare", Function, 3, Optional, Value),
+    callback("RenderEngine", "update", Function, 3, Optional, Value),
+    callback("RenderEngine", "render", Function, 2, Optional, Value),
+    callback("RenderEngine", "render_frame_finish", Function, 1, Optional, Value),
+    callback("RenderEngine", "draw", Function, 3, Optional, Value),
+    callback("RenderEngine", "bake", Function, 7, Optional, Value),
+    callback("RenderEngine", "view_update", Function, 3, Optional, Value),
+    callback("RenderEngine", "view_draw", Function, 3, Optional, Value),
     // Blender `main` (5.3) and later.
-    callback("RenderEngine", "view_pause", FN, 2, OPT, ANY),
-    callback("RenderEngine", "view_resume", FN, 2, OPT, ANY),
-    callback("RenderEngine", "update_script_node", FN, 2, OPT, ANY),
-    callback("RenderEngine", "update_render_passes", FN, 3, OPT, ANY),
+    callback("RenderEngine", "view_pause", Function, 2, Optional, Value),
+    callback("RenderEngine", "view_resume", Function, 2, Optional, Value),
+    callback("RenderEngine", "update_script_node", Function, 2, Optional, Value),
+    callback("RenderEngine", "update_render_passes", Function, 3, Optional, Value),
     // Blender 5.2 and later.
-    callback("RenderEngine", "update_custom_camera", FN, 2, OPT, ANY),
+    callback("RenderEngine", "update_custom_camera", Function, 2, Optional, Value),
 ];
 
 /// Whether the `bpy.types` class `root` has callbacks. A class's callbacks are those of the first
