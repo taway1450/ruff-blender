@@ -101,6 +101,7 @@ pub(super) fn lexical_return_type<'db>(
         .returns
         .as_deref()
         .map(|returns| function_signature_expression_type(db, definition, returns))
+        .or_else(|| crate::types::blender::override_return_type(db, definition))
 }
 
 /// The signature of a single callable. If the callable is overloaded, there is a separate

@@ -1,3 +1,5 @@
+mod blender;
+
 use std::cell::LazyCell;
 
 use crate::{
@@ -387,6 +389,8 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                     no_return,
                 );
             }
+        } else {
+            self.check_blender_override_returns(function);
         }
     }
 
