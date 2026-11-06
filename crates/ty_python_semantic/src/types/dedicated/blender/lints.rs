@@ -13,6 +13,8 @@
 //!   [`super::operator_properties`].
 //! - `blender-preferences-idname` is reported on the file of the add-on's preferences class, by
 //!   [`super::preferences`].
+//! - `blender-invalid-override`, a Blender callback that Blender refuses, is reported on every
+//!   first-party file, by [`super::overrides`].
 
 use ruff_db::parsed::{ParsedModuleRef, parsed_module};
 use ruff_text_size::{Ranged, TextRange, TextSize};
@@ -30,6 +32,7 @@ use super::addon::is_first_party;
 use super::addon_of_file;
 use super::index::addon_in_program;
 use super::operator_properties::check_keymaps;
+use super::overrides::check_overrides;
 use super::preferences::addon_preferences;
 use super::registration_checks::{Finding, Rule, registration_findings};
 use super::rules::check_properties;
@@ -169,6 +172,15 @@ declare_lint! {
     }
 }
 
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-invalid-override.md")]
+    pub(crate) static BLENDER_INVALID_OVERRIDE = {
+        summary: "detects a Blender callback with the wrong number of parameters, or the wrong kind of method",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Error,
+    }
+}
+
 pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
@@ -185,6 +197,7 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_UNREGISTER_MISMATCH);
     registry.register_lint(&BLENDER_UNKNOWN_OPERATOR);
     registry.register_lint(&BLENDER_PREFERENCES_IDNAME);
+    registry.register_lint(&BLENDER_INVALID_OVERRIDE);
 }
 
 /// The Blender lints of `file`: the add-on lints when `file` is an add-on's root module (the
@@ -219,6 +232,7 @@ pub(crate) fn file_diagnostics<'db>(
     if first_party {
         check_properties(&context, &module);
         check_keymaps(&context, &module);
+        check_overrides(&context, file);
     }
     if let Some(key) = addon_in_program(db, file) {
         report_findings(&context, registration_findings(db, key));

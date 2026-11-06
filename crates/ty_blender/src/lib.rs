@@ -2,10 +2,11 @@
 //!
 //! Which add-on a file belongs to and which files an add-on has, read from `blender_manifest.toml`, a
 //! top-level `bl_info` and `[tool.blender]` in `pyproject.toml`; which classes Blender registers and which
-//! idnames it refuses; what an operator call takes and returns, and which Blender
+//! idnames it refuses, and which callbacks it calls on them; what an operator call takes and returns, and which Blender
 //! functions take an operator idname. The type-aware glue lives in
 //! `ty_python_semantic`'s `types/dedicated/blender/`.
 
+mod callbacks;
 mod discovery;
 mod files;
 mod metadata;
@@ -13,6 +14,10 @@ mod operators;
 mod registration;
 mod source;
 
+pub use callbacks::{
+    CALLBACKS, Callback, CallbackKind, CallbackShape, MethodKind, PYTHON_BASE_NAMES, callback_of,
+    callbacks_of, is_callback_root, problem, python_base_names,
+};
 pub use discovery::{Addon, AddonKind, addon_for_path};
 pub use files::addon_source_files;
 pub use metadata::{MANIFEST_FILE, Manifest, REQUIRED_MANIFEST_KEYS, manifest};

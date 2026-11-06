@@ -376,6 +376,16 @@ fn check_inherited_method_conflict<'db>(
         else {
             continue;
         };
+        let Some(contract_ty) = crate::types::blender::override_contract(
+            db,
+            env,
+            class_type,
+            name,
+            definition,
+            contract_ty,
+        ) else {
+            continue;
+        };
         if selected_decorator == contract_decorator
             && selected_ty.is_assignable_to(db, env, contract_ty)
         {
@@ -1252,6 +1262,16 @@ fn check_class_declaration<'db>(
                 env,
                 bind_new_for_override(db, env, class, &member.name, type_on_subclass_instance),
                 bind_new_for_override(db, env, class, &member.name, superclass_type),
+            ) else {
+                continue;
+            };
+            let Some(superclass_override_type) = crate::types::blender::override_contract(
+                db,
+                env,
+                class,
+                &member.name,
+                *first_reachable_definition,
+                superclass_override_type,
             ) else {
                 continue;
             };
