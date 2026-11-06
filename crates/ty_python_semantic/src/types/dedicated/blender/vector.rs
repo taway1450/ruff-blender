@@ -205,14 +205,48 @@ pub(super) fn read_size<'db>(
     size: &Expr,
     argument_type: impl Fn(&Expr) -> Type<'db>,
 ) -> Option<Box<[u8]>> {
-    let int_literal = |expr: &Expr| match expr {
+    valid_size(&read_dimensions(db, size, argument_type)?)
+}
+
+/// The dimensions as Blender accepts them: one to three, each in `[1, 32]`.
+pub(super) fn valid_size(dimensions: &[i64]) -> Option<Box<[u8]>> {
+    if !(1..=3).contains(&dimensions.len()) {
+        return None;
+    }
+    dimensions
+        .iter()
+        .map(|dimension| {
+            u8::try_from(*dimension)
+                .ok()
+                .filter(|dimension| (1..=32).contains(dimension))
+        })
+        .collect()
+}
+
+/// The value of an int literal, `-1` included.
+pub(super) fn int_literal(expr: &Expr) -> Option<i64> {
+    match expr {
         Expr::NumberLiteral(ast::ExprNumberLiteral {
             value: ast::Number::Int(int),
             ..
         }) => int.as_i64(),
+        Expr::UnaryOp(ast::ExprUnaryOp {
+            op: ast::UnaryOp::USub,
+            operand,
+            ..
+        }) => int_literal(operand)?.checked_neg(),
         _ => None,
-    };
-    let dimensions: Vec<i64> = match size {
+    }
+}
+
+/// The dimensions `size=` is written with, whether Blender accepts them or not: an int, or a tuple
+/// or list of ints, read from the syntax, else from the inferred type.
+pub(super) fn read_dimensions<'db>(
+    db: &'db dyn Db,
+    size: &Expr,
+    argument_type: impl Fn(&Expr) -> Type<'db>,
+) -> Option<Vec<i64>> {
+    Some(match size {
         Expr::Tuple(ast::ExprTuple { elts, .. }) | Expr::List(ast::ExprList { elts, .. }) => elts
             .iter()
             .map(|element| int_literal(element).or_else(|| int_type(argument_type(element))))
@@ -233,22 +267,11 @@ pub(super) fn read_size<'db>(
                 }
             }
         },
-    };
-    if !(1..=3).contains(&dimensions.len()) {
-        return None;
-    }
-    dimensions
-        .into_iter()
-        .map(|dimension| {
-            u8::try_from(dimension)
-                .ok()
-                .filter(|dimension| (1..=32).contains(dimension))
-        })
-        .collect()
+    })
 }
 
 /// The value of an int literal type.
-fn int_type(ty: Type<'_>) -> Option<i64> {
+pub(super) fn int_type(ty: Type<'_>) -> Option<i64> {
     ty.as_literal_value()?.as_int()
 }
 
