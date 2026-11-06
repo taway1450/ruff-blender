@@ -31,6 +31,7 @@ use crate::Db;
 use crate::types::{StaticClassLiteral, Type, binding_type};
 
 use super::addon_of_file;
+use super::classes::derives_from;
 use super::evaluate::{Evaluator, PropertyValue};
 use super::follow::{Resolved, resolve_expression};
 use super::symbols::{bpy_types_bases, is_bpy_types_class};
@@ -70,8 +71,7 @@ pub(super) struct FileClass<'db> {
 
 /// Whether `class` is a class `bpy.utils.register_class` accepts.
 pub(super) fn is_registrable<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool {
-    !is_bpy_types_class(db, class)
-        && bpy_types_bases(db, class).any(|base| REGISTRABLE_ROOTS.contains(&base))
+    derives_from(db, class, &REGISTRABLE_ROOTS)
 }
 
 /// One Registered property: `owner.name = <declaration>`, or `setattr(owner, "name", <declaration>)`.

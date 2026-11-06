@@ -18,6 +18,8 @@ use ty_python_semantic::types::{KnownInstanceType, SpecialFormType, Type, TypeVa
 
 use ty_python_semantic::{SemanticModel, TypeQualifiers};
 
+mod blender;
+
 pub fn hover<'db>(
     db: &'db dyn Db,
     file: ProgramFile<'db>,
@@ -57,14 +59,8 @@ pub fn hover<'db>(
         });
     }
 
-    if let Some((range, docs)) = ty_python_semantic::types::blender_idname_hover(db, file, offset) {
-        return Some(RangedValue {
-            range: FileRange::new(file.file(db), range),
-            value: Hover {
-                program_file: file,
-                contents: vec![HoverContent::Docstring(Docstring::new(docs))],
-            },
-        });
+    if let Some(hover) = blender::idname_hover(db, file, offset) {
+        return Some(hover);
     }
     if let GotoTarget::Expression(expr) = goto_target {
         if expr.is_literal_expr() {
