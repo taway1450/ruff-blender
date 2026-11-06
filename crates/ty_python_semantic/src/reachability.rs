@@ -2088,6 +2088,10 @@ fn analyze_single(db: &dyn Db, env: &ProgramEnvironment<'_>, predicate: &Predica
             let place_table = place_table(db, star_import.import.scope(db));
             let symbol = place_table.symbol(star_import.symbol_id);
             let program_file = star_import.import.referenced_file(db);
+
+            if crate::types::blender::hides_star_import(db, program_file, symbol.name()) {
+                return Truthiness::AlwaysFalse;
+            }
             let requires_explicit_reexport = match dunder_all_names(db, program_file) {
                 Some(all_names) => {
                     if all_names.contains(symbol.name()) {
