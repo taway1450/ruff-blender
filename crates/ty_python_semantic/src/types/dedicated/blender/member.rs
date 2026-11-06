@@ -1,17 +1,21 @@
 //! Property members: the property behind an attribute of a Blender instance.
 //!
-//! An attribute such as `scene.my_value` or `group.count` can be a property of two origins:
+//! An attribute such as `scene.my_value` or `group.count` can be a property of three origins:
 //!
 //! - an Annotated property, `count: IntProperty()` in the body of a Property host, which ty already
 //!   sees as a class member (type-expression inference gives the annotation its value type);
 //! - a Registered property, `bpy.types.Scene.my_value = IntProperty()` anywhere in the add-on, which
-//!   no class body declares and which the [Add-on index](super::index) holds instead.
+//!   no class body declares and which the [Add-on index](super::index) holds instead;
+//! - a property that a class decorator adds: `@orientation_helper(...)` gives the class
+//!   `axis_forward` and `axis_up`.
 //!
-//! Both origins are resolved by [`instance_property`], so every rule about a property's value type,
+//! All origins are resolved by [`instance_property`], so every rule about a property's value type,
 //! writability and visibility is decided once, whatever the origin. The hooks into ty's member lookup,
 //! attribute reads and writes, override checks and completions all go through it.
 
+use ruff_db::parsed::parsed_module;
 use ruff_python_ast as ast;
+use ruff_python_ast::name::Name;
 use ty_python_core::ProgramFile;
 use ty_python_core::definition::{Definition, DefinitionState};
 use ty_python_core::{place_table, use_def_map};
@@ -26,18 +30,19 @@ use crate::types::diagnostic::INVALID_ASSIGNMENT;
 use crate::types::list_members::Member;
 use crate::types::{
     ClassBase, ClassType, IntersectionType, StaticClassLiteral, SubclassOfInner, Type,
-    TypeQualifiers, TypeVarBoundOrConstraints, UnionType,
+    TypeQualifiers, TypeVarBoundOrConstraints, UnionType, definition_expression_type_in_scope,
 };
 use crate::{Db, ProgramEnvironment};
 
 use super::evaluate::{PropertyValue, property_value};
 use super::index::{RegisteredProperty, registered_properties};
-use super::symbols::bpy_types_bases;
+use super::properties::PropertyDeclaration;
+use super::symbols::{blender_function_name, bpy_types_bases};
 
 /// The property that gives instances of `class` the attribute `name` in `file`.
 ///
-/// The method resolution order is walked from the most derived class. The first class whose body
-/// declares or assigns `name` decides: its Annotated property, or nothing when it is a plain class
+/// The method resolution order is walked from the most derived class. The first class whose
+/// decorator adds `name` decides, as does the first whose body declares or assigns `name`: its Annotated property, or nothing when it is a plain class
 /// attribute, or when the class is an Ignored host (`value: IntProperty()` on a Panel creates no
 /// property). A body that only reads the name (`alias = items`) does not decide. A class whose body
 /// does not mention `name` gives way to the last registration of `name` on it in the add-on.
@@ -54,6 +59,9 @@ fn instance_property<'db>(
             return None;
         };
         let base = base.class_literal(db).as_static()?;
+        if let Some(property) = decorator_property(db, base, name) {
+            return Some(Some(property).filter(|_| !is_ignored_host(db, base)));
+        }
         if body_binds(db, base, name) {
             return Some(annotated_property(db, base, name).filter(|_| !is_ignored_host(db, base)));
         }
@@ -65,6 +73,58 @@ fn instance_property<'db>(
             .filter(|property| property.accepted)
             .map(|property| Some(&property.value))
     })?
+}
+
+/// The two properties that `@bpy_extras.io_utils.orientation_helper(...)` adds to the class it
+/// decorates.
+const ORIENTATION_AXES: [&str; 2] = ["axis_forward", "axis_up"];
+
+/// The property that `class` gets for `name` from its decorators. `@orientation_helper(...)` puts
+/// `axis_forward` and `axis_up` into the class's own annotations, over any the body declares, as
+/// enums of the six axes. No stub can express a decorator that adds attributes to a class.
+fn decorator_property<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+    name: &str,
+) -> Option<&'db PropertyValue<'db>> {
+    if !ORIENTATION_AXES.contains(&name) {
+        return None;
+    }
+    orientation_axis_property(db, class).as_ref()
+}
+
+/// The six-axis enum property of `axis_forward` and `axis_up`, when `class` is decorated with
+/// `@orientation_helper(...)`. The decorator is read from the class statement, and its callee's type
+/// from the class definition's inference, so that any import of the function is recognised.
+#[salsa::tracked(
+    returns(ref),
+    cycle_initial=|_, _, _| None,
+    heap_size=ruff_memory_usage::heap_size
+)]
+fn orientation_axis_property<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+) -> Option<PropertyValue<'db>> {
+    let module = parsed_module(db, class.program_file(db).python_file(db)).load(db);
+    let body_scope = class.body_scope(db);
+    let statement = body_scope.node(db).expect_class().node(&module);
+    let definition = class.definition(db);
+    let scope = definition.scope(db);
+    statement
+        .decorator_list
+        .iter()
+        .any(|decorator| {
+            let ast::Expr::Call(call) = &decorator.expression else {
+                return false;
+            };
+            let callee = definition_expression_type_in_scope(db, definition, &call.func, scope);
+            blender_function_name(db, callee, "bpy_extras.io_utils") == Some("orientation_helper")
+        })
+        .then(|| {
+            PropertyValue::Declarations(Box::new([PropertyDeclaration::static_enum(&[
+                "X", "Y", "Z", "-X", "-Y", "-Z",
+            ])]))
+        })
 }
 
 /// The last registration of `name` on `owner` in `file`'s add-on.
@@ -442,7 +502,8 @@ pub(crate) fn check_property_write<'db>(
     false
 }
 
-/// The Registered properties that complete `receiver.` in `file`, with their value types.
+/// The Registered properties and the properties added by a decorator that complete `receiver.` in
+/// `file`, with their value types.
 pub(crate) fn completions<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
@@ -450,8 +511,12 @@ pub(crate) fn completions<'db>(
     receiver: Type<'db>,
 ) -> Vec<Member<'db>> {
     let mut members: Vec<Member<'db>> = Vec::new();
-    for property in registered_properties(db, file) {
-        let name = &property.name;
+    let axes = ORIENTATION_AXES.map(Name::new_static);
+    let names = registered_properties(db, file)
+        .iter()
+        .map(|property| &property.name)
+        .chain(&axes);
+    for name in names {
         if members.iter().any(|member| &member.name == name)
             || receiver.member(db, env, name).place.is_definitely_bound()
         {

@@ -106,6 +106,32 @@ impl<'db> PropertyDeclaration<'db> {
         Some(template.instantiate(&CallSite::none(reader)))
     }
 
+    /// An enum with the static items `identifiers` and no other option, as Blender's own Python
+    /// code declares one (`EnumProperty(items=(("X", "X Forward", ""), ...))`).
+    pub(super) fn static_enum(identifiers: &[&'static str]) -> Self {
+        let items = identifiers
+            .iter()
+            .zip(0..)
+            .map(|(identifier, number)| EnumItem {
+                identifier: Name::new_static(identifier),
+                number: Some(number),
+            })
+            .collect();
+        PropertyDeclaration {
+            kind: PropertyKind::Enum,
+            items: Known::Value(EnumItems::Static(StaticItems {
+                items,
+                length: identifiers.len(),
+            })),
+            options: Known::Absent,
+            get: Known::Absent,
+            set: Known::Absent,
+            subtype: Known::Absent,
+            size: Known::Absent,
+            target: Known::Absent,
+        }
+    }
+
     /// The type of the attribute Blender creates from this declaration.
     pub(super) fn value_type(&self, db: &'db dyn Db, env: &ProgramEnvironment<'db>) -> Type<'db> {
         match self.kind {

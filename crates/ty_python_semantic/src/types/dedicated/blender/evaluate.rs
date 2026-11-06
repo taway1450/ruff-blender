@@ -42,7 +42,8 @@ use crate::types::infer::{
     infer_complete_scope_types, infer_definition_types, nearest_enclosing_class,
 };
 use crate::types::{
-    KnownInstanceType, StaticClassLiteral, Type, UnionType, definition_expression_type_in_scope,
+    KnownInstanceType, SpecialFormType, StaticClassLiteral, Type, UnionType,
+    definition_expression_type_in_scope,
 };
 use crate::{Db, ProgramEnvironment};
 
@@ -611,7 +612,8 @@ pub(crate) fn is_property_container<'db>(
 }
 
 /// The property that the class member `definition` declares, when its annotation evaluates to one
-/// (`count: IntProperty()`, `count: "IntProperty()"`, `count: COMMON`, `count: wrapper(2)`).
+/// (`count: IntProperty()`, `count: "IntProperty()"`, `count: COMMON`, `count: wrapper(2)`, and in
+/// the stubs `filepath: Annotated[str, StringProperty()]`).
 ///
 /// It runs the same evaluator as the annotation takeover in type-expression inference, and reads
 /// the callee's type from the definition's own inference, so the two never disagree. An opaque
@@ -646,6 +648,20 @@ pub(super) fn property_value<'db>(
                         .then_some(PropertyValue::Opaque)
                 })
             }
+            // Stubs declare the properties of Blender's mixins (`ImportHelper.filepath`) as
+            // `Annotated[str, StringProperty(...)]`, which reads as the value type for any type
+            // checker. In an add-on, Blender strips `Annotated`, so there it stays an ordinary
+            // annotation.
+            Expr::Subscript(subscript) if quoted.is_none() && !is_first_party(db, file) => {
+                annotated_metadata(subscript, &argument_type)?
+                    .iter()
+                    .find_map(|metadata| match metadata {
+                        Expr::Call(call) => {
+                            evaluator.evaluate_call(call, argument_type(&call.func))
+                        }
+                        _ => None,
+                    })
+            }
             // Only a project's own classes can name a constant property; this keeps the classes
             // of typeshed and the stubs from following every annotation's name.
             Expr::Name(_) | Expr::Attribute(_) | Expr::Subscript(_) if is_first_party(db, file) => {
@@ -654,6 +670,22 @@ pub(super) fn property_value<'db>(
             _ => None,
         }
     })
+}
+
+/// The metadata of `Annotated[T, *metadata]`, where `argument_type` gives the inferred types of its
+/// parts, or `None` when `subscript` is not a subscript of `typing.Annotated` with a call in its
+/// metadata. The syntax is checked first, so that most annotations need no inferred type.
+fn annotated_metadata<'e, 'db>(
+    subscript: &'e ast::ExprSubscript,
+    argument_type: &impl Fn(&Expr) -> Type<'db>,
+) -> Option<&'e [Expr]> {
+    let Expr::Tuple(tuple) = &*subscript.slice else {
+        return None;
+    };
+    let metadata = tuple.elts.get(1..)?;
+    (metadata.iter().any(Expr::is_call_expr)
+        && argument_type(&subscript.value) == Type::SpecialForm(SpecialFormType::Annotated))
+    .then_some(metadata)
 }
 
 /// Read the annotation of the class member `definition` (`count: IntProperty()` in a class body)
