@@ -15,6 +15,8 @@
 //!   [`super::preferences`].
 //! - `blender-invalid-override`, a Blender callback that Blender refuses, is reported on every
 //!   first-party file, by [`super::overrides`].
+//! - The class-shape rules, `blender-mixin-order` and `blender-invalid-base`, are reported on every
+//!   first-party file, by [`super::class_rules`], from the visitor of the property rules.
 
 use ruff_db::parsed::{ParsedModuleRef, parsed_module};
 use ruff_text_size::{Ranged, TextRange, TextSize};
@@ -181,6 +183,24 @@ declare_lint! {
     }
 }
 
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-mixin-order.md")]
+    pub(crate) static BLENDER_MIXIN_ORDER = {
+        summary: "detects a mixin listed after a Blender base that hides the mixin's method",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-invalid-base.md")]
+    pub(crate) static BLENDER_INVALID_BASE = {
+        summary: "detects a class with two unrelated Blender bases",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Error,
+    }
+}
+
 pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
@@ -198,6 +218,8 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_UNKNOWN_OPERATOR);
     registry.register_lint(&BLENDER_PREFERENCES_IDNAME);
     registry.register_lint(&BLENDER_INVALID_OVERRIDE);
+    registry.register_lint(&BLENDER_MIXIN_ORDER);
+    registry.register_lint(&BLENDER_INVALID_BASE);
 }
 
 /// The Blender lints of `file`: the add-on lints when `file` is an add-on's root module (the

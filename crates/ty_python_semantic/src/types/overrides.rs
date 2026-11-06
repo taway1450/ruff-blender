@@ -89,7 +89,10 @@ pub(super) fn check_class<'db>(
     let scope = class.body_scope(db);
     let own_class_members: FxHashSet<_> = all_end_of_scope_members(db, scope).collect();
     let class_specialized = class.identity_specialization(db);
-    if configuration.check_liskov_violations() && !inconsistent_generic_bases {
+    if configuration.check_liskov_violations()
+        && !inconsistent_generic_bases
+        && !crate::types::blender::has_invalid_bases(db, class)
+    {
         check_inherited_conflicts(
             context,
             class,
