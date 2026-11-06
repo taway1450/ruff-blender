@@ -16,7 +16,7 @@ mod source;
 
 pub use callbacks::{
     CALLBACKS, Callback, CallbackKind, CallbackShape, MethodKind, PYTHON_BASE_NAMES, callback_of,
-    callbacks_of, is_callback_root, problem, python_base_names,
+    callbacks_of, is_callback_name, is_callback_root, problem, python_base_names,
 };
 pub use discovery::{Addon, AddonKind, addon_for_path};
 pub use files::addon_source_files;

@@ -227,6 +227,12 @@ pub fn is_callback_root(root: &str) -> bool {
     CALLBACKS.iter().any(|callback| callback.root == root)
 }
 
+/// Whether `name` is a callback of any registrable root: a check on the name alone, before any
+/// class's method resolution order is looked at.
+pub fn is_callback_name(name: &str) -> bool {
+    CALLBACKS.iter().any(|callback| callback.name == name)
+}
+
 /// The callbacks of the root `root`.
 pub fn callbacks_of(root: &str) -> impl Iterator<Item = &'static Callback> {
     CALLBACKS
