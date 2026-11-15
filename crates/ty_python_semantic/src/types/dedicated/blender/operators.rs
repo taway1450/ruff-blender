@@ -1,4 +1,4 @@
-//! Operator calls: `bpy.ops.<category>.<name>(...)` for an add-on's own operators.
+//! Operator calls: `bpy.ops.<category>.<name>(...)` for an add-on's own operators and Blender's.
 //!
 //! Blender adds `bpy.ops.my_addon.run` when `register()` registers an operator with the idname
 //! `my_addon.run`. No stub can say so, so the attribute is synthesised where ty misses it, from the
@@ -13,6 +13,9 @@
 //! - An add-on operator in one of Blender's categories (`bpy.ops.object.my_op`) sits next to the
 //!   built-in ones, and replaces a built-in operator with the same idname, as it does at runtime.
 //! - A macro takes one dict per step, named by the step's `CATEGORY_OT_name` idname.
+//! - A built-in operator, in any file (also outside an add-on), gets the same protocol, with the
+//!   keywords of its stub ([`builtin_operator`]): the stubs make it keyword-only (Blender's own) or
+//!   type the positional arguments loosely (fake-bpy-module's `__new__`).
 
 use std::fmt::Write as _;
 
@@ -171,9 +174,9 @@ fn operators_of<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Option<&'db Add
 }
 
 /// The attribute `name` of the module `module`, read in `file`, when it is an operator category or
-/// an operator of `file`'s add-on that the stubs do not have. `bound` says whether ty found the
-/// attribute: a category the stubs have stays their module, while an add-on operator replaces a
-/// built-in one with the same idname.
+/// an operator of `file`'s add-on that the stubs do not have, or a built-in operator of the stubs.
+/// `bound` says whether ty found the attribute: a category the stubs have stays their module, while
+/// an add-on operator replaces a built-in one with the same idname.
 pub(super) fn module_attribute<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
@@ -183,19 +186,68 @@ pub(super) fn module_attribute<'db>(
     bound: bool,
 ) -> Option<Type<'db>> {
     let module_name = bpy_ops_module(db, env, module)?;
-    let operators = operators_of(db, file)?;
+    let operators = operators_of(db, file);
     match module_name.strip_prefix("bpy.ops") {
-        Some("") if !bound => operators
-            .in_category(name)
-            .next()
-            .map(|_| category_type(db, env, operators, name)),
+        Some("") if !bound => {
+            let operators = operators?;
+            operators
+                .in_category(name)
+                .next()
+                .map(|_| category_type(db, env, operators, name))
+        }
         Some(category) => {
             let category = category.strip_prefix('.')?;
-            let operator = operators.get(category, name)?;
-            Some(operator_type(db, env, operators, operator))
+            if let Some(operators) = operators
+                && let Some(operator) = operators.get(category, name)
+            {
+                return Some(operator_type(db, env, operators, operator));
+            }
+            if !bound {
+                return None;
+            }
+            builtin_operator_type(db, env, category, name)
         }
         None => None,
     }
+}
+
+/// The type of `bpy.ops.<category>.<name>` for a built-in operator: the protocol of an add-on
+/// operator, with one keyword per keyword-only parameter of the stub, typed as a write accepts it.
+fn builtin_operator_type<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    category: &str,
+    name: &str,
+) -> Option<Type<'db>> {
+    let idname = OperatorIdname {
+        category: category.to_string(),
+        name: name.to_string(),
+    };
+    let keywords = builtin_keywords(db, env, &idname)?;
+    Some(operator_protocol(db, env, &idname, keywords))
+}
+
+/// The keyword-only parameters of a built-in operator's call: one per writable keyword of its stub.
+fn builtin_keywords<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    idname: &OperatorIdname,
+) -> Option<Vec<Parameter<'db>>> {
+    let operator = builtin_operator(db, env, idname)?;
+    Some(
+        operator
+            .properties
+            .into_iter()
+            .filter_map(|property| Some(keyword(property.name, property.write?)))
+            .collect(),
+    )
+}
+
+/// An optional keyword-only parameter of an operator call.
+fn keyword<'db>(name: Name, ty: Type<'db>) -> Parameter<'db> {
+    Parameter::keyword_only(name)
+        .with_annotated_type(ty)
+        .with_default_type(ty)
 }
 
 /// The name of `module` when it is Blender's `bpy.ops` or one of its category modules.
@@ -240,7 +292,19 @@ fn operator_type<'db>(
     operators: &AddonOperators<'db>,
     operator: &AddonOperator<'db>,
 ) -> Type<'db> {
-    let idname = operator.idname();
+    let keywords = call_keywords(db, env, operators, operator);
+    operator_protocol(db, env, &operator.idname(), keywords)
+}
+
+/// An operator as `bpy.ops` gives it: `__call__` takes the execution context and the undo flag
+/// positionally (or the undo flag alone, a `bool` or an `int`), then `keywords`; plus `poll()`,
+/// `idname()`, `idname_py()` and `get_rna_type()`.
+fn operator_protocol<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    idname: &OperatorIdname,
+    keywords: Vec<Parameter<'db>>,
+) -> Type<'db> {
     let string = |value: &str| Type::string_literal(db, value);
     let literals = |values: &[&str]| {
         UnionType::from_elements(db, env, values.iter().map(|value| string(value)))
@@ -248,21 +312,23 @@ fn operator_type<'db>(
     let context = literals(&EXECUTION_CONTEXTS);
     let result = KnownClass::Set.to_specialized_instance(db, env, &[literals(&OPERATOR_RESULTS)]);
     let bool_type = KnownClass::Bool.to_instance(db, env);
+    // `bpy_op_parse_args` takes a `bool` or an `int` as the undo flag.
+    let undo_type =
+        UnionType::from_elements(db, env, [bool_type, KnownClass::Int.to_instance(db, env)]);
     let self_parameter = || Parameter::positional_only(Some(Name::new_static("self")));
 
-    let keywords = call_keywords(db, env, operators, operator);
     let with_context = [
         self_parameter(),
         Parameter::positional_only(Some(Name::new_static("execution_context")))
             .with_annotated_type(context)
             .with_default_type(context),
         Parameter::positional_only(Some(Name::new_static("undo")))
-            .with_annotated_type(bool_type)
-            .with_default_type(bool_type),
+            .with_annotated_type(undo_type)
+            .with_default_type(undo_type),
     ];
     let undo_alone = [
         self_parameter(),
-        Parameter::positional_only(Some(Name::new_static("undo"))).with_annotated_type(bool_type),
+        Parameter::positional_only(Some(Name::new_static("undo"))).with_annotated_type(undo_type),
     ];
     let call = CallableType::new(
         db,
@@ -321,11 +387,6 @@ fn call_keywords<'db>(
     operators: &AddonOperators<'db>,
     operator: &AddonOperator<'db>,
 ) -> Vec<Parameter<'db>> {
-    let keyword = |name: Name, ty: Type<'db>| {
-        Parameter::keyword_only(name)
-            .with_annotated_type(ty)
-            .with_default_type(ty)
-    };
     if !is_macro_class(db, operator.class) {
         return operator_properties(db, operator.class)
             .iter()
@@ -602,11 +663,9 @@ fn typed_dict<'db>(
     Type::TypedDict(TypedDictType::from_schema_items(db, schema))
 }
 
-/// The categories and operators of `file`'s add-on that complete `receiver.`: the new categories
-/// under `bpy.ops`, the add-on's operators under a category module or a new category.
-/// The add-on operator whose name the cursor is on in `bpy.ops.<category>.<name>`, with the range
-/// of the name and how the call is spelled with its keywords, for hover. The synthesised operator
-/// type itself only shows its member names.
+/// The operator whose name the cursor is on in `bpy.ops.<category>.<name>`, an add-on's or a
+/// built-in one, with the range of the name and how the call is spelled with its keywords, for
+/// hover. The synthesised operator type itself only shows its member names.
 pub(super) fn operator_call_hover<'db>(
     db: &'db dyn Db,
     file: ProgramFile<'db>,
@@ -638,7 +697,7 @@ pub(super) fn operator_call_hover<'db>(
     finder.visit_body(module.suite());
     let attribute = finder.found?;
     let env = ProgramEnvironment::from_file(file);
-    let operators = operators_of(db, file)?;
+    let operators = operators_of(db, file);
     let scope = semantic_index(db, file)
         .try_expression_scope_id(&*attribute.value)?
         .to_scope_id(db, file);
@@ -647,26 +706,46 @@ pub(super) fn operator_call_hover<'db>(
         Type::ModuleLiteral(module) => bpy_ops_module(db, &env, module.module(db))?
             .strip_prefix("bpy.ops.")?
             .to_string(),
-        Type::ProtocolInstance(_) => operators
-            .categories()
-            .find(|category| category_type(db, &env, operators, category) == receiver)?
-            .to_string(),
+        Type::ProtocolInstance(_) => {
+            let operators = operators?;
+            operators
+                .categories()
+                .find(|category| category_type(db, &env, operators, category) == receiver)?
+                .to_string()
+        }
         _ => return None,
     };
-    let operator = operators.get(&category, attribute.attr.as_str())?;
-    let mut call = format!(
-        "bpy.ops.{category}.{}(execution_context, undo, *",
-        operator.name
-    );
-    for keyword in call_keywords(db, &env, operators, operator) {
+    let name = attribute.attr.as_str();
+    let (idname, keywords) = match operators.and_then(|operators| {
+        operators
+            .get(&category, name)
+            .map(|operator| (operators, operator))
+    }) {
+        Some((operators, operator)) => (
+            operator.idname(),
+            call_keywords(db, &env, operators, operator),
+        ),
+        None => {
+            let idname = OperatorIdname {
+                category: category.clone(),
+                name: name.to_string(),
+            };
+            let keywords = builtin_keywords(db, &env, &idname)?;
+            (idname, keywords)
+        }
+    };
+    let mut call = format!("bpy.ops.{category}.{name}(execution_context, undo, *");
+    for keyword in keywords {
         let name = keyword.name().map(Name::as_str).unwrap_or_default();
         let ty = keyword.annotated_type().display(db, &env);
         let _ = write!(call, ", {name}: {ty}");
     }
     call.push(')');
-    Some((attribute.attr.range, operator.idname(), call))
+    Some((attribute.attr.range, idname, call))
 }
 
+/// The categories and operators of `file`'s add-on that complete `receiver.`: the new categories
+/// under `bpy.ops`, the add-on's operators under a category module or a new category.
 pub(super) fn completions<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
