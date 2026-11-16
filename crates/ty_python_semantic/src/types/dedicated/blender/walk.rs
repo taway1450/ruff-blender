@@ -40,12 +40,13 @@ use ty_python_core::{
 
 use crate::Db;
 use crate::types::definition_resolution::{ResolvedDefinition, find_symbol_in_scope};
-use crate::types::{StaticClassLiteral, Type, binding_type};
+use crate::types::{StaticClassLiteral, Type};
 
 use super::addon::is_first_party;
 use super::evaluate::{Evaluator, PropertyValue};
 use super::follow::{
-    Resolved, imported_definitions, module_by_name, resolve_expression, resolve_name_in,
+    Resolved, imported_definitions, module_by_name, registration_argument_type,
+    resolve_expression, resolve_name_in,
 };
 use super::index::{AddonInProgram, RegisteredProperty, accepts_registered_properties};
 use super::symbols::{bpy_types_bases, is_bpy_types_class};
@@ -961,11 +962,8 @@ impl<'db> IrBuilder<'db, '_> {
             return None;
         }
         let db = self.db;
-        let argument_type = |argument: &Expr| match resolve_expression(db, scope, argument) {
-            Some(Resolved::Value(ty)) => ty,
-            Some(Resolved::Function(definition)) => binding_type(db, definition),
-            Some(Resolved::Module(_) | Resolved::Constant(_)) | None => Type::unknown(),
-        };
+        let argument_type =
+            |argument: &Expr| registration_argument_type(db, self.module, scope, argument);
         Evaluator::new(db, scope, &argument_type).evaluate(value)
     }
 
@@ -2266,6 +2264,7 @@ impl<'db> Walker<'db> {
                                     register,
                                     *class,
                                     *named_at,
+                                    range,
                                     frame,
                                     &BranchPath::default(),
                                     true,
@@ -2384,21 +2383,67 @@ impl<'db> Walker<'db> {
         register: bool,
         class: StaticClassLiteral<'db>,
         named_at: Site,
+        range: TextRange,
         frame: &Frame<'db>,
         element_path: &BranchPath,
         element_exact: bool,
     ) {
+        let path = element_path.prefixed(&frame.path);
+        let exact = frame.exact && element_exact;
         let event = ClassEvent {
             class,
             named_at,
-            path: element_path.prefixed(&frame.path),
-            exact: frame.exact && element_exact && self.exact,
+            path: path.clone(),
+            exact: exact && self.exact,
         };
-        self.record(if register {
-            Event::RegisterClass(event)
+        let method = self.class_method(register, class, named_at);
+        let run_method = |walker: &mut Self| {
+            if let Some(method) = method {
+                let mut caller = Frame {
+                    path: path.steps().to_vec(),
+                    exact,
+                    ..frame.clone()
+                };
+                walker.call_function(
+                    method,
+                    vec![Value::Class(class, named_at)],
+                    &[],
+                    range,
+                    &mut caller,
+                );
+            }
+        };
+        // Blender calls the class's `register()` after registering it and its `unregister()` before
+        // unregistering it (`pyrna_register_class`, `pyrna_unregister_class`).
+        if register {
+            self.record(Event::RegisterClass(event));
+            run_method(self);
         } else {
-            Event::UnregisterClass(event)
-        });
+            run_method(self);
+            self.record(Event::UnregisterClass(event));
+        }
+    }
+
+    /// The `register()` or `unregister()` classmethod that `register_class` or `unregister_class`
+    /// runs, as Cycles assigns `Scene.cycles` in one: a method of an add-on's `PropertyGroup`.
+    fn class_method(
+        &mut self,
+        register: bool,
+        class: StaticClassLiteral<'db>,
+        named_at: Site,
+    ) -> Option<Definition<'db>> {
+        let db = self.db;
+        if is_bpy_types_class(db, class)
+            || !is_first_party(db, class.program_file(db))
+            || !bpy_types_bases(db, class).any(|base| base == "PropertyGroup")
+        {
+            return None;
+        }
+        let name = Name::new_static(if register { "register" } else { "unregister" });
+        match self.attribute(Value::Class(class, named_at), &name, named_at) {
+            Value::Function(method) => Some(method),
+            _ => None,
+        }
     }
 
     /// Run what `register_classes_factory` or `register_submodule_factory` made, as Blender's own
@@ -2425,6 +2470,7 @@ impl<'db> Walker<'db> {
                             register,
                             *class,
                             *named_at,
+                            range,
                             frame,
                             &element.path,
                             element.exact,

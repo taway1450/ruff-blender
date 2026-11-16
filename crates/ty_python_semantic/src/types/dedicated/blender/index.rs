@@ -33,7 +33,7 @@ use crate::types::{StaticClassLiteral, Type, binding_type};
 use super::addon_of_file;
 use super::classes::derives_from;
 use super::evaluate::{Evaluator, PropertyValue};
-use super::follow::{Resolved, resolve_expression};
+use super::follow::{Resolved, registration_argument_type, resolve_expression};
 use super::symbols::{bpy_types_bases, is_bpy_types_class};
 use super::walk::{Event, register_walk};
 
@@ -269,11 +269,8 @@ pub(super) fn file_facts<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> FileFa
             let owner = owner
                 .as_static()
                 .filter(|owner| is_bpy_types_class(db, *owner))?;
-            let argument_type = |argument: &Expr| match resolve_expression(db, scope, argument) {
-                Some(Resolved::Value(ty)) => ty,
-                Some(Resolved::Function(definition)) => binding_type(db, definition),
-                Some(Resolved::Module(_) | Resolved::Constant(_)) | None => Type::unknown(),
-            };
+            let argument_type =
+                |argument: &Expr| registration_argument_type(db, &module, scope, argument);
             let value = Evaluator::new(db, scope, &argument_type).evaluate(candidate.value)?;
             Some(RegisteredProperty {
                 owner,
