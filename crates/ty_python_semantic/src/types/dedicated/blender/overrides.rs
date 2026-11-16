@@ -329,6 +329,9 @@ pub(crate) struct OverrideTypes<'db> {
     /// Whether Blender converts the callback's result with `bool()` (`poll`, `check`, ...), so it
     /// accepts any return value.
     bool_result: bool,
+    /// The position of the parameter Blender passes the operator's own properties to
+    /// ([`ty_blender::Callback::own_properties_position`]).
+    own_properties_position: Option<usize>,
 }
 
 impl<'db> OverrideTypes<'db> {
@@ -420,6 +423,7 @@ pub(crate) fn override_types<'db>(
                 .collect(),
             return_ty: bound.return_ty,
             bool_result: callback.bool_result,
+            own_properties_position: callback.own_properties_position(),
         });
     }
     None
@@ -512,8 +516,7 @@ pub(crate) fn override_parameter_type<'db>(
         // Blender passes an operator's own properties to `description(cls, context, properties)`,
         // not the `OperatorProperties` of the stub. Only the body sees them: callers and the
         // override check keep the parent's type.
-        if position == 2
-            && function.node(&module).name.id == "description"
+        if types.own_properties_position == Some(position)
             && let Some(class) = defining_class(db, definition)
             && let Some(properties) = class_properties_type(db, env, file, class)
         {

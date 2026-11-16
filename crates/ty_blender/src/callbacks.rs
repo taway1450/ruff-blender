@@ -63,6 +63,14 @@ pub struct Callback {
 }
 
 impl Callback {
+    /// The position of the parameter (`self` / `cls` being 0) that Blender passes the operator's
+    /// own properties to, rather than the `OperatorProperties` the stubs declare: the last one of
+    /// `Operator.description(cls, context, properties)`. `None` for every other callback.
+    pub fn own_properties_position(&self) -> Option<usize> {
+        (self.root == "Operator" && self.name == "description")
+            .then(|| self.positional.end().saturating_sub(1))
+    }
+
     /// Why Blender refuses `shape` for this callback, or `None` when it accepts it.
     pub fn problem(&self, shape: CallbackShape) -> Option<String> {
         let mistake = self.mistake(shape)?;

@@ -97,10 +97,7 @@ pub(super) struct AddonOperator<'db> {
 
 impl AddonOperator<'_> {
     pub(super) fn idname(&self) -> OperatorIdname {
-        OperatorIdname {
-            category: self.category.to_string(),
-            name: self.name.to_string(),
-        }
+        OperatorIdname::new(self.category.as_str(), self.name.as_str())
     }
 }
 
@@ -219,10 +216,7 @@ fn builtin_operator_type<'db>(
     category: &str,
     name: &str,
 ) -> Option<Type<'db>> {
-    let idname = OperatorIdname {
-        category: category.to_string(),
-        name: name.to_string(),
-    };
+    let idname = OperatorIdname::new(category, name);
     let keywords = builtin_keywords(db, env, &idname)?;
     Some(operator_protocol(db, env, &idname, keywords))
 }
@@ -726,10 +720,7 @@ pub(super) fn operator_call_hover<'db>(
             call_keywords(db, &env, operators, operator),
         ),
         None => {
-            let idname = OperatorIdname {
-                category: category.clone(),
-                name: name.to_string(),
-            };
+            let idname = OperatorIdname::new(category.clone(), name);
             let keywords = builtin_keywords(db, &env, &idname)?;
             (idname, keywords)
         }

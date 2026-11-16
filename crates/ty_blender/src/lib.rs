@@ -30,7 +30,7 @@ pub use metadata::{MANIFEST_FILE, Manifest, REQUIRED_MANIFEST_KEYS, manifest};
 pub use operators::{
     EXECUTION_CONTEXTS, OPERATOR_RESULTS, OperatorIdname, SINKS, Sink, SinkResult,
 };
-pub use registration::{IdnameFamily, REGISTRABLE_ROOTS};
+pub use registration::{IdnameFamily, REGISTRABLE_ROOTS, registration_classmethod};
 pub use reload_guard::in_reload_guard;
 pub use script_guard::is_script_test;
 pub use source::{BlInfo, BlInfoDict, BlInfoEntry, bl_info};

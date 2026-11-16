@@ -1135,7 +1135,6 @@ fn check_keymap_item<'db>(
 ) {
     let db = context.db();
     let env = context.program_environment();
-    let file = context.program_file();
     let Expr::Tuple(item) = item else {
         return;
     };
@@ -1145,10 +1144,25 @@ fn check_keymap_item<'db>(
     let Some(ty) = expression_type(idname_expression) else {
         return;
     };
-    let idnames = argument_idnames(db, env, ty, Some(idname_expression), expression_type);
-    let [idname] = idnames.as_slice() else {
-        return;
-    };
+    // A conditional idname is checked against each operator it can name.
+    for idname in argument_idnames(db, env, ty, Some(idname_expression), expression_type) {
+        check_keymap_operator(context, idname_expression, &idname, data, expression_type);
+    }
+}
+
+/// Check one operator `idname` of a `bl_keymap` item, whose idname is `idname_expression` and
+/// whose data is `data`: report it when it is unknown, otherwise each `(name, value)` pair of the
+/// data's `"properties"` that the operator does not accept.
+fn check_keymap_operator<'db>(
+    context: &InferContext<'db, '_>,
+    idname_expression: &Expr,
+    idname: &OperatorIdname,
+    data: &Expr,
+    expression_type: &dyn Fn(&Expr) -> Option<Type<'db>>,
+) {
+    let db = context.db();
+    let env = context.program_environment();
+    let file = context.program_file();
     let Some(operator) = find_operator(db, env, file, idname) else {
         if reports_unknown_operators(db, file) {
             report(
