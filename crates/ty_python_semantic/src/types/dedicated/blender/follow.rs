@@ -6,7 +6,7 @@
 //! (`x: COMMON`, `x: props.COMMON`).
 
 use indexmap::IndexSet;
-use ruff_db::parsed::parsed_module;
+use ruff_db::parsed::{ParsedModuleRef, parsed_module};
 use ruff_python_ast::Expr;
 use ty_module_resolver::{ModuleName, file_to_module, resolve_module_confident};
 use ty_python_core::definition::{Definition, DefinitionKind};
@@ -17,7 +17,8 @@ use ty_python_core::{ProgramFile, global_scope, place_table, semantic_index};
 use crate::types::definition_resolution::{
     self, ImportAliasResolution, ResolvedDefinition, find_symbol_in_scope,
 };
-use crate::types::{Type, binding_type};
+use crate::types::infer::nearest_enclosing_class;
+use crate::types::{StaticClassLiteral, Type, binding_type};
 use crate::{Db, ProgramEnvironment};
 
 /// What a name or dotted name refers to.
@@ -47,6 +48,69 @@ pub(super) fn resolve_expression<'db>(
     expression: &Expr,
 ) -> Option<Resolved<'db>> {
     resolve_expression_at_depth(db, scope, expression, 0)
+}
+
+/// The type of `argument`, a part of a registration's value in `scope` (of the file `module`), as
+/// the Property evaluator reads it without inferring the registration: what [`resolve_expression`]
+/// resolves it to, or the class itself for the `cls` of a classmethod. Blender calls a class's
+/// `register()` classmethod when it registers the class, where Cycles assigns its settings:
+///
+/// ```python
+/// class CyclesRenderSettings(bpy.types.PropertyGroup):
+///     @classmethod
+///     def register(cls):
+///         bpy.types.Scene.cycles = PointerProperty(type=cls)
+/// ```
+pub(super) fn registration_argument_type<'db>(
+    db: &'db dyn Db,
+    module: &ParsedModuleRef,
+    scope: ScopeId<'db>,
+    argument: &Expr,
+) -> Type<'db> {
+    match resolve_expression(db, scope, argument) {
+        Some(Resolved::Value(ty)) => ty,
+        Some(Resolved::Function(definition)) => binding_type(db, definition),
+        Some(Resolved::Module(_) | Resolved::Constant(_)) => Type::unknown(),
+        None => classmethod_class(db, module, scope, argument)
+            .map_or_else(Type::unknown, Type::from),
+    }
+}
+
+/// The class whose body defines the classmethod `scope`, when `argument` is the name of its first
+/// parameter.
+fn classmethod_class<'db>(
+    db: &'db dyn Db,
+    module: &ParsedModuleRef,
+    scope: ScopeId<'db>,
+    argument: &Expr,
+) -> Option<StaticClassLiteral<'db>> {
+    let Expr::Name(name) = argument else {
+        return None;
+    };
+    let function = scope.node(db).as_function()?.node(module);
+    let parameters = &function.parameters;
+    let first = parameters
+        .posonlyargs
+        .iter()
+        .chain(&parameters.args)
+        .next()?;
+    let is_classmethod = function.decorator_list.iter().any(|decorator| {
+        decorator
+            .expression
+            .as_name_expr()
+            .is_some_and(|decorator| decorator.id.as_str() == "classmethod")
+    });
+    if !is_classmethod || first.parameter.name.id != name.id {
+        return None;
+    }
+    let index = semantic_index(db, scope.program_file(db));
+    let in_class_body = index
+        .parent_scope_id(scope.file_scope_id(db))
+        .is_some_and(|parent| index.scope(parent).node().as_class().is_some());
+    if !in_class_body {
+        return None;
+    }
+    nearest_enclosing_class(db, index, scope)
 }
 
 fn resolve_expression_at_depth<'db>(
