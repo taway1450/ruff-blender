@@ -5,7 +5,8 @@
 //! that operator's properties. The stubs can only say `OperatorProperties`, so the result of such a
 //! call (a *sink*) is refined here from the idname ([`on_call`]):
 //!
-//! - the idname is the argument's literal string, or the `bl_idname` of the class `X` in
+//! - the idname is the argument's literal string (a conditional idname, `"a" if c else "b"`, gives
+//!   the union of each operator's result), or the `bl_idname` of the class `X` in
 //!   `X.bl_idname`, which ty widens to `str`;
 //! - it is looked up as Blender does: converted to its `CATEGORY_OT_name` form, then found among
 //!   the operators of the file's add-on, then among Blender's own operators, read from the
@@ -42,8 +43,8 @@ use crate::types::context::InferContext;
 use crate::types::infer::{infer_complete_scope_types, nearest_enclosing_class};
 use crate::types::list_members::Member;
 use crate::types::{
-    IntersectionType, KnownClass, LiteralValueType, MemberLookupPolicy, StaticClassLiteral,
-    SubclassOfInner, Type, TypeVarBoundOrConstraints, UnionType,
+    IntersectionType, KnownClass, KnownUnion, LiteralValueType, MemberLookupPolicy,
+    StaticClassLiteral, SubclassOfInner, Type, TypeVarBoundOrConstraints, UnionType,
 };
 use crate::{Db, ProgramEnvironment};
 
@@ -132,29 +133,60 @@ fn literal_string(db: &dyn Db, ty: Type<'_>) -> Option<String> {
     }
 }
 
-/// The idname an argument gives: its literal string, or for `X.bl_idname` the idname of the
-/// operator class `X` (or of `X`'s class).
-fn argument_idname<'db>(
+/// The strings a type stands for: a string literal, or a union of string literals and dynamic
+/// types (`"a" if c else "b"`). `None` when an arm is neither, or no arm is a string.
+fn literal_strings(db: &dyn Db, ty: Type<'_>) -> Option<Vec<String>> {
+    let string = |ty: Type<'_>| {
+        ty.as_literal_value()
+            .and_then(LiteralValueType::as_string)
+            .map(|string| string.value(db).to_string())
+    };
+    let strings = match ty {
+        Type::Union(union) => {
+            let mut strings = Vec::new();
+            for element in union.elements(db) {
+                match string(*element) {
+                    Some(string) => strings.push(string),
+                    None if element.is_dynamic() => {}
+                    None => return None,
+                }
+            }
+            strings
+        }
+        ty => vec![string(ty)?],
+    };
+    (!strings.is_empty()).then_some(strings)
+}
+
+/// The idnames an argument gives: its literal strings (one per arm of a conditional idname), or
+/// for `X.bl_idname` the idname of the operator class `X` (or of `X`'s class). Empty when it gives
+/// none, or when one of its strings is no idname.
+fn argument_idnames<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
     argument_type: Type<'db>,
     argument: Option<&Expr>,
     expression_type: &dyn Fn(&Expr) -> Option<Type<'db>>,
-) -> Option<OperatorIdname> {
-    if let Some(string) = literal_string(db, argument_type) {
-        return OperatorIdname::from_lookup(&string);
+) -> Vec<OperatorIdname> {
+    if let Some(strings) = literal_strings(db, argument_type) {
+        return strings
+            .iter()
+            .map(|string| OperatorIdname::from_lookup(string))
+            .collect::<Option<Vec<_>>>()
+            .unwrap_or_default();
     }
     let Some(Expr::Attribute(attribute)) = argument else {
-        return None;
+        return Vec::new();
     };
     if attribute.attr.as_str() != "bl_idname" {
-        return None;
+        return Vec::new();
     }
-    let class = receiver_class(db, env, expression_type(&attribute.value)?)?;
-    if !is_operator_class(db, class) {
-        return None;
-    }
-    operator_idname(db, class)
+    expression_type(&attribute.value)
+        .and_then(|ty| receiver_class(db, env, ty))
+        .filter(|class| is_operator_class(db, *class))
+        .and_then(|class| operator_idname(db, class))
+        .into_iter()
+        .collect()
 }
 
 /// A property of an operator, of an add-on or of Blender.
@@ -352,11 +384,13 @@ fn without_none<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'d
     }
 }
 
-/// The `mathutils` arm of a vector parameter's annotation (`Vector | Sequence[float]`), or the
+/// What reading a built-in operator's property gives, from its parameter's annotation: the
+/// `mathutils` arm of a vector's annotation (`Vector | Sequence[float]`); `bpy_prop_array[T]` for
+/// any other array, which the stubs write `Sequence[T]` (`constraint_axis: Sequence[bool]`); or the
 /// annotation itself.
 fn vector_value<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'db>) -> Type<'db> {
     let Type::Union(union) = ty else {
-        return ty;
+        return array_value(db, env, ty).unwrap_or(ty);
     };
     union
         .elements(db)
@@ -374,6 +408,33 @@ fn vector_value<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'d
             })
         })
         .unwrap_or(ty)
+}
+
+/// `bpy_prop_array[T]` for the annotation `Sequence[T]` of a one-dimensional array of booleans,
+/// ints or floats, as Blender reads a Bool, Int or Float vector without a `mathutils` subtype. A
+/// stub `bpy_prop_array` that is not generic is used as it is.
+fn array_value<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    ty: Type<'db>,
+) -> Option<Type<'db>> {
+    let (class, specialization) = ty.class_specialization(db, env)?;
+    if !class.is_known(db, KnownClass::Sequence) {
+        return None;
+    }
+    let [item] = specialization.types(db) else {
+        return None;
+    };
+    // `float` in an annotation means `int | float`, and a bool is an int.
+    let number = KnownUnion::Float.to_type(db, env);
+    if item.is_dynamic() || !item.is_assignable_to(db, env, number) {
+        return None;
+    }
+    let array = module_class(db, env, "bpy.types", "bpy_prop_array")?
+        .apply_specialization(db, |generic_context| {
+            generic_context.specialize(db, vec![*item])
+        });
+    Some(Type::instance(db, env, array))
 }
 
 /// Whether a built-in operator's property is an enum: a string literal or a set of them is; a
@@ -485,36 +546,45 @@ pub(crate) fn on_call<'db>(
             };
             let property_type = argument_type("property");
             let idname_argument = call.arguments.find_argument_value(sink.parameter, 0);
-            let Some(idname) =
-                argument_idname(db, env, idname_type, idname_argument, expression_type)
-            else {
+            let idnames = argument_idnames(db, env, idname_type, idname_argument, expression_type);
+            if idnames.is_empty() {
                 continue;
-            };
-            let operator = find_operator(db, env, file, &idname);
+            }
+            let operators: Vec<_> = idnames
+                .iter()
+                .map(|idname| find_operator(db, env, file, idname))
+                .collect();
             if !checked {
                 checked = true;
-                check_call(
-                    context,
-                    sink,
-                    call,
-                    idname_argument,
-                    &idname,
-                    operator.as_ref(),
-                    property_type,
-                );
+                for (idname, operator) in idnames.iter().zip(&operators) {
+                    check_call(
+                        context,
+                        sink,
+                        call,
+                        idname_argument,
+                        idname,
+                        operator.as_ref(),
+                        property_type,
+                    );
+                }
             }
-            let Some(operator) = operator else {
+            // A conditional idname gives the union of each operator's result, and only when every
+            // operator is known.
+            let Some(operators) = operators.into_iter().collect::<Option<Vec<_>>>() else {
                 continue;
             };
-            let refined = match sink.result {
-                SinkResult::Properties => properties_type(db, env, &operator),
-                SinkResult::Holder => {
-                    holder_type(db, env, without_none(db, env, binding.return_ty), &operator)
-                }
-                SinkResult::Unchanged => None,
-            };
+            let refined = operators
+                .iter()
+                .map(|operator| match sink.result {
+                    SinkResult::Properties => properties_type(db, env, operator),
+                    SinkResult::Holder => {
+                        holder_type(db, env, without_none(db, env, binding.return_ty), operator)
+                    }
+                    SinkResult::Unchanged => None,
+                })
+                .collect::<Option<Vec<_>>>();
             if let Some(refined) = refined {
-                binding.set_return_type(refined);
+                binding.set_return_type(UnionType::from_elements(db, env, refined));
             }
         }
     }
@@ -649,8 +719,14 @@ pub(super) fn member<'db>(
         }
         let mut types = Vec::new();
         for element in union.elements(db) {
-            let place =
-                member(db, env, *element, name).unwrap_or_else(|| element.member(db, env, name));
+            // A refined arm without the property makes it missing on the union
+            // (`"a" if c else "b"` where only `a` has it), even where the stub's `__getattr__`
+            // accepts any name.
+            let place = match member(db, env, *element, name) {
+                Some(place) if place.place.is_undefined() => return Some(place),
+                Some(place) => place,
+                None => element.member(db, env, name),
+            };
             types.push(place.place.ignore_possibly_undefined()?);
         }
         return Some(Place::bound(UnionType::from_elements(db, env, types)).into());
@@ -675,6 +751,10 @@ pub(super) fn member<'db>(
 
 /// `self.properties` of an add-on operator (or `step.properties` for an instance): the
 /// properties of its class.
+///
+/// An operator's own property named `properties` wins: `Operator.__getattribute__` looks the
+/// operator's properties up before any `Operator` member, so `self.properties` is that property's
+/// value.
 pub(super) fn own_properties<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
@@ -685,6 +765,30 @@ pub(super) fn own_properties<'db>(
         return None;
     }
     let class = receiver_class(db, env, receiver)?;
+    if !is_operator_class(db, class) {
+        return None;
+    }
+    if let Some(property) = operator_properties(db, class)
+        .iter()
+        .find(|property| property.name == "properties")
+    {
+        return Some(property.value.value_type(db, env));
+    }
+    class_properties_type(db, env, file, class)
+}
+
+/// The properties of the operator class `class`, as the add-on in `file` registers it (a macro
+/// with one property per step), else as the class declares them. `None` when `class` is no
+/// operator class.
+///
+/// It is also the `properties` argument Blender passes to an overriding
+/// `description(cls, context, properties)`.
+pub(super) fn class_properties_type<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    file: ProgramFile<'db>,
+    class: StaticClassLiteral<'db>,
+) -> Option<Type<'db>> {
     if !is_operator_class(db, class) {
         return None;
     }
@@ -1038,12 +1142,14 @@ fn check_keymap_item<'db>(
     let [idname_expression, _, data] = &*item.elts else {
         return;
     };
-    let Some(idname) = expression_type(idname_expression)
-        .and_then(|ty| argument_idname(db, env, ty, Some(idname_expression), expression_type))
-    else {
+    let Some(ty) = expression_type(idname_expression) else {
         return;
     };
-    let Some(operator) = find_operator(db, env, file, &idname) else {
+    let idnames = argument_idnames(db, env, ty, Some(idname_expression), expression_type);
+    let [idname] = idnames.as_slice() else {
+        return;
+    };
+    let Some(operator) = find_operator(db, env, file, idname) else {
         if reports_unknown_operators(db, file) {
             report(
                 context,

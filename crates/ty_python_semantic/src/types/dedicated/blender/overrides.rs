@@ -25,8 +25,9 @@
 //! - [`override_types`] is what an override takes from its parent where it has no annotation: the
 //!   parent's parameter types by position and its return type. [`apply_override_types`] puts them
 //!   in the override's signature, for callers, and [`override_parameter_type`] gives them to the
-//!   parameters in its body. [`override_return_type`] is what its `return` values are inferred
-//!   with and checked against when it has no return annotation.
+//!   parameters in its body (an operator's `description` gets its own properties as `properties`).
+//!   [`override_return_type`] is what its `return` values are inferred with and checked against
+//!   when it has no return annotation.
 
 use ruff_db::parsed::parsed_module;
 use ruff_python_ast as ast;
@@ -49,6 +50,7 @@ use crate::{Db, ProgramEnvironment};
 
 use super::index::file_facts;
 use super::lints::BLENDER_INVALID_OVERRIDE;
+use super::operator_properties::class_properties_type;
 use super::symbols::{bpy_types_bases, bpy_types_class_name, is_bpy_types_class};
 
 /// The root whose callbacks `class` has: the first `bpy.types` class in its method resolution
@@ -496,7 +498,8 @@ pub(crate) fn override_parameter_type<'db>(
     let file = parameter.program_file(db);
     let index = semantic_index(db, file);
     let function = index.scope(parameter.file_scope(db)).node().as_function()?;
-    let types = override_types(db, index.expect_single_definition(function)).as_ref()?;
+    let definition = index.expect_single_definition(function);
+    let types = override_types(db, definition).as_ref()?;
     let module = parsed_module(db, parameter.python_file(db)).load(db);
     let name_range = parameter.kind(db).target_range(&module);
     let parameters = &function.node(&module).parameters;
@@ -506,6 +509,16 @@ pub(crate) fn override_parameter_type<'db>(
         .chain(&parameters.args)
         .position(|candidate| candidate.parameter.name.range() == name_range)
     {
+        // Blender passes an operator's own properties to `description(cls, context, properties)`,
+        // not the `OperatorProperties` of the stub. Only the body sees them: callers and the
+        // override check keep the parent's type.
+        if position == 2
+            && function.node(&module).name.id == "description"
+            && let Some(class) = defining_class(db, definition)
+            && let Some(properties) = class_properties_type(db, env, file, class)
+        {
+            return Some(properties);
+        }
         return types.positional(position);
     }
     if parameters
