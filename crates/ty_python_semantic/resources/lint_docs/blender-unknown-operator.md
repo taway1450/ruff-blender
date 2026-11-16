@@ -2,10 +2,11 @@
 
 Checks the operator idnames given as strings to Blender's functions that take one
 (`layout.operator(...)`, `operator_menu_hold`, `operator_menu_enum`, `operator_enum`,
-`keymap_items.new(...)`, `operator_properties_last`, `Gizmo.target_set_operator`,
-`WorkSpaceTool.operator_properties`, `Macro.define`) and in the `bl_keymap` of a tool, for an idname
-that names neither an operator the add-on registers nor one of Blender's own. Both forms are looked
-up as Blender does: `"object.select_all"` and `"OBJECT_OT_select_all"`.
+`template_popup_confirm`, `keymap_items.new(...)`, `operator_properties_last`,
+`Gizmo.target_set_operator`, `WorkSpaceTool.operator_properties`, `Macro.define`) and in the
+`bl_keymap` of a tool, for an idname that names neither an operator the add-on registers nor one of
+Blender's own. Both forms are looked up as Blender does: `"object.select_all"` and
+`"OBJECT_OT_select_all"`. A conditional idname (`"a" if c else "b"`) is checked for each operator.
 
 Another add-on's operator counts as unknown. When `register()` does something the checker cannot
 follow, or the file belongs to no add-on, nothing is reported: the operator may be registered where

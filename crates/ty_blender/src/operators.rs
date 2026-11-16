@@ -52,11 +52,14 @@ pub struct Sink {
     pub enum_property: bool,
 }
 
-pub const SINKS: [Sink; 9] = [
+pub const SINKS: [Sink; 10] = [
     Sink::new("UILayout", "operator", SinkResult::Properties),
     Sink::new("UILayout", "operator_menu_hold", SinkResult::Properties),
     Sink::new("UILayout", "operator_menu_enum", SinkResult::Properties).with_enum_property(),
     Sink::new("UILayout", "operator_enum", SinkResult::Unchanged).with_enum_property(),
+    // `template_popup_confirm("", ...)` (no operator, only a cancel button) is valid: an empty
+    // idname names no operator, so it is neither refined nor reported.
+    Sink::new("UILayout", "template_popup_confirm", SinkResult::Properties),
     Sink::new(
         "WindowManager",
         "operator_properties_last",
