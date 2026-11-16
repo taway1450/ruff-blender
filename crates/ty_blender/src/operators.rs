@@ -110,6 +110,14 @@ pub struct OperatorIdname {
 }
 
 impl OperatorIdname {
+    /// The idname of the operator `name` in the category `category`, both in the Python form.
+    pub fn new(category: impl Into<String>, name: impl Into<String>) -> Self {
+        OperatorIdname {
+            category: category.into(),
+            name: name.into(),
+        }
+    }
+
     /// The idname a class registers with: its `bl_idname` in the Python form (`category.name`),
     /// when Blender accepts it.
     pub fn from_bl_idname(idname: &str) -> Option<Self> {

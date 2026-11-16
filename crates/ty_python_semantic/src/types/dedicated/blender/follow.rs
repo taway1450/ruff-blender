@@ -7,7 +7,7 @@
 
 use indexmap::IndexSet;
 use ruff_db::parsed::{ParsedModuleRef, parsed_module};
-use ruff_python_ast::Expr;
+use ruff_python_ast::{self as ast, Expr};
 use ty_module_resolver::{ModuleName, file_to_module, resolve_module_confident};
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::place::ScopedPlaceId;
@@ -76,6 +76,20 @@ pub(super) fn registration_argument_type<'db>(
     }
 }
 
+/// Whether `function` is decorated with `@classmethod`, by the decorator's name.
+///
+/// The registration walk runs before inference and must not infer anything in the add-on, so it
+/// cannot ask ty what the decorator evaluates to, as the override checks do: a `classmethod`
+/// rebound in the module is taken for the builtin.
+pub(super) fn is_classmethod(function: &ast::StmtFunctionDef) -> bool {
+    function.decorator_list.iter().any(|decorator| {
+        decorator
+            .expression
+            .as_name_expr()
+            .is_some_and(|decorator| decorator.id.as_str() == "classmethod")
+    })
+}
+
 /// The class whose body defines the classmethod `scope`, when `argument` is the name of its first
 /// parameter.
 fn classmethod_class<'db>(
@@ -94,13 +108,7 @@ fn classmethod_class<'db>(
         .iter()
         .chain(&parameters.args)
         .next()?;
-    let is_classmethod = function.decorator_list.iter().any(|decorator| {
-        decorator
-            .expression
-            .as_name_expr()
-            .is_some_and(|decorator| decorator.id.as_str() == "classmethod")
-    });
-    if !is_classmethod || first.parameter.name.id != name.id {
+    if !is_classmethod(function) || first.parameter.name.id != name.id {
         return None;
     }
     let index = semantic_index(db, scope.program_file(db));

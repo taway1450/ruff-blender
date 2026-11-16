@@ -29,7 +29,7 @@ use ruff_python_ast::name::Name;
 use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_text_size::{Ranged, TextRange, TextSize};
 use rustc_hash::{FxHashMap, FxHashSet};
-use ty_blender::is_script_test;
+use ty_blender::{is_script_test, registration_classmethod};
 use ty_module_resolver::{ImportingFile, ModuleName, file_to_module};
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::place::ScopedPlaceId;
@@ -45,7 +45,7 @@ use crate::types::{StaticClassLiteral, Type};
 use super::addon::is_first_party;
 use super::evaluate::{Evaluator, PropertyValue};
 use super::follow::{
-    Resolved, imported_definitions, module_by_name, registration_argument_type,
+    Resolved, imported_definitions, is_classmethod, module_by_name, registration_argument_type,
     resolve_expression, resolve_name_in,
 };
 use super::index::{AddonInProgram, RegisteredProperty, accepts_registered_properties};
@@ -2425,7 +2425,9 @@ impl<'db> Walker<'db> {
     }
 
     /// The `register()` or `unregister()` classmethod that `register_class` or `unregister_class`
-    /// runs, as Cycles assigns `Scene.cycles` in one: a method of an add-on's `PropertyGroup`.
+    /// runs, as Cycles assigns `Scene.cycles` in one: a classmethod of an add-on's
+    /// `PropertyGroup` ([`registration_classmethod`]). Blender calls it without arguments, so a
+    /// plain method `register(self)` fails before its body runs.
     fn class_method(
         &mut self,
         register: bool,
@@ -2433,17 +2435,21 @@ impl<'db> Walker<'db> {
         named_at: Site,
     ) -> Option<Definition<'db>> {
         let db = self.db;
-        if is_bpy_types_class(db, class)
-            || !is_first_party(db, class.program_file(db))
-            || !bpy_types_bases(db, class).any(|base| base == "PropertyGroup")
-        {
+        if is_bpy_types_class(db, class) || !is_first_party(db, class.program_file(db)) {
             return None;
         }
-        let name = Name::new_static(if register { "register" } else { "unregister" });
-        match self.attribute(Value::Class(class, named_at), &name, named_at) {
-            Value::Function(method) => Some(method),
-            _ => None,
-        }
+        let name = bpy_types_bases(db, class)
+            .find_map(|base| registration_classmethod(base, register))?;
+        let Value::Function(method) =
+            self.attribute(Value::Class(class, named_at), &Name::new_static(name), named_at)
+        else {
+            return None;
+        };
+        let DefinitionKind::Function(function) = method.kind(db) else {
+            return None;
+        };
+        let module = parsed_module(db, method.python_file(db)).load(db);
+        is_classmethod(function.node(&module)).then_some(method)
     }
 
     /// Run what `register_classes_factory` or `register_submodule_factory` made, as Blender's own

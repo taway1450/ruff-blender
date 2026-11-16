@@ -60,6 +60,24 @@ impl IdnameFamily {
     }
 }
 
+/// The classmethod that `register_class` (`register` true) or `unregister_class` runs on a class
+/// derived from the `bpy.types` class `root`, where an add-on assigns the settings of a group, as
+/// Cycles assigns `Scene.cycles`:
+///
+/// ```python
+/// class CyclesRenderSettings(bpy.types.PropertyGroup):
+///     @classmethod
+///     def register(cls):
+///         bpy.types.Scene.cycles = PointerProperty(type=cls)
+/// ```
+///
+/// Blender calls `cls.register()` without arguments after registering any class, and
+/// `cls.unregister()` before unregistering it (`pyrna_register_class`, `pyrna_unregister_class`);
+/// only a `PropertyGroup`'s are followed, the ones that assign properties.
+pub fn registration_classmethod(root: &str, register: bool) -> Option<&'static str> {
+    (root == "PropertyGroup").then_some(if register { "register" } else { "unregister" })
+}
+
 /// The longest operator idname Blender accepts in its Python form (`OP_MAX_PY_IDNAME`).
 const OPERATOR_IDNAME_MAX: usize = 60;
 
