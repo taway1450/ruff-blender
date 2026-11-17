@@ -1,5 +1,5 @@
 use crate::glob::{ExcludeFilter, IncludeExcludeFilter, IncludeFilter, PortableGlobKind};
-use crate::metadata::blender::{BlenderOptions, Strictness};
+use crate::metadata::blender::{self, BlenderOptions};
 use crate::metadata::pyproject::{ResolveRequiresPythonError, resolve_requires_python_lower_bound};
 use crate::metadata::python_version::SupportedPythonVersion;
 use crate::metadata::settings::{OverrideSettings, SrcSettings};
@@ -43,7 +43,7 @@ use ty_module_resolver::{
 use ty_python_core::platform::PythonPlatform;
 use ty_python_core::program::{MisconfigurationStrategy, ProgramSettings, PythonEnvironmentError};
 use ty_python_semantic::lint::{Level, LintRegistry, LintSource, RuleSelection};
-use ty_python_semantic::types::blender_rule_category;
+use ty_python_semantic::types::BlenderRuleCategory;
 use ty_python_semantic::{
     AnalysisSettings, PythonEnvironment, PythonVersionFileSource, PythonVersionSource,
     PythonVersionWithSource, ReturnTypeInference, SitePackagesDiscoveryError, SitePackagesPaths,
@@ -98,9 +98,8 @@ pub struct Options {
     /// The keys are either rule names or `all` to set a default severity for all rules.
     /// See [the rules documentation](https://ty.dev/rules) for a list of all available rules.
     ///
-    /// The Blender rule categories `blender-assumptions`, `blender-implied-narrowings` and
-    /// `blender-imprecise-annotations` set the severity of all the rules of a category: a rule's
-    /// own name takes precedence over its category, and a category over `all`.
+    /// A Blender rule category (`blender-assumptions`, `blender-implied-narrowings`,
+    /// `blender-imprecise-annotations`) sets all its rules, below a rule's own name and above `all`.
     ///
     /// Valid severities are:
     ///
@@ -227,14 +226,13 @@ impl Options {
             rules.inner.sort_by_cached_key(|name, _| {
                 if name.as_str() == "all" {
                     0
-                } else if blender_rule_category(name).is_some() {
-                    1
                 } else if registry.is_alias(name) {
-                    2
+                    1
                 } else {
-                    3
+                    2
                 }
             });
+            rules.inner.sort_by_cached_key(|name, _| blender::selector_rank(name));
         };
 
         if let Some(rules) = &mut self.rules {
@@ -247,6 +245,7 @@ impl Options {
                 }
             }
         }
+        blender::add_strictness_preset(self, registry);
     }
 
     pub fn deserialize_with<'de, D>(
@@ -581,8 +580,7 @@ impl Options {
         strategy: &Strategy,
     ) -> Result<(Settings, Vec<OptionDiagnostic>), Strategy::Error<ToSettingsError>> {
         let mut diagnostics = Vec::new();
-        let strictness = BlenderOptions::strictness(self.blender.as_ref());
-        let rules = self.rules.or_default().to_rule_selection(db, strictness);
+        let rules = self.rules.or_default().to_rule_selection(db);
 
         let terminal_options = self.terminal.or_default();
         let terminal = TerminalSettings {
@@ -686,7 +684,6 @@ impl Options {
             let override_instance = override_option.to_override(
                 db,
                 project_root,
-                BlenderOptions::strictness(self.blender.as_ref()),
                 self.rules.as_ref(),
                 self.analysis.as_ref(),
                 diagnostics,
@@ -1374,7 +1371,7 @@ impl Rules {
     fn lint(&self, db: &dyn Db, diagnostics: &mut Vec<OptionDiagnostic>) {
         let registry = db.lint_registry();
         for name in self.inner.keys() {
-            if name.as_str() == "all" || blender_rule_category(name).is_some() {
+            if name.as_str() == "all" || BlenderRuleCategory::from_name(name).is_some() {
                 continue;
             }
             let diagnostic = match registry.get(name) {
@@ -1402,19 +1399,11 @@ impl Rules {
         }
     }
 
-    pub(crate) fn to_rule_selection(
-        &self,
-        db: &dyn Db,
-        strictness: Option<Strictness>,
-    ) -> RuleSelection {
+    pub(crate) fn to_rule_selection(&self, db: &dyn Db) -> RuleSelection {
         let registry = db.lint_registry();
 
         // Initialize the selection with the defaults
         let mut selection = RuleSelection::from_registry(registry);
-        // The `[blender] strictness` preset replaces the defaults of the Blender rule categories.
-        strictness
-            .unwrap_or_default()
-            .apply(&mut selection, registry);
 
         for (rule_name, level) in &self.inner {
             let source = rule_name.source();
@@ -1439,17 +1428,10 @@ impl Rules {
                 for lint in registry.lints() {
                     set_lint_level(*lint);
                 }
-            } else if let Some(category) = blender_rule_category(rule_name) {
-                for lint in category
-                    .rules
-                    .iter()
-                    .filter_map(|name| registry.get(name).ok())
-                {
-                    set_lint_level(lint);
-                }
             } else if let Ok(lint) = registry.get(rule_name) {
                 set_lint_level(lint);
             }
+            blender::category_lints(rule_name, registry).for_each(set_lint_level);
         }
 
         selection
@@ -2421,7 +2403,6 @@ impl OverrideOptions {
         &self,
         db: &dyn Db,
         project_root: &SystemPath,
-        strictness: Option<Strictness>,
         global_rules: Option<&Rules>,
         global_analysis: Option<&AnalysisOptions>,
         diagnostics: &mut Vec<OptionDiagnostic>,
@@ -2456,7 +2437,7 @@ impl OverrideOptions {
         }
 
         // Convert merged rules to rule selection
-        let rule_selection = merged_rules.to_rule_selection(db, strictness);
+        let rule_selection = merged_rules.to_rule_selection(db);
 
         let mut merged_analysis = self.analysis.clone().unwrap_or_default();
 
@@ -2652,30 +2633,7 @@ mod schema {
 
             properties.insert("all".to_string(), all_schema.into());
 
-            for category in &ty_python_semantic::types::BLENDER_RULE_CATEGORIES {
-                let mut category_schema = schemars::Schema::default();
-                let object = category_schema.ensure_object();
-                object.insert(
-                    "title".to_string(),
-                    Value::String(format!(
-                        "set the severity level of the Blender rules: {}",
-                        category.rules.join(", ")
-                    )),
-                );
-                object.insert(
-                    "description".to_string(),
-                    Value::String(
-                        "Configure the severity level of every rule of this Blender rule \
-                            category. Individual rule settings override it; it overrides `all`."
-                            .to_string(),
-                    ),
-                );
-                object.insert(
-                    "oneOf".to_string(),
-                    Value::Array(vec![level_schema.clone().into()]),
-                );
-                properties.insert(category.name.to_string(), category_schema.into());
-            }
+            properties.extend(crate::metadata::blender::category_schemas(&level_schema));
 
             let mut schema = schemars::json_schema!({ "type": "object" });
             let object = schema.ensure_object();

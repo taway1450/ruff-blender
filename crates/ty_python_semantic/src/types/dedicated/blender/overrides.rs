@@ -378,7 +378,8 @@ fn widen_array_outputs<'db>(
     ty
 }
 
-/// Whether `ty` is a string literal or a union of them: the item type of an enum set.
+/// Whether `ty` is a string literal or a union of them: an enum value, or the item type of an enum
+/// set.
 pub(super) fn is_string_literals(db: &dyn Db, ty: Type<'_>) -> bool {
     let is_string = |ty: Type<'_>| {
         ty.as_literal_value()

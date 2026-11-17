@@ -1,9 +1,9 @@
 //! The `[blender]` options: how strict the Blender rules that accept code and only report it are.
 //!
-//! Those rules come in three categories (`ty_python_semantic::types::BLENDER_RULE_CATEGORIES`):
-//! Assumptions, Implied narrowings and Imprecise annotations. A category's name sets the level of
-//! all its rules in `[rules]`, and the `strictness` preset sets the levels of all three categories
-//! at once, below every explicit level:
+//! Those rules come in three categories ([`BlenderRuleCategory`]): Assumptions, Implied narrowings
+//! and Imprecise annotations. A category's name sets the level of all its rules in `[rules]`, and
+//! the `strictness` preset sets the levels of all three categories at once, below every explicit
+//! level, `all` included:
 //!
 //! | Preset | Assumptions | Implied narrowings | Imprecise annotations |
 //! |---|---|---|---|
@@ -11,13 +11,14 @@
 //! | `default` | warn | warn | warn |
 //! | `strict` | error | error | error |
 
-use ruff_db::diagnostic::Severity;
 use ruff_macros::{Combine, OptionsMetadata};
 use ruff_ranged_value::RangedValue;
 use serde::{Deserialize, Serialize};
 use ty_combine::Combine;
-use ty_python_semantic::lint::{Level, LintRegistry, LintSource, RuleSelection};
-use ty_python_semantic::types::{BLENDER_RULE_CATEGORIES, BlenderRuleCategory};
+use ty_python_semantic::lint::{Level, LintId, LintRegistry};
+use ty_python_semantic::types::BlenderRuleCategory;
+
+use crate::metadata::options::{Options, Rules};
 
 #[derive(
     Debug,
@@ -55,14 +56,6 @@ pub struct BlenderOptions {
     pub strictness: Option<RangedValue<Strictness>>,
 }
 
-impl BlenderOptions {
-    pub(crate) fn strictness(options: Option<&Self>) -> Option<Strictness> {
-        options
-            .and_then(|options| options.strictness.as_deref())
-            .copied()
-    }
-}
-
 /// A `[blender] strictness` preset.
 #[derive(
     Debug, Default, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize, get_size2::GetSize,
@@ -81,31 +74,89 @@ pub enum Strictness {
 
 impl Strictness {
     /// The level of `category` under this preset.
-    fn level(self, category: &BlenderRuleCategory) -> Level {
-        match (self, category.name) {
+    fn level(self, category: BlenderRuleCategory) -> Level {
+        match (self, category) {
             (Strictness::Strict, _) => Level::Error,
-            (Strictness::Lenient, "blender-assumptions") | (Strictness::Default, _) => Level::Warn,
+            (Strictness::Lenient, BlenderRuleCategory::Assumptions) | (Strictness::Default, _) => {
+                Level::Warn
+            }
             (Strictness::Lenient, _) => Level::Ignore,
         }
     }
+}
 
-    /// Sets the level of every rule of the Blender rule categories in `selection` to this preset's,
-    /// before the explicit levels of `[rules]` are applied over it.
-    pub(crate) fn apply(self, selection: &mut RuleSelection, registry: &LintRegistry) {
-        for category in &BLENDER_RULE_CATEGORIES {
-            let level = self.level(category);
-            for lint in category
-                .rules
+/// Writes the `[blender] strictness` preset of `options` into its `[rules]`, as a level for every
+/// rule of the Blender rule categories placed ahead of all other selectors, `all` included, so
+/// that every explicit level takes precedence over it. Called once the selectors are in their
+/// order of precedence, as the `[rules]` of `[[overrides]]` and of other configuration files are
+/// merged after these.
+///
+/// Without a preset, the rules' default levels are the `default` preset's.
+pub(crate) fn add_strictness_preset(options: &mut Options, registry: &LintRegistry) {
+    let Some(strictness) = options
+        .blender
+        .as_ref()
+        .and_then(|blender| blender.strictness.clone())
+    else {
+        return;
+    };
+    let preset: Rules = BlenderRuleCategory::ALL
+        .into_iter()
+        .flat_map(|category| {
+            let level = strictness.clone().map_value(|preset| preset.level(category));
+            category
+                .rules()
                 .iter()
-                .filter_map(|name| registry.get(name).ok())
-            {
-                match Severity::try_from(level) {
-                    Ok(severity) => selection.enable(lint, severity, LintSource::Default),
-                    Err(()) => selection.disable(lint),
-                }
-            }
-        }
+                .filter(|name| registry.get(name).is_ok())
+                .map(move |name| (level.clone().map_value(|_| (*name).to_string()), level.clone()))
+        })
+        .collect();
+    options.rules = Some(match options.rules.take() {
+        Some(rules) => rules.combine(preset),
+        None => preset,
+    });
+}
+
+/// The precedence of a `[rules]` selector among `all` (0), a Blender rule category (1) and the
+/// rule names (2). A stable sort by it after upstream's keeps aliases ahead of the rule names.
+pub(crate) fn selector_rank(name: &str) -> u8 {
+    if name == "all" {
+        0
+    } else if BlenderRuleCategory::from_name(name).is_some() {
+        1
+    } else {
+        2
     }
+}
+
+/// The `[rules]` schema entries of the Blender rule categories, each taking a `level_schema`.
+#[cfg(feature = "schemars")]
+pub(crate) fn category_schemas(
+    level_schema: &schemars::Schema,
+) -> impl Iterator<Item = (String, serde_json::Value)> + '_ {
+    BlenderRuleCategory::ALL.into_iter().map(move |category| {
+        let schema = schemars::json_schema!({
+            "title": format!(
+                "set the severity level of the Blender rules: {}",
+                category.rules().join(", ")
+            ),
+            "description": "Configure the severity level of every rule of this Blender rule \
+                category. Individual rule settings override it; it overrides `all`.",
+            "oneOf": [level_schema],
+        });
+        (category.name().to_string(), schema.into())
+    })
+}
+
+/// The rules of the Blender rule category `name` names, none when it names no category.
+pub(crate) fn category_lints<'a>(
+    name: &str,
+    registry: &'a LintRegistry,
+) -> impl Iterator<Item = LintId> + 'a {
+    BlenderRuleCategory::from_name(name)
+        .into_iter()
+        .flat_map(|category| category.rules().iter())
+        .filter_map(|name| registry.get(name).ok())
 }
 
 impl Combine for Strictness {
