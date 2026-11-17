@@ -43,7 +43,7 @@ use crate::types::context::InferContext;
 use crate::types::infer::{function_known_decorators, nearest_enclosing_class};
 use crate::types::signatures::CallableSignature;
 use crate::types::{
-    ClassType, KnownClass, MemberLookupPolicy, Parameter, Parameters, Signature,
+    ClassType, KnownClass, LiteralValueType, MemberLookupPolicy, Parameter, Parameters, Signature,
     StaticClassLiteral, Type, UnionType,
 };
 use crate::{Db, ProgramEnvironment};
@@ -52,6 +52,7 @@ use super::index::file_facts;
 use super::lints::BLENDER_INVALID_OVERRIDE;
 use super::operator_properties::class_properties_type;
 use super::symbols::{bpy_types_bases, bpy_types_class_name, is_bpy_types_class};
+use super::vector::module_class;
 
 /// The root whose callbacks `class` has: the first `bpy.types` class in its method resolution
 /// order that has callbacks (`Node` for a `ShaderNode` subclass). `None` for a `bpy.types` class
@@ -279,7 +280,8 @@ fn positional_only_signature<'db>(
     .with_definition(signature.definition)
 }
 
-/// `ty` with each `bpy_prop_array[T]` in it widened to `bpy_prop_array[T] | Sequence[T]`.
+/// `ty` with each `bpy_prop_array[T]` in it widened to `bpy_prop_array[T] | Sequence[T]`, also
+/// inside a fixed-length tuple.
 ///
 /// Blender accepts any sequence of the right length where a callback returns an array, so this
 /// is what an override's return values and return annotation are checked with. The stubs'
@@ -291,6 +293,14 @@ fn positional_only_signature<'db>(
 ///     def draw_color(self, context, node):  # `-> bpy_prop_array[float]` for callers
 ///         return (1.0, 1.0, 1.0, 1.0)  # fine: a `Sequence[float]`
 /// ```
+///
+/// A callback with several outputs returns them as a tuple, each output widened on its own:
+/// `UIList.filter_items` returns `(flags, order)`, two lists of ints.
+///
+/// An enum-set output, `set[Literal[...]]`, is widened to `collections.abc.Set[Literal[...]]`:
+/// Blender reads any set of the enum's names, so an override may return or be annotated with a
+/// set of fewer of them (`-> set[Literal["FINISHED"]]`) or a `frozenset`, which the invariant
+/// `set` would reject. A name that is not one of the enum's stays an error.
 fn widen_array_outputs<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
@@ -298,6 +308,27 @@ fn widen_array_outputs<'db>(
 ) -> Type<'db> {
     if let Type::Union(union) = ty {
         return union.map(db, env, |element| widen_array_outputs(db, env, *element));
+    }
+    if let Some(spec) = ty.exact_tuple_instance_spec(db)
+        && let Some(tuple) = spec.as_fixed_length()
+    {
+        let elements: Vec<Type<'db>> = tuple
+            .all_elements()
+            .iter()
+            .map(|element| widen_array_outputs(db, env, *element))
+            .collect();
+        return Type::heterogeneous_tuple(db, env, elements);
+    }
+    if let Some((class, specialization)) = ty.class_specialization(db, env)
+        && class.is_known(db, KnownClass::Set)
+        && let [item] = specialization.types(db)
+        && is_string_literals(db, *item)
+        && let Some(abstract_set) = module_class(db, env, "typing", "AbstractSet")
+    {
+        let abstract_set = abstract_set.apply_specialization(db, |generic_context| {
+            generic_context.specialize(db, vec![*item])
+        });
+        return Type::instance(db, env, abstract_set);
     }
     if let Some((class, specialization)) = ty.class_specialization(db, env)
         && bpy_types_class_name(db, class) == Some("bpy_prop_array")
@@ -307,6 +338,19 @@ fn widen_array_outputs<'db>(
         return UnionType::from_two_elements(db, env, ty, sequence);
     }
     ty
+}
+
+/// Whether `ty` is a string literal or a union of them: the item type of an enum set.
+fn is_string_literals(db: &dyn Db, ty: Type<'_>) -> bool {
+    let is_string = |ty: Type<'_>| {
+        ty.as_literal_value()
+            .and_then(LiteralValueType::as_string)
+            .is_some()
+    };
+    match ty {
+        Type::Union(union) => union.elements(db).iter().all(|element| is_string(*element)),
+        ty => is_string(ty),
+    }
 }
 
 /// What an override of a Blender callback takes from its parent where it has no annotation.

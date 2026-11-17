@@ -17,8 +17,9 @@
 //! depends on ([`BranchPath`]) and whether its order is known (`exact`). A value the walk cannot know
 //! (`getattr(...)`, `importlib.import_module(...)`, an unbound parameter) is *opaque*; the walk gives
 //! up ([`Walk::incomplete`]) only when such a value is registered, called or assigned a property to.
-//! Values from Blender or the standard library (`bpy.context`, `os.environ`) are *foreign* and never
-//! make it give up.
+//! Values from Blender or the standard library (`bpy.context`, `os.environ`) are *foreign*: they make
+//! it give up only when they are registered (`register_class(type(...))`, a class taken from a dict's
+//! `.values()`), since the walk can't tell which class they are.
 
 use std::rc::Rc;
 
@@ -446,6 +447,8 @@ enum Val<'db> {
     },
     /// `a if c else b`.
     Either(TextSize, Box<[Val<'db>]>),
+    /// A literal that is never a class (`None`, `True`, a number).
+    Literal,
     /// Something outside first-party code, with its dotted path when it is known.
     Foreign(Option<Box<str>>),
     Opaque(TextRange),
@@ -1033,6 +1036,11 @@ impl<'db> IrBuilder<'db, '_> {
             Expr::StringLiteral(string) => Val::Str(Name::new(string.value.to_str())),
             Expr::Subscript(_) => Val::Opaque(expression.range()),
             Expr::Named(named) => self.expression(&named.value, scope),
+            Expr::NoneLiteral(_)
+            | Expr::BooleanLiteral(_)
+            | Expr::NumberLiteral(_)
+            | Expr::BytesLiteral(_)
+            | Expr::EllipsisLiteral(_) => Val::Literal,
             _ => Val::Foreign(None),
         }
     }
@@ -1589,6 +1597,8 @@ enum Value<'db> {
     Seq(Rc<[Element<'db>]>),
     /// What a factory returned: both functions (`half` is `None`) or one of them.
     Factory(Rc<Factory<'db>>, Option<Half>),
+    /// A literal that is never a class (`None`): registering it is never the walk's blind spot.
+    Literal,
     Foreign(Option<Rc<str>>),
     Opaque(Site),
 }
@@ -1990,6 +2000,7 @@ impl<'db> Walker<'db> {
                     Value::Opaque(frame.site(db, TextRange::empty(*offset)))
                 }
             }
+            Val::Literal => Value::Literal,
             Val::Foreign(path) => Value::Foreign(path.as_deref().map(Rc::from)),
             Val::Opaque(range) => Value::Opaque(frame.site(db, *range)),
         }
@@ -2271,7 +2282,9 @@ impl<'db> Walker<'db> {
                                 );
                             }
                             Some(Value::Opaque(site)) => self.give_up(*site),
-                            None => self.give_up(site),
+                            // A value the walk can't follow to a class (`type(...)`, an item of a
+                            // dict's `.values()`) may be any class.
+                            Some(Value::Foreign(_)) | None => self.give_up(site),
                             _ => {}
                         }
                         Value::Foreign(None)
@@ -2482,6 +2495,7 @@ impl<'db> Walker<'db> {
                             element.exact,
                         ),
                         Value::Opaque(site) => self.give_up(*site),
+                        Value::Foreign(_) => self.give_up(frame.site(db, range)),
                         _ => {}
                     }
                 }
@@ -2627,7 +2641,7 @@ fn bind<'db>(db: &'db dyn Db, target: &Target, value: Value<'db>, frame: &mut Fr
                     frame,
                 );
             }
-            Value::Foreign(_) => {
+            Value::Foreign(_) | Value::Literal => {
                 for target in targets {
                     bind(db, target, Value::Foreign(None), frame);
                 }
@@ -2656,7 +2670,7 @@ fn module_member<'db>(
     let defined = !find_symbol_in_scope(db, global_scope(db, module), name).is_empty();
     if defined {
         let value = module_name_value(db, module, name, range);
-        if !matches!(value, Val::Foreign(None)) || is_first_party(db, module) {
+        if !matches!(value, Val::Foreign(None) | Val::Literal) || is_first_party(db, module) {
             return value;
         }
     }

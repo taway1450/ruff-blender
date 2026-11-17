@@ -186,6 +186,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         }
 
         let result = self.infer_subscript_load_impl(value_ty, subscript)?;
+        let result = self.blender_subscript_type(subscript, result);
         if let ast::Expr::Dict(dict) = subscript.value.as_ref()
             && let Some((_, values)) =
                 dict_literal_key_value_types(self.db(), self.program_environment(), dict, |expr| {

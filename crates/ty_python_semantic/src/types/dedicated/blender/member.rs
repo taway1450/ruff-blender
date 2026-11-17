@@ -159,6 +159,20 @@ fn registered_on<'db>(
         .find(|property| property.owner == owner && property.name == name)
 }
 
+/// The registration of `name` on the first class in the method resolution order of `class` that
+/// has one in `file`'s add-on.
+fn registration_on_class<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    class: StaticClassLiteral<'db>,
+    name: &str,
+) -> Option<&'db RegisteredProperty<'db>> {
+    class.iter_mro(db, None).find_map(|base| match base {
+        ClassBase::Class(base) => registered_on(db, file, base.class_literal(db).as_static()?, name),
+        _ => None,
+    })
+}
+
 /// Whether some class in the method resolution order of `class` has a registration of `name` in
 /// `file`'s add-on. This is what makes `bpy.types.Scene.my_value` a known name of the class object,
 /// for the registration itself and for `del` in `unregister()`.
@@ -462,13 +476,15 @@ pub(crate) fn on_load<'db>(
 }
 
 /// The callbacks in which Blender gives `self.layout` a layout, by the `bpy.types` class that
-/// declares them. Elsewhere (`poll`, a timer, `AddonPreferences.draw`) it may be `None`.
-const DRAW_CALLBACKS: [(&str, &[&str]); 4] = [
-    ("Panel", &["draw", "draw_header", "draw_header_preset"]),
-    ("Menu", &["draw"]),
-    ("Header", &["draw"]),
-    ("Operator", &["draw"]),
-];
+/// declares them. Elsewhere (`poll`, a timer, `AddonPreferences.draw`, an Operator's `execute`) it
+/// may be `None`.
+const DRAW_CALLBACKS: [(&str, &[&str]); 1] = [("Operator", &["draw"])];
+
+/// The `bpy.types` classes whose instances Python only ever sees while Blender draws them: a Panel,
+/// Menu or Header instance exists only in its `draw` callbacks (`poll` is a classmethod), so every
+/// instance method of such a class, `draw` or a helper it calls on `self`, runs while the layout is
+/// set.
+const DRAWN_CLASSES: [&str; 3] = ["Panel", "Menu", "Header"];
 
 /// Whether `attribute` reads the layout of the instance being drawn: its receiver is the first
 /// parameter (`self`) of a draw callback ([`is_draw_callback`]), in its body or in a comprehension
@@ -499,7 +515,8 @@ fn is_drawn_layout<'db>(
 }
 
 /// Whether the function scope `function` is a draw callback: a method, in the body of a class
-/// deriving from the `bpy.types` class that declares the callback ([`DRAW_CALLBACKS`]).
+/// deriving from the `bpy.types` class that declares the callback ([`DRAW_CALLBACKS`]), or any
+/// instance method of a class deriving from a Panel, Menu or Header ([`DRAWN_CLASSES`]).
 ///
 /// The callback is found by its name, not by registration: an unregistered base's `draw` is
 /// inherited by the registered subclass that Blender calls it on. Since the hook changes the type
@@ -515,14 +532,24 @@ fn is_draw_callback<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> bool {
         return false;
     };
     let module = parsed_module(db, file.python_file(db)).load(db);
-    let name = node.node(&module).name.as_str();
+    let node = node.node(&module);
+    let name = node.name.as_str();
     let Some(class) = nearest_enclosing_class(db, index, function) else {
         return false;
     };
+    let is_instance_method = !node.decorator_list.iter().any(|decorator| {
+        decorator
+            .expression
+            .as_name_expr()
+            .is_some_and(|decorator| {
+                matches!(decorator.id.as_str(), "classmethod" | "staticmethod")
+            })
+    });
     bpy_types_bases(db, class).any(|base| {
-        DRAW_CALLBACKS
-            .iter()
-            .any(|(root, callbacks)| *root == base && callbacks.contains(&name))
+        (is_instance_method && DRAWN_CLASSES.contains(&base))
+            || DRAW_CALLBACKS
+                .iter()
+                .any(|(root, callbacks)| *root == base && callbacks.contains(&name))
     })
 }
 
@@ -618,6 +645,25 @@ pub(in crate::types) fn on_store<'db>(
             member: ClassAttributeWriteMember::Unresolved { .. },
         } if class_receiver(db, object_ty)
             .is_some_and(|class| is_registered_on_class(db, file, class, attribute)) =>
+        {
+            AttributeWriteRequirement::Unconstrained
+        }
+        // The stubs, generated from a running Blender, declare the properties its startup scripts
+        // register (`WindowManager.preset_name: str`): the registration itself is the write.
+        AttributeWriteRequirement::Class {
+            object_ty,
+            member:
+                ClassAttributeWriteMember::ClassAttribute(
+                    FallbackAttributeWriteRequirement::AssignableTo { ty, .. },
+                ),
+        } if class_receiver(db, object_ty)
+            .and_then(|class| registration_on_class(db, file, class, attribute))
+            .is_some_and(|property| {
+                property
+                    .value
+                    .value_type(db, env)
+                    .is_assignable_to(db, env, ty)
+            }) =>
         {
             AttributeWriteRequirement::Unconstrained
         }

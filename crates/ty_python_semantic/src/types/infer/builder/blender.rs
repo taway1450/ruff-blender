@@ -19,6 +19,24 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
         blender::override_parameter_type(self.db(), self.program_environment(), parameter, default)
     }
 
+    /// The type of the subscript load `subscript`, which ty inferred as `ty`: an item of
+    /// `bl_rna.properties` with a string-literal key is the `Property` subclass of the attribute's
+    /// kind (`blender::rna_property_type`).
+    pub(super) fn blender_subscript_type(
+        &self,
+        subscript: &ast::ExprSubscript,
+        ty: Type<'db>,
+    ) -> Type<'db> {
+        blender::rna_property_type(
+            self.db(),
+            self.program_environment(),
+            subscript,
+            ty,
+            |expression| self.expression_type(expression),
+        )
+        .unwrap_or(ty)
+    }
+
     /// The type of `name`, unbound where it is read, in the guarded branch of an add-on's reload
     /// guard (`blender::reload_guard_type`).
     pub(super) fn blender_reload_guard_type(&self, name: &ast::ExprName) -> Option<Type<'db>> {

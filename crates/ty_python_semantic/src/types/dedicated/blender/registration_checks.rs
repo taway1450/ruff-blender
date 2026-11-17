@@ -96,15 +96,18 @@ pub(super) fn registration_findings<'db>(
 struct AddonClasses<'db> {
     /// Each class with the file and the range of its name.
     classes: Vec<(StaticClassLiteral<'db>, Site)>,
-    /// The classes that another of them derives from. Blender never needs them registered: a
-    /// registered subclass copies what it inherits.
+    /// The classes that another of them derives from, or that a `type(name, (C, ...), namespace)`
+    /// call in the add-on makes a class from. Blender never needs them registered: a registered
+    /// subclass copies what it inherits.
     bases: FxHashSet<StaticClassLiteral<'db>>,
 }
 
 impl<'db> AddonClasses<'db> {
     fn new(db: &'db dyn Db, key: AddonInProgram<'db>) -> Self {
         let mut classes = Vec::new();
+        let mut type_call_bases = Vec::new();
         for file in key.files(db) {
+            type_call_bases.extend(file_facts(db, file).type_call_bases.iter().copied());
             for class in &file_facts(db, file).classes {
                 classes.push((
                     class.class,
@@ -115,7 +118,8 @@ impl<'db> AddonClasses<'db> {
                 ));
             }
         }
-        let bases = only_bases(db, classes.iter().map(|(class, _)| *class));
+        let mut bases = only_bases(db, classes.iter().map(|(class, _)| *class));
+        bases.extend(type_call_bases);
         AddonClasses { classes, bases }
     }
 
