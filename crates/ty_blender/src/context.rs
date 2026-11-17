@@ -106,6 +106,27 @@ const MENU_PREFIXES: [(&str, &str); 21] = [
     ("ASSETBROWSER", "FILE_BROWSER"),
 ];
 
+/// The context path that the `bpy.types` function `class.function`, called with the context,
+/// checks when it returns true: the member chain from the context that is then not `None`.
+///
+/// `XrSessionState.is_running(context)` is true only while the window manager's XR session
+/// exists (`WM_xr_session_exists`), and `window_manager.xr_session_state` is that session's state
+/// (`rna_WindowManager_xr_session_state_get`), `None` only without one.
+pub fn checked_by_call(class: &str, function: &str) -> Option<&'static [&'static str]> {
+    CHECKED_BY_CALL
+        .iter()
+        .find(|(known_class, known_function, _)| {
+            *known_class == class && *known_function == function
+        })
+        .map(|(_, _, path)| *path)
+}
+
+const CHECKED_BY_CALL: [(&str, &str, &[&str]); 1] = [(
+    "XrSessionState",
+    "is_running",
+    &["window_manager", "xr_session_state"],
+)];
+
 #[cfg(test)]
 mod tests {
     use super::{
