@@ -36,9 +36,12 @@
 //!   checks compare them with and the types they take from their parent;
 //! - [`registration_checks`]: the registration checks, what Blender refuses, ignores or leaves
 //!   behind when it runs `register()` and `unregister()`;
+//! - [`assumptions`]: the Assumptions, facts Blender keeps in ordinary use but does not guarantee,
+//!   taken as given and reported;
 //! - [`reload_guard`]: the names an add-on's reload guard (`if "bpy" in locals():`) uses.
 
 mod addon;
+mod assumptions;
 mod addon_key;
 mod bl_rna;
 mod callbacks;

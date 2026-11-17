@@ -35,6 +35,20 @@ pub fn context_guarantee(name: &str) -> Option<ContextGuarantee> {
     }
 }
 
+/// Whether the member `name` of `bpy.types.Context` is an assumed one outside Blender callbacks:
+/// `scene`, `view_layer` and `tool_settings` hold the window's or the loaded file's scene wherever
+/// Python code runs in ordinary use (a timer runs with the first window set, an app handler, a
+/// `--python` script, a test or a preset with the loaded file's scene), and are `None` only under
+/// `context.temp_override(scene=None)` or in a FileHandler's import operator run by the collection
+/// importer. While an add-on is imported or registered, `bpy.context` has no `scene` at all: it
+/// raises, which no type expresses.
+///
+/// The other Guaranteed members are left out: `preferences` and `window_manager` are never `None`
+/// in the stubs, and `blend_data` is not read outside callbacks in practice.
+pub fn is_assumed_context_member(name: &str) -> bool {
+    matches!(name, "scene" | "view_layer" | "tool_settings")
+}
+
 /// Whether Blender calls the callback `name` of the root `root` in an editor of the class's
 /// `bl_space_type`: every callback of a Panel and a Header, and of a GizmoGroup but
 /// `setup_keymap`, which runs when the key map is set up, outside any editor.
@@ -94,7 +108,10 @@ const MENU_PREFIXES: [(&str, &str); 21] = [
 
 #[cfg(test)]
 mod tests {
-    use super::{ContextGuarantee, context_guarantee, menu_space_type, runs_in_editor};
+    use super::{
+        ContextGuarantee, context_guarantee, is_assumed_context_member, menu_space_type,
+        runs_in_editor,
+    };
 
     #[test]
     fn guarantees() {
@@ -109,6 +126,15 @@ mod tests {
         );
         assert_eq!(context_guarantee("window"), None);
         assert_eq!(context_guarantee("object"), None);
+    }
+
+    #[test]
+    fn assumed_members() {
+        assert!(is_assumed_context_member("scene"));
+        assert!(is_assumed_context_member("view_layer"));
+        assert!(is_assumed_context_member("tool_settings"));
+        assert!(!is_assumed_context_member("blend_data"));
+        assert!(!is_assumed_context_member("object"));
     }
 
     #[test]

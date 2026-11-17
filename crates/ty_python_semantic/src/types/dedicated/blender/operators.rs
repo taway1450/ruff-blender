@@ -39,6 +39,7 @@ use crate::types::{
 };
 use crate::{Db, ProgramEnvironment};
 
+use super::assumptions::is_conditional_class;
 use super::classes::{derives_from, maybe_registered_classes, operator_idname};
 use super::evaluate::PropertyValue;
 use super::index::{AddonInProgram, addon_in_program, addon_index};
@@ -168,6 +169,32 @@ pub(super) fn addon_operators<'db>(
 /// The operators of the add-on `file` belongs to.
 fn operators_of<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Option<&'db AddonOperators<'db>> {
     Some(addon_operators(db, addon_in_program(db, file)?))
+}
+
+/// The operator class of the add-on of `file` that `attribute`, `bpy.ops.<category>.<name>` (or
+/// `ops.<category>.<name>`), names, when `register()` registers it only on a branch
+/// ([`super::assumptions`]). Read from the syntax: the category is a protocol, not a module.
+pub(super) fn conditional_operator<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    attribute: &ast::ExprAttribute,
+) -> Option<StaticClassLiteral<'db>> {
+    let ast::Expr::Attribute(category) = &*attribute.value else {
+        return None;
+    };
+    let is_ops = match &*category.value {
+        ast::Expr::Name(name) => name.id == "ops",
+        ast::Expr::Attribute(ops) => {
+            ops.attr.id == "ops" && matches!(&*ops.value, ast::Expr::Name(bpy) if bpy.id == "bpy")
+        }
+        _ => false,
+    };
+    if !is_ops {
+        return None;
+    }
+    let key = addon_in_program(db, file)?;
+    let operator = addon_operators(db, key).get(category.attr.as_str(), attribute.attr.as_str())?;
+    is_conditional_class(db, key, operator.class).then_some(operator.class)
 }
 
 /// The attribute `name` of the module `module`, read in `file`, when it is an operator category or

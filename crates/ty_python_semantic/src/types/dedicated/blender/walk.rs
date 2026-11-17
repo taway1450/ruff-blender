@@ -27,6 +27,7 @@ use ruff_db::files::File;
 use ruff_db::parsed::{ParsedModuleRef, parsed_module};
 use ruff_python_ast::helpers::any_over_expr;
 use ruff_python_ast::name::Name;
+use ruff_python_ast::visitor::{Visitor, walk_expr};
 use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_text_size::{Ranged, TextRange, TextSize};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -123,6 +124,11 @@ impl BranchPath {
         &self.0
     }
 
+    /// Whether the event depends on no branch.
+    pub(super) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// This path below the branches `outer`.
     fn prefixed(&self, outer: &[(BranchId, Arms)]) -> BranchPath {
         BranchPath::new(outer.iter().chain(self.0.iter()).copied())
@@ -190,6 +196,14 @@ pub(super) enum Event<'db> {
     DefineMacroStep {
         macro_class: StaticClassLiteral<'db>,
         idname: Name,
+    },
+    /// `<entry>.preferences` evaluated, where the entry is `<x>.addons[...]`, `<x>.addons.get(...)`
+    /// or a name: a candidate read of the add-on's preferences.
+    PreferencesRead {
+        site: Site,
+        /// Whether it ran in a function Blender calls later (a timer, a handler), after
+        /// `register()` returned.
+        deferred: bool,
     },
 }
 
@@ -447,6 +461,11 @@ enum Val<'db> {
     },
     /// `a if c else b`.
     Either(TextSize, Box<[Val<'db>]>),
+    /// An attribute `.preferences` that may read an add-on's preferences
+    /// ([`Event::PreferencesRead`]), at the range.
+    PreferencesRead(Box<Val<'db>>, TextRange),
+    /// A value evaluated after reads of an add-on's preferences nested in its expression.
+    WithReads(Box<[Val<'db>]>, Box<Val<'db>>),
     /// A literal that is never a class (`None`, `True`, a number).
     Literal,
     /// Something outside first-party code, with its dotted path when it is known.
@@ -474,6 +493,32 @@ enum Builtin {
     Copy,
     /// `sorted(x)`, `set(x)`: the elements, in an order the walk does not know.
     Unordered,
+}
+
+/// The attributes `.preferences` inside an expression that may read an add-on's preferences: on
+/// a subscript (`addons[KEY]`), a call (`addons.get(KEY)`) or a name. Lambdas are not entered, and
+/// neither is such an attribute's own receiver.
+#[derive(Default)]
+struct PreferencesReads<'a> {
+    reads: Vec<&'a ast::ExprAttribute>,
+}
+
+impl<'a> Visitor<'a> for PreferencesReads<'a> {
+    fn visit_expr(&mut self, expression: &'a Expr) {
+        match expression {
+            Expr::Attribute(attribute)
+                if attribute.attr.id == "preferences"
+                    && matches!(
+                        &*attribute.value,
+                        Expr::Subscript(_) | Expr::Call(_) | Expr::Name(_)
+                    ) =>
+            {
+                self.reads.push(attribute);
+            }
+            Expr::Lambda(_) => {}
+            _ => walk_expr(self, expression),
+        }
+    }
 }
 
 /// The steps of `file`. The syntax tree is dropped afterwards; only the steps are kept, so an edit
@@ -973,11 +1018,23 @@ impl<'db> IrBuilder<'db, '_> {
     fn expression(&mut self, expression: &Expr, scope: ScopeId<'db>) -> Val<'db> {
         match expression {
             Expr::Name(name) => self.name(scope, &name.id, name.range),
-            Expr::Attribute(attribute) => Val::Attribute(
-                Box::new(self.expression(&attribute.value, scope)),
-                attribute.attr.id.clone(),
-                attribute.range,
-            ),
+            Expr::Attribute(attribute) => {
+                let value = Val::Attribute(
+                    Box::new(self.expression(&attribute.value, scope)),
+                    attribute.attr.id.clone(),
+                    attribute.range,
+                );
+                if attribute.attr.id == "preferences"
+                    && matches!(
+                        &*attribute.value,
+                        Expr::Subscript(_) | Expr::Call(_) | Expr::Name(_)
+                    )
+                {
+                    Val::PreferencesRead(Box::new(value), attribute.range)
+                } else {
+                    value
+                }
+            }
             Expr::Call(call) => self.call(call, scope),
             Expr::Tuple(ast::ExprTuple { elts, .. }) | Expr::List(ast::ExprList { elts, .. }) => {
                 Val::Display {
@@ -1034,15 +1091,32 @@ impl<'db> IrBuilder<'db, '_> {
                 ]),
             ),
             Expr::StringLiteral(string) => Val::Str(Name::new(string.value.to_str())),
-            Expr::Subscript(_) => Val::Opaque(expression.range()),
+            Expr::Subscript(_) => self.with_reads(expression, scope, Val::Opaque(expression.range())),
             Expr::Named(named) => self.expression(&named.value, scope),
             Expr::NoneLiteral(_)
             | Expr::BooleanLiteral(_)
             | Expr::NumberLiteral(_)
             | Expr::BytesLiteral(_)
             | Expr::EllipsisLiteral(_) => Val::Literal,
-            _ => Val::Foreign(None),
+            _ => self.with_reads(expression, scope, Val::Foreign(None)),
         }
+    }
+
+    /// `value`, the value of `expression` whose parts the walk does not model (a comparison, a
+    /// subscript, an f-string, ...), evaluated after the reads of an add-on's preferences inside it
+    /// (`entry.preferences is None`), so that they are still seen in order.
+    fn with_reads(&mut self, expression: &Expr, scope: ScopeId<'db>, value: Val<'db>) -> Val<'db> {
+        let mut finder = PreferencesReads::default();
+        walk_expr(&mut finder, expression);
+        if finder.reads.is_empty() {
+            return value;
+        }
+        let reads = finder
+            .reads
+            .into_iter()
+            .map(|attribute| self.expression(&Expr::Attribute(attribute.clone()), scope))
+            .collect();
+        Val::WithReads(reads, Box::new(value))
     }
 
     fn comprehension(
@@ -1933,6 +2007,19 @@ impl<'db> Walker<'db> {
                 Value::Seq(values.into())
             }
             Val::Starred(inner) => self.eval(inner, frame),
+            Val::WithReads(reads, inner) => {
+                for read in reads {
+                    self.eval(read, frame);
+                }
+                self.eval(inner, frame)
+            }
+            Val::PreferencesRead(inner, range) => {
+                self.record(Event::PreferencesRead {
+                    site: frame.site(db, *range),
+                    deferred: !self.exact,
+                });
+                self.eval(inner, frame)
+            }
             Val::Add(left, right) => {
                 let left = self.eval(left, frame);
                 let right = self.eval(right, frame);

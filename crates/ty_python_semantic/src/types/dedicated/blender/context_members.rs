@@ -39,7 +39,8 @@ use ruff_python_ast::name::Name;
 use ruff_python_ast::visitor::{Visitor, walk_expr};
 use ruff_python_ast::{self as ast, Expr};
 use ty_blender::{
-    ContextGuarantee, callback_of, context_guarantee, menu_space_type, runs_in_editor,
+    ContextGuarantee, OperatorIdname, callback_of, context_guarantee, is_assumed_context_member,
+    menu_space_type, runs_in_editor,
 };
 use ty_python_core::scope::ScopeId;
 use ty_python_core::{ProgramFile, global_scope, place_table, semantic_index};
@@ -50,9 +51,11 @@ use crate::types::infer::nearest_enclosing_class;
 use crate::types::{StaticClassLiteral, Type};
 use crate::{Db, ProgramEnvironment};
 
-use super::classes::{class_string, mro_classes};
+use super::classes::{class_string, mro_classes, operator_idname};
 use super::index::addon_in_program;
-use super::lints::{BLENDER_NARROWED_BY_MENU_PREFIX, BLENDER_NARROWED_BY_POPOVER};
+use super::lints::{
+    BLENDER_ASSUMED_CONTEXT_MEMBER, BLENDER_NARROWED_BY_MENU_PREFIX, BLENDER_NARROWED_BY_POPOVER,
+};
 use super::member::without_none;
 use super::overrides::callback_root;
 use super::poll_checks::is_tested_read;
@@ -77,9 +80,17 @@ pub(super) fn on_load<'db>(
     if !is_context_instance(db, env, receiver) {
         return None;
     }
-    let function = enclosing_function(db, file, attribute)?;
-    let callback = callback_context(db, function).as_ref()?;
+    let function = enclosing_function(db, file, attribute);
+    let callback = function.and_then(|function| callback_context(db, function).as_ref());
+    let Some(callback) = callback else {
+        // Outside a callback: an Assumption for the members Blender keeps in ordinary use.
+        return assumed_member(context, attribute, function, place, None);
+    };
+    let function = function?;
     match guarantee {
+        ContextGuarantee::Always if callback.import_operator && is_assumed_in_import(name) => {
+            assumed_member(context, attribute, Some(function), place, Some(callback))
+        }
         ContextGuarantee::Always => Some(place.map_type(|ty| without_none(db, ty))),
         ContextGuarantee::InEditor => {
             let space_type = callback.space_type.as_deref()?;
@@ -119,6 +130,52 @@ pub(super) fn on_load<'db>(
     }
 }
 
+/// The read `attribute` of an assumed context member ([`ty_blender::is_assumed_context_member`]),
+/// in the function scope `function` (`None` at module level), outside a Blender callback or, with
+/// `callback`, in a callback of a FileHandler's import operator: narrowed without `None`, and
+/// reported under `blender-assumed-context-member` unless the code only tests it.
+fn assumed_member<'db>(
+    context: &InferContext<'db, '_>,
+    attribute: &ast::ExprAttribute,
+    function: Option<ScopeId<'db>>,
+    place: PlaceAndQualifiers<'db>,
+    callback: Option<&CallbackContext>,
+) -> Option<PlaceAndQualifiers<'db>> {
+    let db = context.db();
+    let env = context.program_environment();
+    let name = attribute.attr.id.as_str();
+    if !is_assumed_context_member(name) {
+        return None;
+    }
+    let narrowed = place.map_type(|ty| without_none(db, ty));
+    let scope = function.unwrap_or_else(|| global_scope(db, context.program_file()));
+    if narrowed.place != place.place
+        && !is_tested_read(db, scope, attribute)
+        && let Some(ty) = narrowed.place.ignore_possibly_undefined()
+        && let Some(builder) = context.report_lint(&BLENDER_ASSUMED_CONTEXT_MEMBER, attribute)
+    {
+        let reason = if callback.is_some() {
+            "a FileHandler names this operator as its `bl_import_operator`, and Blender's collection \
+             importer runs it with no scene"
+        } else {
+            "Blender guarantees it only while it calls a callback, though a timer, a handler or a \
+             script has one in ordinary use"
+        };
+        builder.into_diagnostic(format_args!(
+            "`context.{name}` is taken as `{}`: {reason}",
+            ty.display(db, env),
+        ));
+    }
+    Some(narrowed)
+}
+
+/// Whether `name` is a member that the collection importer leaves `None` in a FileHandler's import
+/// operator: `scene` and the scene's `tool_settings`. `view_layer` crashes there rather than give
+/// `None`.
+fn is_assumed_in_import(name: &str) -> bool {
+    matches!(name, "scene" | "tool_settings")
+}
+
 /// Whether `ty` is an instance of `bpy.types.Context`.
 fn is_context_instance<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'db>) -> bool {
     let Type::NominalInstance(instance) = ty else {
@@ -155,6 +212,9 @@ struct CallbackContext {
     /// names. `None` when the callback has no editor of a known type.
     space_type: Option<String>,
     space_source: SpaceSource,
+    /// Whether the callback is an Operator's that a FileHandler of the same add-on names as its
+    /// `bl_import_operator`.
+    import_operator: bool,
 }
 
 /// Where the editor of a callback comes from.
@@ -207,9 +267,11 @@ fn callback_context<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<Call
     } else {
         (None, SpaceSource::BlSpaceType)
     };
+    let import_operator = root == "Operator" && is_import_operator(db, file, class);
     Some(CallbackContext {
         space_type,
         space_source,
+        import_operator,
     })
 }
 
@@ -232,6 +294,58 @@ fn is_popover<'db>(
         Some(addon) => addon.files(db).any(opens),
         None => opens(file),
     }
+}
+
+/// Whether the operator `class`, defined in `file`, is the import operator of a FileHandler of its
+/// add-on (or of `file`, when it belongs to no add-on): a class whose `bl_import_operator` is a
+/// string literal naming the operator's idname, in either form.
+fn is_import_operator<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    class: StaticClassLiteral<'db>,
+) -> bool {
+    let Some(idname) = operator_idname(db, class) else {
+        return false;
+    };
+    let names = |file| {
+        import_operators(db, file)
+            .iter()
+            .filter_map(|operator| OperatorIdname::from_lookup(operator))
+            .any(|operator| operator == idname)
+    };
+    match addon_in_program(db, file) {
+        Some(addon) => addon.files(db).any(names),
+        None => names(file),
+    }
+}
+
+/// The string literal `bl_import_operator` values of the module-level classes of `file`, by syntax
+/// alone.
+#[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
+fn import_operators<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Box<[Name]> {
+    let module = parsed_module(db, file.python_file(db)).load(db);
+    let mut operators = Vec::new();
+    for statement in module.suite() {
+        let ast::Stmt::ClassDef(class) = statement else {
+            continue;
+        };
+        for statement in &class.body {
+            let (target, value) = match statement {
+                ast::Stmt::Assign(assign) => match &*assign.targets {
+                    [target] => (target, Some(&*assign.value)),
+                    _ => continue,
+                },
+                ast::Stmt::AnnAssign(assign) => (&*assign.target, assign.value.as_deref()),
+                _ => continue,
+            };
+            if let (Expr::Name(target), Some(Expr::StringLiteral(value))) = (target, value)
+                && target.id == "bl_import_operator"
+            {
+                operators.push(Name::new(value.value.to_str()));
+            }
+        }
+    }
+    operators.into_boxed_slice()
 }
 
 /// The panel idnames `file` opens as a popover, by syntax alone: the string literal panel of

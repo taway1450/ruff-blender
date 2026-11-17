@@ -51,6 +51,13 @@ pub(super) struct AddonIndex<'db> {
     /// Whether `register()` was followed to its end. When it was not, an unknown part of the
     /// add-on's classes is registered.
     pub(super) complete: bool,
+    /// The classes `register()` registers only on a branch: every registration of each is on an
+    /// arm of an `if`, an `except` handler or a `match`, in a function Blender calls later (a
+    /// timer, a handler), or from a sequence whose elements may be left out (a list extended in a
+    /// function, a filtered comprehension, an unordered sequence).
+    pub(super) conditional_classes: Box<[StaticClassLiteral<'db>]>,
+    /// The Registered properties (owner and name) `register()` assigns only on a branch, likewise.
+    pub(super) conditional_properties: Box<[(StaticClassLiteral<'db>, Name)]>,
 }
 
 /// What [`file_facts`] finds in one file.
@@ -210,17 +217,35 @@ pub(super) fn addon_index<'db>(db: &'db dyn Db, key: AddonInProgram<'db>) -> Add
     let walk = register_walk(db, key);
     let mut registered_properties: Vec<RegisteredProperty<'db>> = Vec::new();
     let mut registered_classes: Vec<StaticClassLiteral<'db>> = Vec::new();
+    // Each class and property with whether some registration of it always happens.
+    let mut classes_always: Vec<(StaticClassLiteral<'db>, bool)> = Vec::new();
+    let mut properties_always: Vec<((StaticClassLiteral<'db>, Name), bool)> = Vec::new();
     for event in &walk.events {
         match event {
-            Event::SetProperty { property, .. } => {
+            Event::SetProperty {
+                property,
+                path,
+                exact,
+                ..
+            } => {
                 if !registered_properties.contains(property) {
                     registered_properties.push(property.clone());
                 }
+                note_always(
+                    &mut properties_always,
+                    (property.owner, property.name.clone()),
+                    path.is_empty() && *exact,
+                );
             }
             Event::RegisterClass(event) => {
                 if !registered_classes.contains(&event.class) {
                     registered_classes.push(event.class);
                 }
+                note_always(
+                    &mut classes_always,
+                    event.class,
+                    event.path.is_empty() && event.exact,
+                );
             }
             _ => {}
         }
@@ -239,6 +264,22 @@ pub(super) fn addon_index<'db>(db: &'db dyn Db, key: AddonInProgram<'db>) -> Add
         registered_properties: registered_properties.into_boxed_slice(),
         registered_classes: registered_classes.into_boxed_slice(),
         complete,
+        conditional_classes: classes_always
+            .into_iter()
+            .filter_map(|(class, always)| (!always).then_some(class))
+            .collect(),
+        conditional_properties: properties_always
+            .into_iter()
+            .filter_map(|(property, always)| (!always).then_some(property))
+            .collect(),
+    }
+}
+
+/// Records one registration of `key`, which always happens when `always` is true.
+fn note_always<K: PartialEq>(entries: &mut Vec<(K, bool)>, key: K, always: bool) {
+    match entries.iter_mut().find(|(known, _)| *known == key) {
+        Some((_, known)) => *known |= always,
+        None => entries.push((key, always)),
     }
 }
 
