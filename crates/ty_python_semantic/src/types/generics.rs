@@ -285,6 +285,7 @@ pub(crate) fn typing_self<'db>(
         &env,
         class.identity_specialization(db),
     ));
+    let bounds = crate::types::blender::mixin_self_bounds(db, &env, class, bounds);
     let typevar = TypeVarInstance::new(
         db,
         identity,

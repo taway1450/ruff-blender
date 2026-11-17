@@ -30,7 +30,7 @@ pub use context::{
     menu_space_type, runs_in_editor,
 };
 pub use discovery::{Addon, AddonKind, addon_for_path};
-pub use files::addon_source_files;
+pub use files::{addon_source_files, folder_source_files};
 pub use metadata::{MANIFEST_FILE, Manifest, REQUIRED_MANIFEST_KEYS, manifest};
 pub use operators::{
     EXECUTION_CONTEXTS, OPERATOR_RESULTS, OperatorIdname, SINKS, Sink, SinkResult,
