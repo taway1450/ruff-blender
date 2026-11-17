@@ -73,7 +73,7 @@ mod walk;
 pub(crate) use addon::addon_of_file;
 pub(crate) use bl_rna::rna_property_type;
 pub(crate) use callbacks::declaration_callee;
-pub use categories::{BLENDER_RULE_CATEGORIES, BlenderRuleCategory, blender_rule_category};
+pub use categories::BlenderRuleCategory;
 pub(crate) use class_rules::has_invalid_bases;
 pub(crate) use evaluate::{
     annotation_value_type, is_opaque_call, is_property_container, reference_value_type,

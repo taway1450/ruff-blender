@@ -37,9 +37,8 @@ Configures the enabled rules and their severity.
 The keys are either rule names or `all` to set a default severity for all rules.
 See [the rules documentation](https://ty.dev/rules) for a list of all available rules.
 
-The Blender rule categories `blender-assumptions`, `blender-implied-narrowings` and
-`blender-imprecise-annotations` set the severity of all the rules of a category: a rule's
-own name takes precedence over its category, and a category over `all`.
+A Blender rule category (`blender-assumptions`, `blender-implied-narrowings`,
+`blender-imprecise-annotations`) sets all its rules, below a rule's own name and above `all`.
 
 Valid severities are:
 

@@ -15,12 +15,11 @@
 
 use ruff_python_ast::{self as ast, Expr};
 
-use crate::types::{
-    KnownClass, KnownUnion, LiteralValueType, StaticClassLiteral, SubclassOfInner, Type,
-};
+use crate::types::{KnownClass, KnownUnion, StaticClassLiteral, SubclassOfInner, Type};
 use crate::{Db, ProgramEnvironment};
 
 use super::member::without_none;
+use super::overrides::is_string_literals;
 use super::symbols::{bpy_types_bases, bpy_types_class_name};
 use super::vector::module_class;
 
@@ -198,17 +197,4 @@ fn kind_of<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'db>) -
         return Some(Kind::Pointer);
     }
     None
-}
-
-/// Whether `ty` is a string literal or a union of them: the value of an enum.
-fn is_string_literals(db: &dyn Db, ty: Type<'_>) -> bool {
-    let is_string = |ty: Type<'_>| {
-        ty.as_literal_value()
-            .and_then(LiteralValueType::as_string)
-            .is_some()
-    };
-    match ty {
-        Type::Union(union) => union.elements(db).iter().all(|element| is_string(*element)),
-        ty => is_string(ty),
-    }
 }
