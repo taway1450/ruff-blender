@@ -44,6 +44,12 @@
 //!   while drawing its parent. The message names the parent.
 //! - A read inside a `poll` knows what the poll's earlier guards checked ([`poll_flow`]). That is
 //!   the poll's own control flow, so it is not reported.
+//!
+//! A Panel's `bl_context` gives facts the same way, where Blender enforces it before it polls the
+//! panel ([`bl_context_facts`]): an object in the Properties tabs that need one, what the mode
+//! gives in the 3D viewport's sidebar and toolbar. It holds in the panel's `poll` and the callbacks
+//! the poll gates, and in those of its sub-panels, and is reported under
+//! `blender-narrowed-by-bl-context`.
 
 use std::cell::RefCell;
 
@@ -53,7 +59,10 @@ use ruff_python_ast::visitor::source_order::{SourceOrderVisitor, walk_expr};
 use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_text_size::{Ranged, TextRange};
 use rustc_hash::FxHashMap;
-use ty_blender::{checked_by_call, gated_by_poll, implied_paths, mode_facts, same_pointers};
+use ty_blender::{
+    ModeFacts, bl_context_facts, checked_by_call, gated_by_poll, implied_paths, mode_facts,
+    same_pointers,
+};
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::scope::{NodeWithScopeRef, ScopeId};
 use ty_python_core::{ProgramFile, semantic_index};
@@ -68,7 +77,7 @@ use super::classes::{class_string, mro_classes, own_binding};
 use super::context_members::{enclosing_function, is_popover, space_subclass};
 use super::follow::{Resolved, is_classmethod, resolve_expression};
 use super::index::{addon_in_program, file_facts};
-use super::lints::BLENDER_NARROWED_BY_POLL;
+use super::lints::{BLENDER_NARROWED_BY_BL_CONTEXT, BLENDER_NARROWED_BY_POLL};
 use super::member::without_none;
 use super::overrides::callback_root;
 use super::symbols::{bpy_types_class_name, is_bpy_types_class};
@@ -80,6 +89,9 @@ const MAX_HELPER_DEPTH: usize = 3;
 
 /// How many aliases (`ob = context.object`, `data = ob.data`) are followed back at most.
 const MAX_ALIAS_DEPTH: usize = 8;
+
+/// How many panels up a `bl_parent_id` chain are followed to its top panel at most.
+const MAX_PANEL_DEPTH: usize = 8;
 
 /// An attribute chain from the context: `context.object.active_material` is
 /// `["object", "active_material"]`, also read as `bpy.context.object.active_material` or through a
@@ -216,21 +228,33 @@ pub(super) fn on_load<'db>(
         && let Some(gated) = gated
         && let Some(source) = from_gate.first()
         && !paths.skips(attribute.range(), &path)
-        && let Some(builder) = context.report_lint(&BLENDER_NARROWED_BY_POLL, attribute)
     {
-        builder.into_diagnostic(format_args!(
-            "`{}` is taken as `{}` because `{}.poll()` checked it; Blender calls `{}` only after \
-             {} returned true, with the same context",
-            display_path(&path),
-            narrowed.display(db, env),
-            source.poll_class,
-            gated.callback,
-            if source.parent {
-                "its parent panel's poll"
-            } else {
-                "its poll"
-            },
-        ));
+        let lint = match source.gate {
+            Gate::BlContext(_) => &BLENDER_NARROWED_BY_BL_CONTEXT,
+            Gate::Poll | Gate::ParentPoll => &BLENDER_NARROWED_BY_POLL,
+        };
+        if let Some(builder) = context.report_lint(lint, attribute) {
+            let path = display_path(&path);
+            let narrowed = narrowed.display(db, env);
+            match &source.gate {
+                Gate::BlContext(bl_context) => builder.into_diagnostic(format_args!(
+                    "`{path}` is taken as `{narrowed}` because `{}` has `bl_context = \"{bl_context}\"`; \
+                     Blender polls and draws the panel only where that context is current",
+                    source.poll_class,
+                )),
+                gate => builder.into_diagnostic(format_args!(
+                    "`{path}` is taken as `{narrowed}` because `{}.poll()` checked it; Blender calls \
+                     `{}` only after {} returned true, with the same context",
+                    source.poll_class,
+                    gated.callback,
+                    if matches!(gate, Gate::ParentPoll) {
+                        "its parent panel's poll"
+                    } else {
+                        "its poll"
+                    },
+                )),
+            };
+        }
     }
     Some(place.map_type(|_| narrowed))
 }
@@ -303,10 +327,20 @@ struct GatedFacts {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize)]
 struct SourcedFact {
     fact: Fact,
-    /// The class whose `poll` checked it, for the message.
+    /// The class whose `poll` checked it, or whose `bl_context` gives it, for the message.
     poll_class: Name,
-    /// Whether that poll is a parent panel's, up the `bl_parent_id` chain.
-    parent: bool,
+    gate: Gate,
+}
+
+/// What gives a [`SourcedFact`].
+#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize)]
+enum Gate {
+    /// The class's own `poll`.
+    Poll,
+    /// The poll of a parent panel, up the `bl_parent_id` chain.
+    ParentPoll,
+    /// The `bl_context` of the panel, or of the top panel of its `bl_parent_id` chain.
+    BlContext(Name),
 }
 
 /// The facts of the polls that gate the function scope `function`, when it is a method in the body
@@ -317,7 +351,8 @@ struct SourcedFact {
 /// Blender polls a sub-panel only while it draws the parent panel, and it draws the parent only
 /// after the parent's poll returned true (`ed_panel_draw` in `area.cc`). A sub-panel that its
 /// add-on also opens as a popover ([`is_popover`]) is drawn without its parent, so it gets no
-/// parent facts.
+/// parent facts. A Panel's `poll` and gated callbacks also get what its `bl_context` gives
+/// ([`panel_context_facts`]).
 #[salsa::tracked(
     returns(ref),
     cycle_initial=|_, _, _| None,
@@ -344,11 +379,19 @@ fn gated_facts<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<GatedFact
         facts.extend(own.iter().map(|fact| SourcedFact {
             fact: fact.clone(),
             poll_class: poll_class.clone(),
-            parent: false,
+            gate: Gate::Poll,
         }));
     }
     if is_panel && !is_popover(db, file, class) {
         for sourced in parent_poll_facts(db, class).as_deref().unwrap_or_default() {
+            if !facts.iter().any(|known| known.fact == sourced.fact) {
+                facts.push(sourced.clone());
+            }
+        }
+        for sourced in panel_context_facts(db, class)
+            .as_deref()
+            .unwrap_or_default()
+        {
             if !facts.iter().any(|known| known.fact == sourced.fact) {
                 facts.push(sourced.clone());
             }
@@ -377,6 +420,30 @@ fn parent_poll_facts<'db>(
     db: &'db dyn Db,
     class: StaticClassLiteral<'db>,
 ) -> Option<Box<[SourcedFact]>> {
+    let parent = parent_panel(db, class)?;
+    let mut facts: Vec<SourcedFact> = Vec::new();
+    if let Some((own, poll_class)) = poll_facts(db, parent).as_ref() {
+        facts.extend(own.iter().map(|fact| SourcedFact {
+            fact: fact.clone(),
+            poll_class: poll_class.clone(),
+            gate: Gate::ParentPoll,
+        }));
+    }
+    for sourced in parent_poll_facts(db, parent).as_deref().unwrap_or_default() {
+        if !facts.iter().any(|known| known.fact == sourced.fact) {
+            facts.push(sourced.clone());
+        }
+    }
+    Some(facts.into_boxed_slice())
+}
+
+/// The parent panel of the panel `class`: the panel whose idname (its `bl_idname`, or else its
+/// class name) is the `bl_parent_id`, looked up among the classes of the same file, then of the
+/// same add-on. `None` without a `bl_parent_id`, or for one of Blender's own panels.
+fn parent_panel<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+) -> Option<StaticClassLiteral<'db>> {
     let parent_id = class_string(db, class, "bl_parent_id")?;
     let file = class.body_scope(db).program_file(db);
     let find = |file: ProgramFile<'db>| {
@@ -391,22 +458,64 @@ fn parent_poll_facts<'db>(
                         == parent_id
             })
     };
-    let parent = find(file)
-        .or_else(|| addon_in_program(db, file).and_then(|addon| addon.files(db).find_map(find)))?;
-    let mut facts: Vec<SourcedFact> = Vec::new();
-    if let Some((own, poll_class)) = poll_facts(db, parent).as_ref() {
-        facts.extend(own.iter().map(|fact| SourcedFact {
-            fact: fact.clone(),
-            poll_class: poll_class.clone(),
-            parent: true,
-        }));
-    }
-    for sourced in parent_poll_facts(db, parent).as_deref().unwrap_or_default() {
-        if !facts.iter().any(|known| known.fact == sourced.fact) {
-            facts.push(sourced.clone());
+    find(file)
+        .or_else(|| addon_in_program(db, file).and_then(|addon| addon.files(db).find_map(find)))
+}
+
+/// What the `bl_context` of the panel `class` gives where Blender enforces it
+/// ([`bl_context_facts`]), each fact with the panel that declares it. Blender checks the context
+/// of a top-level panel only, before its poll, and draws a sub-panel only inside its parent, so the
+/// context is that of the top panel of the `bl_parent_id` chain. Nothing when a panel of the chain
+/// is not found or is opened as a popover ([`is_popover`]), where no context is checked.
+#[salsa::tracked(
+    returns(ref),
+    cycle_initial=|_, _, _| None,
+    heap_size=ruff_memory_usage::heap_size
+)]
+fn panel_context_facts<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+) -> Option<Box<[SourcedFact]>> {
+    let mut top = class;
+    for _ in 0..MAX_PANEL_DEPTH {
+        if is_popover(db, top.body_scope(db).program_file(db), top) {
+            return None;
         }
+        if class_string(db, top, "bl_parent_id").is_none() {
+            let space_type = class_string(db, top, "bl_space_type")?;
+            // Blender's default region type is the main region.
+            let region_type =
+                class_string(db, top, "bl_region_type").unwrap_or_else(|| "WINDOW".to_string());
+            let bl_context = class_string(db, top, "bl_context")?;
+            let known = bl_context_facts(&space_type, &region_type, &bl_context)?;
+            let declaring = class_attribute_owner(db, top, "bl_context").unwrap_or(top);
+            return Some(
+                known_facts(known)
+                    .0
+                    .into_iter()
+                    .map(|fact| SourcedFact {
+                        fact,
+                        poll_class: declaring.name(db).clone(),
+                        gate: Gate::BlContext(Name::new(&bl_context)),
+                    })
+                    .collect(),
+            );
+        }
+        top = parent_panel(db, top)?;
     }
-    Some(facts.into_boxed_slice())
+    None
+}
+
+/// The class of the method resolution order of `class` whose body binds `name`, before the
+/// `bpy.types` classes.
+fn class_attribute_owner<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+    name: &str,
+) -> Option<StaticClassLiteral<'db>> {
+    mro_classes(db, class)
+        .take_while(|base| !is_bpy_types_class(db, *base))
+        .find(|base| own_binding(db, *base, name).is_some())
 }
 
 /// What the `poll` Blender calls for `class` checks, with the name of the class that defines it:
@@ -1172,29 +1281,34 @@ fn may_return_true(body: &[Stmt]) -> bool {
 /// What `context.mode` being one of `modes` says about the context ([`mode_facts`]): the facts
 /// every one of the modes gives. Nothing when one of them gives none (`OBJECT`).
 fn mode_facts_of(modes: &[Name]) -> Facts {
-    let mut each = modes.iter().map(|mode| {
-        let known = mode_facts(mode.as_str())?;
-        let mut facts = Facts::default();
-        for path in known.set {
-            let path: Path = path.iter().map(|name| Name::new_static(name)).collect();
-            if let Some(object_type) = known.object_type
-                && path.len() == 1
-            {
-                facts.add(Fact::Tag {
-                    path: path.clone(),
-                    attribute: Name::new_static("type"),
-                    values: Box::new([Name::new_static(object_type)]),
-                });
-            }
-            facts.add(Fact::NotNone(path));
-        }
-        Some(facts)
-    });
+    let mut each = modes
+        .iter()
+        .map(|mode| mode_facts(mode.as_str()).map(known_facts));
     let Some(Some(first)) = each.next() else {
         return Facts::default();
     };
     each.try_fold(first, |facts, other| Some(facts.intersect(&other?)))
         .unwrap_or_default()
+}
+
+/// The facts of a mode or a `bl_context` ([`ModeFacts`]): its paths are set, and its one-member
+/// paths have its object type.
+fn known_facts(known: ModeFacts) -> Facts {
+    let mut facts = Facts::default();
+    for path in known.set {
+        let path: Path = path.iter().map(|name| Name::new_static(name)).collect();
+        if let Some(object_type) = known.object_type
+            && path.len() == 1
+        {
+            facts.add(Fact::Tag {
+                path: path.clone(),
+                attribute: Name::new_static("type"),
+                values: Box::new([Name::new_static(object_type)]),
+            });
+        }
+        facts.add(Fact::NotNone(path));
+    }
+    facts
 }
 
 /// The facts the Pointer aliases add to `facts` ([`implied_paths`], [`same_pointers`]): a set
@@ -1664,14 +1778,16 @@ pub(super) fn is_tested_read<'db>(
 
 /// The paths and tested reads of the scope `scope`: a function, whose context is its first
 /// parameter annotated `Context` or else its second one (a callback's), or a module, where only
-/// `bpy.context` is the context.
+/// `bpy.context` is the context. A `poll`'s returned value is a test too.
 #[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
 pub(super) fn function_paths<'db>(db: &'db dyn Db, scope: ScopeId<'db>) -> FunctionPaths {
     let file: ProgramFile<'db> = scope.program_file(db);
     let module = parsed_module(db, file.python_file(db)).load(db);
     let node = scope.node(db);
+    let mut is_poll = false;
     let (parameters, body, context) = if let Some(function) = node.as_function() {
         let function = function.node(&module);
+        is_poll = function.name.id == "poll";
         let parameters = &function.parameters;
         let mut positional = parameters.posonlyargs.iter().chain(&parameters.args);
         let annotated = parameters.iter().find(|parameter| {
@@ -1702,6 +1818,7 @@ pub(super) fn function_paths<'db>(db: &'db dyn Db, scope: ScopeId<'db>) -> Funct
         tested: Vec::new(),
         regions: Vec::new(),
         own_reads: false,
+        returns_test: is_poll,
     };
     tests.block(body);
     let Tests {
@@ -1737,6 +1854,7 @@ pub(super) fn name_tests(body: &[Stmt], name: &Name) -> (Vec<TextRange>, Vec<Tex
         tested: Vec::new(),
         regions: Vec::new(),
         own_reads: true,
+        returns_test: false,
     };
     tests.block(body);
     let regions = tests
@@ -1756,6 +1874,8 @@ struct Tests<'a> {
     regions: Vec<(Path, TextRange)>,
     /// Whether a tested alias records the read of the name itself rather than its value.
     own_reads: bool,
+    /// Whether the returned value is a test, as a `poll`'s is.
+    returns_test: bool,
 }
 
 impl Tests<'_> {
@@ -1818,6 +1938,9 @@ impl Tests<'_> {
                     self.block(&statement.orelse);
                 }
                 Stmt::With(statement) => self.block(&statement.body),
+                Stmt::Return(ast::StmtReturn {
+                    value: Some(value), ..
+                }) if self.returns_test => self.test(value),
                 Stmt::Try(statement) => {
                     self.block(&statement.body);
                     for handler in &statement.handlers {

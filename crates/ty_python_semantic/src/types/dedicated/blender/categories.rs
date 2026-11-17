@@ -49,6 +49,7 @@ impl BlenderRuleCategory {
                 "blender-narrowed-by-poll",
                 "blender-narrowed-by-menu-prefix",
                 "blender-narrowed-by-popover",
+                "blender-narrowed-by-bl-context",
             ],
             Self::ImpreciseAnnotations => &[
                 "blender-imprecise-operator-return",

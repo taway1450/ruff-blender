@@ -21,8 +21,8 @@
 //!   `set[str]` and an enum value where they are inferred.
 //! - The Implied narrowing rules (`blender-narrowed-by-*`, the category
 //!   `blender-implied-narrowings`) are reported at the narrowed read, while it is inferred: by
-//!   [`super::poll_checks`] for a pointer a `poll()` checked, by [`super::context_members`] for a
-//!   menu's idname prefix and a popover panel.
+//!   [`super::poll_checks`] for a pointer a `poll()` checked or a panel's `bl_context` guarantees,
+//!   by [`super::context_members`] for a menu's idname prefix and a popover panel.
 //! - The Assumption rules (`blender-assumed-*`, the category `blender-assumptions`): the context
 //!   members by [`super::context_members`] and the uses of a class or property registered on a
 //!   branch and of the add-on's preferences by [`super::assumptions`], at the read while it is
@@ -287,6 +287,15 @@ declare_lint! {
 }
 
 declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-narrowed-by-bl-context.md")]
+    pub(crate) static BLENDER_NARROWED_BY_BL_CONTEXT = {
+        summary: "detects a read of a context member that a panel's `bl_context` guarantees where Blender enforces it",
+        status: LintStatus::stable("0.0.103"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
     #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-context-member.md")]
     pub(crate) static BLENDER_ASSUMED_CONTEXT_MEMBER = {
         summary: "detects `context.scene`, `view_layer` or `tool_settings` read where Blender does not guarantee them",
@@ -394,6 +403,7 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_NARROWED_BY_POLL);
     registry.register_lint(&BLENDER_NARROWED_BY_MENU_PREFIX);
     registry.register_lint(&BLENDER_NARROWED_BY_POPOVER);
+    registry.register_lint(&BLENDER_NARROWED_BY_BL_CONTEXT);
     registry.register_lint(&BLENDER_ASSUMED_CONTEXT_MEMBER);
     registry.register_lint(&BLENDER_ASSUMED_LIST_ITEM);
     registry.register_lint(&BLENDER_ASSUMED_REGISTRATION);
