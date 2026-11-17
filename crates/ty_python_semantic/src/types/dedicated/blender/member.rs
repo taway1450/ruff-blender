@@ -43,7 +43,7 @@ use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
 use super::{
     assumptions, context_assumptions, context_members, operator_properties, operators,
-    pointer_aliases, poll_checks, preferences,
+    pointer_aliases, poll_checks, preferences, subclass_members,
 };
 
 /// The property that gives instances of `class` the attribute `name` in `file`.
@@ -517,7 +517,8 @@ pub(crate) fn on_load<'db>(
             }
             Place::bound(ty).into()
         }
-        None => place,
+        // `ob.constraints[0].target`: a member only some refined subclasses declare.
+        None => subclass_members::on_load(context, attribute, receiver, place).unwrap_or(place),
     }
 }
 

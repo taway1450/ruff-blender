@@ -21,7 +21,10 @@
 //!   just added);
 //! - [`pointer_aliases`]: what Blender's bookkeeping, an area's type and `temp_override` say
 //!   about a read, without a poll;
-//! - [`type_tags`]: narrowing by a Type tag, `md.type == 'SUBSURF'` makes `md` a `SubsurfModifier`;
+//! - [`type_tags`]: narrowing by a Type tag, `md.type == 'SUBSURF'` makes `md` a `SubsurfModifier`,
+//!   and [`constructors`], by a constructor's argument, `constraints.new('COPY_LOCATION')`;
+//! - [`subclass_members`]: a member only some of a refined base's subclasses declare
+//!   (`ob.constraints[0].target`), an Assumption;
 //! - [`operators`]: `bpy.ops.<category>.<name>` for an add-on's own operators;
 //! - [`operator_properties`]: what an operator idname given as a string gives
 //!   (`layout.operator("my_addon.run").count`), for add-on and built-in operators;
@@ -55,6 +58,7 @@ mod categories;
 mod class_rules;
 mod classes;
 mod context_assumptions;
+mod constructors;
 mod context_members;
 mod evaluate;
 mod follow;
@@ -74,6 +78,7 @@ mod properties;
 mod registration_checks;
 mod reload_guard;
 mod rules;
+mod subclass_members;
 mod symbols;
 mod type_tags;
 mod vector;

@@ -49,6 +49,7 @@ use crate::types::{
 use crate::{Db, ProgramEnvironment};
 
 use super::classes::{class_string, operator_idname};
+use super::constructors;
 use super::imprecise::check_enum_arguments;
 use super::index::addon_in_program;
 use super::lints::{BLENDER_INVALID_OPERATOR_PROPERTY, BLENDER_UNKNOWN_OPERATOR};
@@ -88,7 +89,7 @@ fn sink_of<'db>(
 }
 
 /// The class of a method's receiver, an instance or a class object.
-fn receiver_class<'db>(
+pub(super) fn receiver_class<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
     receiver: Type<'db>,
@@ -517,7 +518,8 @@ fn holder_type<'db>(
 }
 
 /// Refine the return type of a call to a sink, and check its idname and property arguments; and
-/// report the imprecise enum values passed to a Blender function (`super::imprecise`).
+/// report the imprecise enum values passed to a Blender function (`super::imprecise`); and narrow a
+/// constructor by its Type tag argument (`super::constructors`).
 ///
 /// Only the arms of the callee that are sinks change: `self.layout.operator(...)` calls a
 /// `UILayout | None` attribute.
@@ -529,6 +531,8 @@ pub(crate) fn on_call<'db>(
 ) {
     // `bpy.ops.object.mode_set(mode=mode)` with `mode: str`.
     check_enum_arguments(context, call, bindings, expression_type);
+    // `ob.constraints.new('COPY_LOCATION')`, `tree.nodes.new(type='ShaderNodeMath')`.
+    constructors::on_call(context, call, bindings, expression_type);
     let db = context.db();
     let env = context.program_environment();
     let file = context.program_file();

@@ -152,6 +152,37 @@ fn narrow_by_values<'db>(
     }
 }
 
+/// The public classes the Type tag table names for a struct of class `base`, by any of its tags,
+/// in table order: the refined subclasses of a refined base. The private tag views
+/// (`_Object_MESH`) only restate members of their base, and are left out.
+#[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
+pub(super) fn tagged_subclasses<'db>(
+    db: &'db dyn Db,
+    base: StaticClassLiteral<'db>,
+) -> Box<[StaticClassLiteral<'db>]> {
+    let mut classes = Vec::new();
+    for tag in type_tags(db, base.program_file(db)) {
+        if tag.base == base && !tag.class.name(db).starts_with('_') && !classes.contains(&tag.class)
+        {
+            classes.push(tag.class);
+        }
+    }
+    classes.into_boxed_slice()
+}
+
+/// The Type tags of `base`, in table order: the attributes some of its subclasses declare as a
+/// `Literal` (`Constraint.type`, `Attribute.data_type`, `Node.bl_idname`).
+#[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
+pub(super) fn tag_attributes<'db>(db: &'db dyn Db, base: StaticClassLiteral<'db>) -> Box<[Name]> {
+    let mut attributes: Vec<Name> = Vec::new();
+    for tag in type_tags(db, base.program_file(db)) {
+        if tag.base == base && !attributes.contains(&tag.attribute) {
+            attributes.push(tag.attribute.clone());
+        }
+    }
+    attributes.into_boxed_slice()
+}
+
 /// The value of a string literal type.
 fn string_literal(db: &dyn Db, ty: Type<'_>) -> Option<Name> {
     let literal = ty.as_literal_value()?.as_string()?;
@@ -159,7 +190,7 @@ fn string_literal(db: &dyn Db, ty: Type<'_>) -> Option<Name> {
 }
 
 /// The string values of a type that is a string literal or a union of them.
-fn string_literals(db: &dyn Db, ty: Type<'_>) -> Option<Vec<Name>> {
+pub(super) fn string_literals(db: &dyn Db, ty: Type<'_>) -> Option<Vec<Name>> {
     match ty {
         Type::Union(union) => union
             .elements(db)
@@ -216,7 +247,7 @@ fn tags_differ<'db>(
     }
 }
 
-fn instance<'db>(
+pub(super) fn instance<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
     class: StaticClassLiteral<'db>,
