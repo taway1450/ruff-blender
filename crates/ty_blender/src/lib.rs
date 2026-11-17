@@ -39,14 +39,12 @@ pub use metadata::{MANIFEST_FILE, Manifest, REQUIRED_MANIFEST_KEYS, manifest};
 pub use operators::{
     EXECUTION_CONTEXTS, OPERATOR_RESULTS, OperatorIdname, SINKS, Sink, SinkResult,
 };
-pub use pointer_aliases::{
-    ModeFacts, implied_paths, is_set_once_read, mode_facts, same_pointers,
-};
+pub use pointer_aliases::{ModeFacts, implied_paths, is_set_once_read, mode_facts, same_pointers};
 pub use registration::{IdnameFamily, REGISTRABLE_ROOTS, registration_classmethod};
 pub use reload_guard::in_reload_guard;
 pub use script_guard::is_script_test;
 pub use source::{BlInfo, BlInfoDict, BlInfoEntry, bl_info};
 pub use type_tags::{
-    ADDON_TYPE_TAG, IdnameConstructor, NO_SUBCLASS_MEMBERS, excludes_on_mismatch,
-    idname_constructor,
+    ADDON_TYPE_TAG, IdnameConstructor, NO_SUBCLASS_MEMBERS, PointerTag, excludes_on_mismatch,
+    idname_constructor, pointer_tag, tag_writers,
 };

@@ -41,15 +41,15 @@ use ty_python_core::{global_scope, semantic_index};
 use crate::Db;
 use crate::lint::LintMetadata;
 use crate::place::PlaceAndQualifiers;
-use crate::types::{StaticClassLiteral, Type};
 use crate::types::context::InferContext;
 use crate::types::infer::nearest_enclosing_class;
+use crate::types::{StaticClassLiteral, Type};
 
 use super::classes::{mro_classes, own_binding};
 use super::context_members::{enclosing_function, is_context_instance};
 use super::lints::{
-    BLENDER_ASSUMED_ADDED_OBJECT, BLENDER_ASSUMED_EDITOR_MEMBER,
-    BLENDER_ASSUMED_INTERNAL_OPERATOR, BLENDER_ASSUMED_PRESET_CONTEXT,
+    BLENDER_ASSUMED_ADDED_OBJECT, BLENDER_ASSUMED_EDITOR_MEMBER, BLENDER_ASSUMED_INTERNAL_OPERATOR,
+    BLENDER_ASSUMED_PRESET_CONTEXT,
 };
 use super::member::without_none;
 use super::overrides::callback_root;

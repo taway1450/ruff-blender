@@ -40,6 +40,7 @@ use crate::place::{Place, PlaceAndQualifiers, imported_symbol};
 use crate::semantic_model::ExpectedStringLiteralCompletion;
 use crate::types::call::Bindings;
 use crate::types::context::InferContext;
+use crate::types::diagnostic::MISSING_UNION_ATTRIBUTE;
 use crate::types::infer::{infer_complete_scope_types, nearest_enclosing_class};
 use crate::types::list_members::Member;
 use crate::types::{
@@ -708,6 +709,36 @@ fn identity<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'db>) 
     literal_string(db, member)
 }
 
+/// `receiver.name` read in the code: the refined member (see [`member`]). On a union whose arms
+/// do not all have it, the arms that lack it are reported as `missing-union-attribute`, like
+/// stock ty does for a union, and the read has the type of the arms that have it.
+pub(super) fn load<'db>(
+    context: &InferContext<'db, '_>,
+    attribute: &ast::ExprAttribute,
+    receiver: Type<'db>,
+) -> Option<PlaceAndQualifiers<'db>> {
+    let db = context.db();
+    let env = context.program_environment();
+    let name = attribute.attr.id.as_str();
+    let (place, missing) = union_member(db, env, receiver, name)?;
+    if attribute.ctx.is_load()
+        && !missing.is_empty()
+        && !place.place.is_undefined()
+        && let Some(builder) = context.report_lint(&MISSING_UNION_ATTRIBUTE, attribute)
+    {
+        let arms = missing
+            .iter()
+            .map(|ty| format!("`{}`", ty.display(db, env)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        builder.into_diagnostic(format_args!(
+            "Attribute `{name}` is not defined on {arms} in union `{}`",
+            receiver.display(db, env)
+        ));
+    }
+    Some(place)
+}
+
 /// The attribute `name` of a refined receiver: the protocol's member, or a member the nominal
 /// class defines itself (never through its `__getattr__`). The identity member is hidden. A union
 /// with a refined arm reads every arm. `None` when the receiver is not refined.
@@ -717,6 +748,23 @@ pub(super) fn member<'db>(
     receiver: Type<'db>,
     name: &str,
 ) -> Option<PlaceAndQualifiers<'db>> {
+    let (place, missing) = union_member(db, env, receiver, name)?;
+    if missing.is_empty() {
+        Some(place)
+    } else {
+        Some(Place::Undefined.into())
+    }
+}
+
+/// [`member`], with the union arms that lack the name. Each arm is read on its own: a refined
+/// arm without the property misses it even where the stub's `__getattr__` accepts any name
+/// (`"a" if c else "b"` where only `a` has it). The place is the union of the arms that have it.
+fn union_member<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    receiver: Type<'db>,
+    name: &str,
+) -> Option<(PlaceAndQualifiers<'db>, Vec<Type<'db>>)> {
     if let Type::Union(union) = receiver {
         if !union
             .elements(db)
@@ -726,35 +774,39 @@ pub(super) fn member<'db>(
             return None;
         }
         let mut types = Vec::new();
+        let mut missing = Vec::new();
         for element in union.elements(db) {
-            // A refined arm without the property makes it missing on the union
-            // (`"a" if c else "b"` where only `a` has it), even where the stub's `__getattr__`
-            // accepts any name.
             let place = match member(db, env, *element, name) {
-                Some(place) if place.place.is_undefined() => return Some(place),
                 Some(place) => place,
                 None => element.member(db, env, name),
             };
-            types.push(place.place.ignore_possibly_undefined()?);
+            match place.place.ignore_possibly_undefined() {
+                Some(ty) => types.push(ty),
+                None => missing.push(*element),
+            }
         }
-        return Some(Place::bound(UnionType::from_elements(db, env, types)).into());
+        if types.is_empty() {
+            return Some((Place::Undefined.into(), missing));
+        }
+        let place = Place::bound(UnionType::from_elements(db, env, types)).into();
+        return Some((place, missing));
     }
     let (protocol, _, others) = refined_parts(db, env, receiver)?;
     if name == IDENTITY {
-        return Some(Place::Undefined.into());
+        return Some((Place::Undefined.into(), Vec::new()));
     }
     let own = protocol.member(db, env, name);
     if own.place.is_definitely_bound() {
-        return Some(own);
+        return Some((own, Vec::new()));
     }
     for other in others {
         let place =
             other.member_lookup_with_policy(db, env, name, MemberLookupPolicy::NO_GETATTR_LOOKUP);
         if !place.place.is_undefined() {
-            return Some(place);
+            return Some((place, Vec::new()));
         }
     }
-    Some(Place::Undefined.into())
+    Some((Place::Undefined.into(), Vec::new()))
 }
 
 /// `self.properties` of an add-on operator (or `step.properties` for an instance): the

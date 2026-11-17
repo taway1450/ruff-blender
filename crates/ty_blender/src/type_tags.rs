@@ -1,6 +1,11 @@
-//! Type tags: the read-only attribute (`Modifier.type`, `Node.bl_idname`) whose value names the
-//! subclass Blender refines a struct to. Which value names which class depends on the Blender
-//! version and is read from the stubs; what holds for every version is here.
+//! Type tags: the attribute (`Modifier.type`, `Node.bl_idname`) whose value names the subclass
+//! Blender refines a struct to, or the class of a pointer below it (`Area.type`). Which value names
+//! which class depends on the Blender version and is read from the stubs; what holds for every
+//! version is here.
+//!
+//! Most tags are read-only, but not all: `Light.type`, `Texture.type` and `Area.type` can be
+//! written, and Blender then refines the struct anew. So a test of a tag narrows nothing in a
+//! scope that writes that tag of the same struct ([`tag_writers`]).
 
 /// The tag Blender gives every struct an add-on defines: a Python node, socket or node tree has
 /// the type `'CUSTOM'`. A stub class that declares it (`NodeSocketVirtual`) is not the only class
@@ -55,4 +60,35 @@ pub fn idname_constructor(class: &str, method: &str) -> Option<IdnameConstructor
     IDNAME_CONSTRUCTORS
         .into_iter()
         .find(|constructor| constructor.class == class && constructor.method == method)
+}
+
+/// A Type tag that names the class of a pointer below its struct rather than the struct's own:
+/// the value of `class.attribute` is the `Space` Type tag of `<struct>.<path>`.
+#[derive(Debug, Clone, Copy)]
+pub struct PointerTag {
+    pub class: &'static str,
+    pub attribute: &'static str,
+    pub path: &'static [&'static str],
+}
+
+/// The Pointer tags: an area's first space is the space of the area's type (`ED_area_newspace`
+/// puts a new space first, and `Area.type` is the `spacetype` of that first space), so after
+/// `area.type == 'VIEW_3D'`, `area.spaces.active` is a `SpaceView3D`.
+const POINTER_TAGS: [PointerTag; 1] = [PointerTag {
+    class: "Area",
+    attribute: "type",
+    path: &["spaces", "active"],
+}];
+
+/// The Pointer tag `class.attribute`, if it is one.
+pub fn pointer_tag(class: &str, attribute: &str) -> Option<PointerTag> {
+    POINTER_TAGS
+        .into_iter()
+        .find(|tag| tag.class == class && tag.attribute == attribute)
+}
+
+/// The attributes whose write changes the Type tag `attribute`: the tag itself, and for a `type`
+/// also a `ui_type` (`rna_Area_ui_type_set` sets an area's space type).
+pub fn tag_writers(attribute: &str) -> impl Iterator<Item = &str> {
+    std::iter::once(attribute).chain((attribute == "type").then_some("ui_type"))
 }

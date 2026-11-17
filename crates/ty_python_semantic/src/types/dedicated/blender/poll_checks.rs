@@ -1474,7 +1474,10 @@ fn aliases(
     context: &Name,
 ) -> FxHashMap<Name, Alias> {
     let mut bindings = Bindings::default();
-    for parameter in parameters.into_iter().flat_map(|parameters| parameters.iter()) {
+    for parameter in parameters
+        .into_iter()
+        .flat_map(|parameters| parameters.iter())
+    {
         bindings.other(parameter.name().id.clone());
     }
     bindings.block(body);
@@ -1791,12 +1794,14 @@ pub(super) fn function_paths<'db>(db: &'db dyn Db, scope: ScopeId<'db>) -> Funct
         let parameters = &function.parameters;
         let mut positional = parameters.posonlyargs.iter().chain(&parameters.args);
         let annotated = parameters.iter().find(|parameter| {
-            parameter.annotation().is_some_and(|annotation| match annotation {
-                Expr::Name(name) => name.id == "Context",
-                Expr::Attribute(attribute) => attribute.attr.id == "Context",
-                Expr::StringLiteral(string) => string.value.to_str().ends_with("Context"),
-                _ => false,
-            })
+            parameter
+                .annotation()
+                .is_some_and(|annotation| match annotation {
+                    Expr::Name(name) => name.id == "Context",
+                    Expr::Attribute(attribute) => attribute.attr.id == "Context",
+                    Expr::StringLiteral(string) => string.value.to_str().ends_with("Context"),
+                    _ => false,
+                })
         });
         let context = match annotated {
             Some(parameter) => parameter.name().id.clone(),

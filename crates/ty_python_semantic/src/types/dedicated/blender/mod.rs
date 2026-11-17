@@ -51,15 +51,15 @@
 //! - [`reload_guard`]: the names an add-on's reload guard (`if "bpy" in locals():`) uses.
 
 mod addon;
-mod assumptions;
 mod addon_key;
+mod assumptions;
 mod bl_rna;
 mod callbacks;
 mod categories;
 mod class_rules;
 mod classes;
-mod context_assumptions;
 mod constructors;
+mod context_assumptions;
 mod context_members;
 mod evaluate;
 mod follow;
@@ -73,8 +73,8 @@ mod module_dunders;
 mod operator_properties;
 mod operators;
 mod overrides;
-mod poll_checks;
 mod pointer_aliases;
+mod poll_checks;
 mod preferences;
 mod properties;
 mod registration_checks;
@@ -82,6 +82,7 @@ mod reload_guard;
 mod rules;
 mod subclass_members;
 mod symbols;
+mod temp_override;
 mod type_tags;
 mod vector;
 mod walk;

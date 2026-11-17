@@ -1,7 +1,7 @@
 //! Narrowing by a Type tag: a test of the tag of a `bpy.types` struct tells which subclass it is.
 //!
-//! Blender refines a struct to the subclass its tag names, and the tag is read-only. The stubs
-//! state it in two forms, and both give the same table, (base, attribute, value) → class:
+//! Blender refines a struct to the subclass its tag names. The stubs state it in two forms, and both
+//! give the same table, (base, attribute, value) → class:
 //!
 //! ```python
 //! class Modifier(bpy_struct):
@@ -22,27 +22,43 @@
 //! `Mesh` through ordinary member lookup. `in` gives the union of the classes of its values; `!=`,
 //! `not in` and the `else` branch rule them out. The table holds the stub classes only: an
 //! add-on's own node has a `bl_idname` no stub class declares, and is not narrowed.
+//!
+//! A Pointer tag names the class of a pointer below the struct instead ([`ty_blender::pointer_tag`]):
+//! `area.type == 'VIEW_3D'` makes `area` an `Area & P`, where the synthesised protocol `P` has
+//! `spaces: Q` and `Q` has `active: SpaceView3D`, so `area.spaces.active` is a `SpaceView3D` through
+//! ordinary member lookup.
+//!
+//! The narrowing is ty's own, so rebinding the struct drops it. Some tags can be written
+//! (`Light.type`, `Area.type`, which `Area.ui_type` sets too): a scope that writes the tag of the
+//! same place anywhere gets no narrowing from a test of it ([`ty_blender::tag_writers`]).
 
 use ruff_db::parsed::parsed_module;
 use ruff_python_ast::{self as ast, name::Name};
-use ty_blender::{ADDON_TYPE_TAG, excludes_on_mismatch};
+use ruff_text_size::Ranged;
+use ty_blender::{ADDON_TYPE_TAG, excludes_on_mismatch, pointer_tag, tag_writers};
 use ty_python_core::ProgramFile;
+use ty_python_core::place::{PlaceExpr, PlaceTable};
 
 use crate::place::imported_symbol;
 use crate::types::{IntersectionBuilder, StaticClassLiteral, Type, UnionType};
 use crate::{Db, ProgramEnvironment};
 
 use super::classes::mro_classes;
-use super::symbols::is_bpy_types_class;
+use super::context_members::space_subclass;
+use super::symbols::{bpy_types_class_name, is_bpy_types_class};
 
 /// The type of the struct `value_ty` once the test `<value>.<attribute> <operator> <rhs>` gave
 /// `is_positive`, when `attribute` is a Type tag of its `bpy.types` class. `rhs_ty` is a string
 /// literal for `==` and `!=`, and a tuple of them for `in` and `not in` (a set or list display is
 /// given as a tuple). `None` leaves the test to ty: a struct of no `bpy.types` class, a value no
-/// stub class declares, or a test that cannot rule a class out.
+/// stub class declares, a test that cannot rule a class out, or a scope (`places`) that writes the
+/// tag of `value`.
+#[expect(clippy::too_many_arguments)]
 pub(crate) fn narrow_type_tag<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
+    places: &PlaceTable,
+    value: &ast::Expr,
     value_ty: Type<'db>,
     attribute: &str,
     rhs_ty: Type<'db>,
@@ -64,7 +80,67 @@ pub(crate) fn narrow_type_tag<'db>(
     // Whether the tag is one of `values` where the test narrows: the `if` branch of `==` and `in`,
     // the `else` branch of `!=` and `not in`.
     let is_one_of = matches!(operator, ast::CmpOp::Eq | ast::CmpOp::In) == is_positive;
+    if writes_tag(places, value, attribute) {
+        return None;
+    }
+    if is_one_of && let Some(narrowed) = narrow_pointer_tag(db, env, value_ty, attribute, &values) {
+        return Some(narrowed);
+    }
     narrow_by_values(db, env, value_ty, attribute, &values, is_one_of)
+}
+
+/// Whether the scope of `places` writes the tag `attribute` of `value` (`area.type = ...`)
+/// anywhere: there a test of the tag says nothing about a later read.
+fn writes_tag(places: &PlaceTable, value: &ast::Expr, attribute: &str) -> bool {
+    tag_writers(attribute).any(|writer| {
+        let target = ast::ExprAttribute {
+            node_index: ast::AtomicNodeIndex::default(),
+            range: value.range(),
+            value: Box::new(value.clone()),
+            attr: ast::Identifier::new(writer, value.range()),
+            ctx: ast::ExprContext::Store,
+        };
+        PlaceExpr::try_from_expr(&target)
+            .and_then(|place| places.place_id(&place))
+            .is_some_and(|id| places.place(id).is_bound())
+    })
+}
+
+/// The struct `value_ty` once its Pointer tag `attribute` is known to be one of `values`:
+/// `Area & P`, where `P` gives the tag's pointer the union of the classes the values name.
+fn narrow_pointer_tag<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    value_ty: Type<'db>,
+    attribute: &str,
+    values: &[Name],
+) -> Option<Type<'db>> {
+    let positive: Vec<Type<'db>> = match value_ty {
+        Type::NominalInstance(_) => vec![value_ty],
+        Type::Intersection(intersection) => intersection.iter_positive(db).collect(),
+        _ => return None,
+    };
+    let tag = positive.iter().find_map(|element| {
+        let Type::NominalInstance(instance) = element else {
+            return None;
+        };
+        let class = instance.class(db, env).class_literal(db).as_static()?;
+        pointer_tag(bpy_types_class_name(db, class)?, attribute)
+    })?;
+    let classes = values
+        .iter()
+        .map(|value| space_subclass(db, env, value))
+        .collect::<Option<Vec<_>>>()?;
+    let pointer = tag.path.iter().rev().fold(
+        UnionType::from_elements(db, env, classes),
+        |member, name| Type::protocol_with_readonly_members(db, env, [(*name, member)]),
+    );
+    Some(
+        IntersectionBuilder::new(db, env)
+            .add_positive(value_ty)
+            .add_positive(pointer)
+            .build(),
+    )
 }
 
 /// The type of the struct `value_ty` once its Type tag `attribute` is known to be one of `values`,

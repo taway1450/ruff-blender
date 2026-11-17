@@ -43,7 +43,7 @@ use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
 use super::{
     assumptions, context_assumptions, context_members, operator_properties, operators,
-    pointer_aliases, poll_checks, preferences, subclass_members,
+    pointer_aliases, poll_checks, preferences, subclass_members, temp_override,
 };
 
 /// The property that gives instances of `class` the attribute `name` in `file`.
@@ -473,7 +473,7 @@ pub(crate) fn on_load<'db>(
     }
     // `layout.operator("my_addon.run").count`: the operator's properties, also where the stub's
     // `__getattr__` accepts any name.
-    if let Some(member) = operator_properties::member(db, env, receiver, name) {
+    if let Some(member) = operator_properties::load(context, attribute, receiver) {
         return member;
     }
     if name == "properties"
@@ -484,8 +484,11 @@ pub(crate) fn on_load<'db>(
     if name == "layout" && is_drawn_layout(db, file, attribute) {
         return place.map_type(|ty| without_none(db, ty));
     }
-    // `area.spaces.active` after `area.type == 'VIEW_3D'`, a member passed to `temp_override`.
-    if let Some(member) = pointer_aliases::on_load(context, attribute, receiver, place) {
+    // A Grease Pencil brush's settings, a member passed to `temp_override`.
+    if let Some(member) = pointer_aliases::on_load(context, attribute, place) {
+        return member;
+    }
+    if let Some(member) = temp_override::on_load(context, attribute, receiver, place) {
         return member;
     }
     // `context.scene` inside a Blender callback, and a pointer its class's `poll()` checked
