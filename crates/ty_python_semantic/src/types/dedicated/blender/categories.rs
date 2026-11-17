@@ -62,6 +62,8 @@ impl BlenderRuleCategory {
 
     /// The category named `name` in `[rules]`, if it is one.
     pub fn from_name(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|category| category.name() == name)
+        Self::ALL
+            .into_iter()
+            .find(|category| category.name() == name)
     }
 }

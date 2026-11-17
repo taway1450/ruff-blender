@@ -43,8 +43,8 @@ use crate::types::diagnostic::TypeCheckDiagnostics;
 use crate::{Db, ProgramEnvironment, declare_lint};
 
 use super::addon::is_first_party;
-use super::assumptions::check_assumptions;
 use super::addon_of_file;
+use super::assumptions::check_assumptions;
 use super::index::addon_in_program;
 use super::operator_properties::check_keymaps;
 use super::overrides::check_overrides;

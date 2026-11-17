@@ -49,7 +49,10 @@ pub fn context_guarantee(name: &str) -> Option<ContextGuarantee> {
 /// The other Guaranteed members are left out: `preferences` and `window_manager` are never `None`
 /// in the stubs, and `blend_data` is not read outside callbacks in practice.
 pub fn is_assumed_context_member(name: &str) -> bool {
-    matches!(name, "scene" | "view_layer" | "tool_settings" | "collection")
+    matches!(
+        name,
+        "scene" | "view_layer" | "tool_settings" | "collection"
+    )
 }
 
 /// Whether the member `name` of `bpy.types.Context` is one of the editor's: `area`, `region` and

@@ -36,8 +36,8 @@ use crate::types::context::InferContext;
 
 use super::index::{AddonInProgram, addon_in_program, addon_index};
 use super::lints::{
-    BLENDER_ASSUMED_COMPLETE_REGISTRATION, BLENDER_ASSUMED_LIST_ITEM,
-    BLENDER_ASSUMED_PREFERENCES, BLENDER_ASSUMED_REGISTRATION,
+    BLENDER_ASSUMED_COMPLETE_REGISTRATION, BLENDER_ASSUMED_LIST_ITEM, BLENDER_ASSUMED_PREFERENCES,
+    BLENDER_ASSUMED_REGISTRATION,
 };
 use super::member::without_none;
 use super::overrides::{assumed_item_type, override_types};
@@ -57,7 +57,8 @@ pub(super) fn check_assumptions(
         && let Some(site) = register_walk(db, key).incomplete
         && site.file == context.file()
         && !site.range.is_empty()
-        && let Some(builder) = context.report_lint(&BLENDER_ASSUMED_COMPLETE_REGISTRATION, site.range)
+        && let Some(builder) =
+            context.report_lint(&BLENDER_ASSUMED_COMPLETE_REGISTRATION, site.range)
     {
         builder.into_diagnostic(
             "`register()` registers a value the checker cannot follow here, so every class and \
@@ -256,13 +257,11 @@ pub(super) fn report_conditional_property<'db>(
     let Some(key) = addon_in_program(db, context.program_file()) else {
         return;
     };
-    if !addon_index(db, key)
-        .conditional_properties
-        .iter()
-        .any(|(conditional_owner, conditional_name)| {
+    if !addon_index(db, key).conditional_properties.iter().any(
+        |(conditional_owner, conditional_name)| {
             *conditional_owner == owner && conditional_name == name
-        })
-    {
+        },
+    ) {
         return;
     }
     if let Some(builder) = context.report_lint(&BLENDER_ASSUMED_REGISTRATION, site) {

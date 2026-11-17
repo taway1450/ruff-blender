@@ -27,7 +27,6 @@
 //! A mixin method also counts as a draw callback (`self.layout` is never `None`) when it is one for
 //! every user ([`super::member`]).
 
-
 use ruff_db::files::File;
 use ruff_db::parsed::parsed_module;
 use ruff_db::system::SystemPath;
@@ -61,9 +60,8 @@ pub(crate) fn mixin_self_bounds<'db>(
     if users.is_empty() {
         return bounds;
     }
-    let instance = |class: StaticClassLiteral<'db>| {
-        Type::instance(db, env, class.identity_specialization(db))
-    };
+    let instance =
+        |class: StaticClassLiteral<'db>| Type::instance(db, env, class.identity_specialization(db));
     let blender_classes = users.iter().filter_map(|user| {
         mro_classes(db, *user)
             .find(|base| is_bpy_types_class(db, *base))
@@ -98,7 +96,11 @@ pub(super) fn mixin_users<'db>(
     {
         return Box::default();
     }
-    let folder = file.file(db).path(db).as_system_path().and_then(SystemPath::parent);
+    let folder = file
+        .file(db)
+        .path(db)
+        .as_system_path()
+        .and_then(SystemPath::parent);
     let files: Box<[File]> = match (addon_in_program(db, file), folder) {
         (Some(addon), _) => addon.files(db).map(|file| file.file(db)).collect(),
         (None, Some(folder)) => folder_source_files(db, folder).into(),
