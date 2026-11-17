@@ -33,7 +33,9 @@ use ruff_db::parsed::parsed_module;
 use ruff_python_ast as ast;
 use ruff_python_ast::name::Name;
 use ruff_text_size::Ranged;
-use ty_blender::{CallbackShape, MethodKind, callback_of, is_callback_name, is_callback_root};
+use ty_blender::{
+    Callback, CallbackShape, MethodKind, callback_of, is_callback_name, is_callback_root,
+};
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::scope::FileScopeId;
 use ty_python_core::{ProgramFile, semantic_index};
@@ -48,6 +50,10 @@ use crate::types::{
 };
 use crate::{Db, ProgramEnvironment};
 
+use super::imprecise::{
+    NarrowedParameter, accepted_mixin_return, check_method_annotations, check_mixin_returns,
+    has_imprecise_return, narrowed_parameters,
+};
 use super::index::file_facts;
 use super::lints::BLENDER_INVALID_OVERRIDE;
 use super::operator_properties::class_properties_type;
@@ -130,7 +136,7 @@ fn method_kind<'db>(
 }
 
 /// The class whose body defines `definition`.
-fn defining_class<'db>(
+pub(super) fn defining_class<'db>(
     db: &'db dyn Db,
     definition: Definition<'db>,
 ) -> Option<StaticClassLiteral<'db>> {
@@ -180,8 +186,10 @@ pub(super) fn check_overrides(context: &InferContext, file: ProgramFile) {
             {
                 builder.into_diagnostic(problem.clone());
             }
+            check_method_annotations(context, definition, function);
         }
     }
+    check_mixin_returns(context, file);
 }
 
 /// What ty's override checks compare the method `name` of `class`, defined by `definition`, with,
@@ -219,7 +227,23 @@ pub(crate) fn override_contract<'db>(
         .then(|| method_shape(db, definition).as_ref())
         .flatten()
         .map(|(_, shape)| shape.positional.saturating_sub(1));
-    Some(with_positional_only_parameters(db, env, contract, kept))
+    let accepted = AcceptedAnnotations {
+        narrowed: narrowed_parameters(db, definition),
+        definition,
+    };
+    Some(with_positional_only_parameters(
+        db, env, contract, kept, &accepted,
+    ))
+}
+
+/// The annotations of an override, or of a mixin method standing in for one, that ty's override
+/// check accepts although they do not fit the parent's signature: the Imprecise annotations
+/// (`super::imprecise`).
+struct AcceptedAnnotations<'a, 'db> {
+    /// Parameters annotated with a subtype of the parent's type.
+    narrowed: &'a [NarrowedParameter<'db>],
+    /// The method, whose return annotation may be the parent's enum-set result widened to `str`.
+    definition: Definition<'db>,
 }
 
 /// `contract` with its positional parameters made positional-only, keeping the first `kept` of them
@@ -229,16 +253,17 @@ fn with_positional_only_parameters<'db>(
     env: &ProgramEnvironment<'db>,
     contract: Type<'db>,
     kept: Option<usize>,
+    accepted: &AcceptedAnnotations<'_, 'db>,
 ) -> Type<'db> {
     match contract {
         Type::Union(union) => union.map(db, env, |element| {
-            with_positional_only_parameters(db, env, *element, kept)
+            with_positional_only_parameters(db, env, *element, kept, accepted)
         }),
         Type::Callable(callable) => {
             let overloads = callable
                 .signatures(db)
                 .iter()
-                .map(|signature| positional_only_signature(db, env, signature, kept));
+                .map(|signature| positional_only_signature(db, env, signature, kept, accepted));
             Type::Callable(
                 callable.with_signatures(db, CallableSignature::from_overloads(overloads)),
             )
@@ -252,10 +277,16 @@ fn positional_only_signature<'db>(
     env: &ProgramEnvironment<'db>,
     signature: &Signature<'db>,
     kept: Option<usize>,
+    accepted: &AcceptedAnnotations<'_, 'db>,
 ) -> Signature<'db> {
     if !signature.parameters().is_standard() {
         return signature.clone();
     }
+    let widened = widen_array_outputs(db, env, signature.return_ty);
+    let return_ty = match accepted_mixin_return(db, env, accepted.definition, signature.return_ty) {
+        Some(annotation) => UnionType::from_two_elements(db, env, widened, annotation),
+        None => widened,
+    };
     let mut positional = 0;
     let parameters = signature.parameters().iter().filter_map(|parameter| {
         if !parameter.is_positional() {
@@ -265,9 +296,16 @@ fn positional_only_signature<'db>(
         if kept.is_some_and(|kept| positional > kept) {
             return None;
         }
+        // A bound contract has no `self` / `cls`, so its first positional parameter is the
+        // override's second.
+        let annotated_type = accepted
+            .narrowed
+            .iter()
+            .find(|narrowed| narrowed.position == positional)
+            .map_or(parameter.annotated_type(), |narrowed| narrowed.annotation);
         Some(
             Parameter::positional_only(parameter.name().cloned())
-                .with_annotated_type(parameter.annotated_type())
+                .with_annotated_type(annotated_type)
                 .with_optional_default_type(parameter.default_type(db))
                 .with_definition(parameter.definition()),
         )
@@ -275,7 +313,7 @@ fn positional_only_signature<'db>(
     Signature::new_generic(
         signature.generic_context,
         Parameters::standard(parameters.collect::<Vec<_>>()),
-        widen_array_outputs(db, env, signature.return_ty),
+        return_ty,
     )
     .with_definition(signature.definition)
 }
@@ -341,7 +379,7 @@ fn widen_array_outputs<'db>(
 }
 
 /// Whether `ty` is a string literal or a union of them: the item type of an enum set.
-fn is_string_literals(db: &dyn Db, ty: Type<'_>) -> bool {
+pub(super) fn is_string_literals(db: &dyn Db, ty: Type<'_>) -> bool {
     let is_string = |ty: Type<'_>| {
         ty.as_literal_value()
             .and_then(LiteralValueType::as_string)
@@ -426,7 +464,18 @@ pub(crate) fn override_types<'db>(
         return None;
     }
 
-    let env = ProgramEnvironment::from_file(definition.program_file(db));
+    parent_callback_types(db, class, callback)
+}
+
+/// What a method `callback` of `class` takes from the callback it overrides: the types of the first
+/// class after `class` in its method resolution order that defines it and is a `bpy.types` class or
+/// derives from one ([`override_types`]).
+pub(super) fn parent_callback_types<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+    callback: &Callback,
+) -> Option<OverrideTypes<'db>> {
+    let env = ProgramEnvironment::from_file(class.program_file(db));
     for base in class.iter_mro(db, None).skip(1) {
         let ClassBase::Class(base_class) = base else {
             continue;
@@ -440,7 +489,7 @@ pub(crate) fn override_types<'db>(
         let member = class.class_member_from_mro(
             db,
             &env,
-            &name,
+            callback.name,
             MemberLookupPolicy::default(),
             std::iter::once(base),
         );
@@ -513,10 +562,11 @@ pub(crate) fn apply_override_types<'db>(
             }
         })
         .collect::<Vec<_>>();
+    // `-> set[str]` on `execute` is typed as the parent's result (`super::imprecise`).
     let return_annotated = match definition.kind(db) {
         DefinitionKind::Function(function) => {
             let module = parsed_module(db, definition.python_file(db)).load(db);
-            function.node(&module).returns.is_some()
+            function.node(&module).returns.is_some() && !has_imprecise_return(db, definition)
         }
         _ => true,
     };

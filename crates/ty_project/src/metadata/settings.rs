@@ -6,6 +6,7 @@ use ty_combine::Combine;
 use ty_python_semantic::AnalysisSettings;
 use ty_python_semantic::lint::RuleSelection;
 
+use crate::metadata::blender::BlenderOptions;
 use crate::metadata::options::{AnalysisOptionsContext, InnerOverrideOptions, OutputFormat};
 use crate::script::Script;
 use crate::{Db, glob::IncludeExcludeFilter};
@@ -226,7 +227,10 @@ fn merge_overrides(db: &dyn Db, overrides: Vec<Arc<InnerOverrideOptions>>, _: ()
     let rules = merged.rules.unwrap_or_default();
     let analysis = merged.analysis.unwrap_or_default();
 
-    let rules = rules.to_rule_selection(db);
+    let strictness = metadata
+        .options_in_precedence_order(metadata.options(), metadata.uv_workspace_options.as_deref())
+        .find_map(|options| BlenderOptions::strictness(options.blender.as_ref()));
+    let rules = rules.to_rule_selection(db, strictness);
     // The analysis options were already validated when building the individual overrides.
     let analysis = analysis.to_settings(db, AnalysisOptionsContext::Override, &mut Vec::new());
 

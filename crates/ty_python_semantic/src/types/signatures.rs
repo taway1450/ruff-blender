@@ -97,9 +97,7 @@ pub(super) fn lexical_return_type<'db>(
     definition: Definition<'db>,
     function: &ast::StmtFunctionDef,
 ) -> Option<Type<'db>> {
-    function
-        .returns
-        .as_deref()
+    crate::types::blender::return_annotation(db, definition, function)
         .map(|returns| function_signature_expression_type(db, definition, returns))
         .or_else(|| crate::types::blender::override_return_type(db, definition))
 }

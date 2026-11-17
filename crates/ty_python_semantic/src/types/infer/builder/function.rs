@@ -200,7 +200,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
 
         self.infer_scope_body(&function.body);
 
-        if let Some(returns) = function.returns.as_deref() {
+        if let Some(returns) = self.blender_return_annotation(function) {
             let has_empty_body = self.return_types_and_ranges.is_empty()
                 && function_body_kind(db, env, function, |expr| self.expression_type(expr))
                     == FunctionBodyKind::Stub;

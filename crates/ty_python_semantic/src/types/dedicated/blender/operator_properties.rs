@@ -49,6 +49,7 @@ use crate::types::{
 use crate::{Db, ProgramEnvironment};
 
 use super::classes::{class_string, operator_idname};
+use super::imprecise::check_enum_arguments;
 use super::index::addon_in_program;
 use super::lints::{BLENDER_INVALID_OPERATOR_PROPERTY, BLENDER_UNKNOWN_OPERATOR};
 use super::operators::{
@@ -515,7 +516,8 @@ fn holder_type<'db>(
     Some(IntersectionType::from_elements(db, env, [holder, protocol]))
 }
 
-/// Refine the return type of a call to a sink, and check its idname and property arguments.
+/// Refine the return type of a call to a sink, and check its idname and property arguments; and
+/// report the imprecise enum values passed to a Blender function (`super::imprecise`).
 ///
 /// Only the arms of the callee that are sinks change: `self.layout.operator(...)` calls a
 /// `UILayout | None` attribute.
@@ -525,6 +527,8 @@ pub(crate) fn on_call<'db>(
     bindings: &mut Bindings<'db>,
     expression_type: &dyn Fn(&Expr) -> Option<Type<'db>>,
 ) {
+    // `bpy.ops.object.mode_set(mode=mode)` with `mode: str`.
+    check_enum_arguments(context, call, bindings, expression_type);
     let db = context.db();
     let env = context.program_environment();
     let file = context.program_file();

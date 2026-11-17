@@ -403,7 +403,9 @@ pub(crate) fn exempts_attribute_override<'db>(
             .is_some_and(|superclass| annotated_property(db, superclass, name).is_some())
 }
 
-/// The attribute `attribute` read from `receiver` in `file`, where ty found `place`.
+/// The attribute `attribute` read from `receiver` in the file of `context`, where ty found `place`.
+///
+/// `context` is where a Blender rule that accepts a narrowed read reports it, at the read.
 ///
 /// When ty finds nothing, or finds it on only some arms of the receiver, a Registered property in
 /// the file's add-on gives the attribute its value type. On a class object only `del` is accepted
@@ -414,13 +416,14 @@ pub(crate) fn exempts_attribute_override<'db>(
 /// add-on's own preferences class ([`preferences`]), and `bpy.ops` and operator idnames give the
 /// add-on's operators.
 pub(crate) fn on_load<'db>(
-    db: &'db dyn Db,
-    env: &ProgramEnvironment<'db>,
-    file: ProgramFile<'db>,
+    context: &InferContext<'db, '_>,
     attribute: &ast::ExprAttribute,
     receiver: Type<'db>,
     place: PlaceAndQualifiers<'db>,
 ) -> PlaceAndQualifiers<'db> {
+    let db = context.db();
+    let env = context.program_environment();
+    let file = context.program_file();
     let name = attribute.attr.id.as_str();
     if name == "preferences"
         && let Some(ty) = preferences::preferences_load(db, env, file, attribute, receiver)

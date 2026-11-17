@@ -290,6 +290,23 @@ fn operator_type<'db>(
     operator_protocol(db, env, &operator.idname(), keywords)
 }
 
+/// Whether `ty` is the `__call__` of an operator as `bpy.ops` gives it ([`operator_protocol`]),
+/// bound or not: a callable with a positional-only `execution_context` parameter, which only these
+/// synthesized signatures have.
+pub(super) fn is_operator_call(db: &dyn Db, ty: Type<'_>) -> bool {
+    let Type::Callable(callable) = ty else {
+        return false;
+    };
+    callable.signatures(db).iter().any(|signature| {
+        signature.parameters().iter().any(|parameter| {
+            parameter.is_positional_only()
+                && parameter
+                    .name()
+                    .is_some_and(|name| name == "execution_context")
+        })
+    })
+}
+
 /// An operator as `bpy.ops` gives it: `__call__` takes the execution context and the undo flag
 /// positionally (or the undo flag alone, a `bool` or an `int`), then `keywords`; plus `poll()`,
 /// `idname()`, `idname_py()` and `get_rna_type()`.

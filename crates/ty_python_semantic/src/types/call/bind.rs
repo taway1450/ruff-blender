@@ -7844,6 +7844,13 @@ impl<'a, 'db> ArgumentTypeChecker<'a, 'db> {
                     self.inferable_typevars,
                 )
                 .is_never_satisfied(db, self.env, self.inferable_typevars)
+            && !crate::types::blender::accepts_enum_argument(
+                db,
+                self.env,
+                self.signature_type,
+                argument_type,
+                expected_ty,
+            )
             && !self.should_defer_typevartuple_callable_check(
                 parameter.annotated_type(),
                 expected_ty,
