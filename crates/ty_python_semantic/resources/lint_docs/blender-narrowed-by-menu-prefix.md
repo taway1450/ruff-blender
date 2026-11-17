@@ -31,7 +31,7 @@ class CLIP_MT_my_tools(Menu):
 
 class MY_MT_tools(Menu):
     def draw(self, context):
-        clip = context.space_data.clip  # error: [unresolved-attribute]
+        clip = context.space_data.clip  # error: [missing-attribute]
 ```
 
 Check `context.space_data.type` (or `context.area.type`) in the menu's `poll`.

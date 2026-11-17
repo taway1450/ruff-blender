@@ -15,7 +15,7 @@ Every class deriving from a Blender class is checked, registered or not, since a
 subclass inherits the method.
 
 Blender passes a callback's arguments by position, as many as it has parameters, so a renamed
-parameter (`def execute(self, ctx)`) or a short `draw_item` is fine. ty's `invalid-method-override`
+parameter (`def execute(self, ctx)`) or a short `draw_item` is fine. ty's `incompatible-method-override`
 accepts them too, and leaves a method that this rule reports to it.
 
 ## Why is this bad?

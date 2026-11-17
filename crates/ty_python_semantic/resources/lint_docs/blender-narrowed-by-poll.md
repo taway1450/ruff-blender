@@ -34,7 +34,7 @@ class MY_PT_material(Panel):
 
     def draw(self, context):
         self.layout.label(text=context.object.name)  # error: [blender-narrowed-by-poll]
-        self.layout.label(text=context.material.name)  # error: [unresolved-attribute]
+        self.layout.label(text=context.material.name)  # error: [missing-union-attribute]
 ```
 
 Check the pointer in the callback too, or read it once into a checked local.

@@ -5,7 +5,7 @@ Checks the parameters of a Blender callback override (`UIList.draw_item`, `Opera
 such as the add-on's own `PropertyGroup` for `draw_item`'s `item` or `Armature` for its `data`.
 
 The override is accepted, and its body sees the annotated type. An annotation that is no subtype of
-the parent's type is still ty's `invalid-method-override`.
+the parent's type is still ty's `incompatible-method-override`.
 
 The rule belongs to the category `blender-imprecise-annotations`.
 
