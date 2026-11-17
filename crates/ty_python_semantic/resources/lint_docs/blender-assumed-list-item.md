@@ -4,6 +4,10 @@ Checks the reads of the `item` parameter of a `UIList.draw_item` override that l
 unannotated. The parameter is typed without `None`; a read that the method only tests for truth
 or `None` (`if item is None: return`) is not reported, nor are the reads it narrows itself.
 
+Where the add-on draws the list with `layout.template_list("MY_UL_items", "", data, "propname")`,
+in any of its modules, `item` has the element type of the collection `data.propname`, the union of
+them when the list shows several collections. Otherwise it keeps the type of `UIList.draw_item`.
+
 The rule belongs to the category `blender-assumptions`.
 
 ## Why is this bad?

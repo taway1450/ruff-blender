@@ -46,7 +46,8 @@
 //! - [`registration_checks`]: the registration checks, what Blender refuses, ignores or leaves
 //!   behind when it runs `register()` and `unregister()`;
 //! - [`assumptions`]: the Assumptions, facts Blender keeps in ordinary use but does not guarantee,
-//!   taken as given and reported;
+//!   taken as given and reported, and [`list_sources`], a list's `item` typed by the collection its
+//!   `template_list` calls show;
 //! - [`reload_guard`]: the names an add-on's reload guard (`if "bpy" in locals():`) uses.
 
 mod addon;
@@ -65,6 +66,7 @@ mod follow;
 mod imprecise;
 mod index;
 mod lints;
+mod list_sources;
 mod member;
 mod mixin_self;
 mod module_dunders;
