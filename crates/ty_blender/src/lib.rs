@@ -4,10 +4,11 @@
 //! top-level `bl_info` and `[tool.blender]` in `pyproject.toml`; which classes Blender registers and which
 //! idnames it refuses, and which callbacks it calls on them; what an operator call takes and returns, and which Blender
 //! functions take an operator idname; which pointers Blender keeps in step and what a mode
-//! implies; which code runs only when Blender reloads an add-on, and which
+//! or a panel's `bl_context` implies; which code runs only when Blender reloads an add-on, and which
 //! never runs in one; which Type tags a test may not narrow by. The
 //! type-aware glue lives in `ty_python_semantic`'s `types/dedicated/blender/`.
 
+mod bl_context;
 mod callbacks;
 mod context;
 mod discovery;
@@ -21,6 +22,7 @@ mod script_guard;
 mod source;
 mod type_tags;
 
+pub use bl_context::bl_context_facts;
 pub use callbacks::{
     CALLBACKS, Callback, CallbackKind, CallbackShape, MethodKind, PYTHON_BASE_NAMES, callback_of,
     callbacks_of, gated_by_poll, is_callback_name, is_callback_root, problem, python_base_names,
