@@ -38,6 +38,7 @@ use crate::{Db, ProgramEnvironment};
 
 use super::evaluate::{PropertyValue, property_value};
 use super::index::{RegisteredProperty, registered_properties};
+use super::mixin_self::mixin_users;
 use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
 use super::{
@@ -596,12 +597,19 @@ fn is_draw_callback<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> bool {
                 matches!(decorator.id.as_str(), "classmethod" | "staticmethod")
             })
     });
-    bpy_types_bases(db, class).any(|base| {
-        (is_instance_method && DRAWN_CLASSES.contains(&base))
-            || DRAW_CALLBACKS
-                .iter()
-                .any(|(root, callbacks)| *root == base && callbacks.contains(&name))
-    })
+    let is_drawn = |class| {
+        bpy_types_bases(db, class).any(|base| {
+            (is_instance_method && DRAWN_CLASSES.contains(&base))
+                || DRAW_CALLBACKS
+                    .iter()
+                    .any(|(root, callbacks)| *root == base && callbacks.contains(&name))
+        })
+    };
+    is_drawn(class) || {
+        // A mixin's method is drawn when it is for every user of the mixin.
+        let users = mixin_users(db, class);
+        !users.is_empty() && users.iter().all(|user| is_drawn(*user))
+    }
 }
 
 /// `ty` without `None`.

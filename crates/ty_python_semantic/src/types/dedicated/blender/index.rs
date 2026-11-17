@@ -391,7 +391,7 @@ impl<'a> Visitor<'a> for TypeCalls<'a> {
 /// The class statements of a module body, including those under a module-level `if` or `try`.
 /// Classes defined in functions are left out: factories make them, and which of them are
 /// registered can't be told.
-fn module_classes(body: &[ast::Stmt]) -> Vec<&ast::StmtClassDef> {
+pub(super) fn module_classes(body: &[ast::Stmt]) -> Vec<&ast::StmtClassDef> {
     let mut classes = Vec::new();
     for statement in body {
         match statement {

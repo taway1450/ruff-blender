@@ -28,6 +28,21 @@ pub fn addon_source_files(db: &dyn Db, addon: &Addon) -> Vec<File> {
     files
 }
 
+/// The `.py` files directly in `folder`, by name: the files that share a folder with a file in no
+/// add-on, such as Blender's own `bl_ui` modules.
+pub fn folder_source_files(db: &dyn Db, folder: &SystemPath) -> Vec<File> {
+    let Ok(listing) = directory_listing(db, folder) else {
+        return Vec::new();
+    };
+    listing
+        .iter()
+        .filter(|(name, _)| listing.entry_is_file(db, folder, name))
+        .map(|(name, _)| folder.join(name))
+        .filter(|path| path.extension() == Some("py"))
+        .filter_map(|path| system_path_to_file(db, path).ok())
+        .collect()
+}
+
 fn collect_folder(db: &dyn Db, folder: &SystemPath, files: &mut Vec<File>) {
     let Ok(listing) = directory_listing(db, folder) else {
         return;

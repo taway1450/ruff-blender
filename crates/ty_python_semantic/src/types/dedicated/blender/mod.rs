@@ -11,6 +11,7 @@
 //! - [`walk`]: the `register()` walk, what `register()` and `unregister()` do, in order;
 //! - [`index`]: the Add-on index, what an add-on's code does to Blender, gathered without inference;
 //! - [`member`]: the property behind an attribute of a Blender instance, of either origin;
+//! - [`mixin_self`]: `self` in a mixin's methods, typed by the `bpy.types` classes of its users;
 //! - [`bl_rna`]: `bl_rna.properties["name"]` as the `Property` subclass of the attribute's kind;
 //! - [`context_members`]: the Guaranteed context members, non-None inside a Blender callback, and
 //!   the spaces a menu's idname prefix or a popover implies;
@@ -57,6 +58,7 @@ mod imprecise;
 mod index;
 mod lints;
 mod member;
+mod mixin_self;
 mod module_dunders;
 mod operator_properties;
 mod operators;
@@ -91,6 +93,7 @@ pub(crate) use member::{
     check_property_write, completions, exempts_attribute_override, hides_class_member,
     hides_instance_member, on_load,
 };
+pub(crate) use mixin_self::mixin_self_bounds;
 pub(crate) use module_dunders::package_type;
 pub use operator_properties::blender_idname_hover;
 pub(crate) use operator_properties::{idname_completions, on_call};
