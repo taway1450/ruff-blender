@@ -21,53 +21,100 @@
 //! ```
 //!
 //! Keying on the receiver's type, not on the `context` parameter, covers a renamed parameter,
-//! `bpy.context` and an alias (`scene = context.scene`, since the read's own type changes). A Panel
-//! opened as a popover gets the opening editor's area, and `temp_override(scene=None)` empties the
-//! context: both are known unsoundnesses, not special-cased.
+//! `bpy.context` and an alias (`scene = context.scene`, since the read's own type changes).
+//! `temp_override(scene=None)` empties the context: a known unsoundness, not special-cased.
+//!
+//! Two Implied narrowings give the space by convention rather than by guarantee, so their reads
+//! are reported (the category `blender-implied-narrowings`):
+//!
+//! - a Menu has no `bl_space_type`, but in its `draw` and `poll` the editor prefix of its idname
+//!   ([`ty_blender::menu_space_type`], `CLIP_MT_view`) gives `space_data` and `area`
+//!   (`blender-narrowed-by-menu-prefix`);
+//! - a Panel that the same add-on opens as a popover (`layout.popover(...)`, `wm.call_panel`) is
+//!   drawn with the opening editor's area, so its `space_data` keeps the `bl_space_type` subclass
+//!   but is reported (`blender-narrowed-by-popover`).
 
 use ruff_db::parsed::parsed_module;
-use ruff_python_ast as ast;
 use ruff_python_ast::name::Name;
-use ty_blender::{ContextGuarantee, callback_of, context_guarantee, runs_in_editor};
+use ruff_python_ast::visitor::{Visitor, walk_expr};
+use ruff_python_ast::{self as ast, Expr};
+use ty_blender::{
+    ContextGuarantee, callback_of, context_guarantee, menu_space_type, runs_in_editor,
+};
 use ty_python_core::scope::ScopeId;
 use ty_python_core::{ProgramFile, global_scope, place_table, semantic_index};
 
 use crate::place::{PlaceAndQualifiers, imported_symbol};
+use crate::types::context::InferContext;
 use crate::types::infer::nearest_enclosing_class;
 use crate::types::{StaticClassLiteral, Type};
 use crate::{Db, ProgramEnvironment};
 
 use super::classes::{class_string, mro_classes};
+use super::index::addon_in_program;
+use super::lints::{BLENDER_NARROWED_BY_MENU_PREFIX, BLENDER_NARROWED_BY_POPOVER};
 use super::member::without_none;
 use super::overrides::callback_root;
+use super::poll_checks::is_tested_read;
 use super::symbols::bpy_types_class_name;
 use super::vector::module_class;
 
-/// The member `attribute` read from `receiver` in `file`, where ty found `place`, when it is a
-/// Guaranteed context member of the Blender callback the read is in. `None` leaves the read to the
+/// The member `attribute` read from `receiver` in the file of `context`, where ty found `place`,
+/// when it is a Guaranteed context member of the Blender callback the read is in, or a space a
+/// menu's idname prefix or a popover implies (reported to `context`). `None` leaves the read to the
 /// other hooks.
 pub(super) fn on_load<'db>(
-    db: &'db dyn Db,
-    env: &ProgramEnvironment<'db>,
-    file: ProgramFile<'db>,
+    context: &InferContext<'db, '_>,
     attribute: &ast::ExprAttribute,
     receiver: Type<'db>,
     place: PlaceAndQualifiers<'db>,
 ) -> Option<PlaceAndQualifiers<'db>> {
+    let db = context.db();
+    let env = context.program_environment();
+    let file = context.program_file();
     let name = attribute.attr.id.as_str();
     let guarantee = context_guarantee(name)?;
     if !is_context_instance(db, env, receiver) {
         return None;
     }
-    let callback = enclosing_callback(db, file, attribute)?;
+    let function = enclosing_function(db, file, attribute)?;
+    let callback = callback_context(db, function).as_ref()?;
     match guarantee {
         ContextGuarantee::Always => Some(place.map_type(|ty| without_none(db, ty))),
         ContextGuarantee::InEditor => {
             let space_type = callback.space_type.as_deref()?;
+            let rule = match (callback.space_source, name) {
+                (SpaceSource::MenuPrefix, "region") => return None,
+                (SpaceSource::MenuPrefix, _) => Some(&BLENDER_NARROWED_BY_MENU_PREFIX),
+                (SpaceSource::Popover, "space_data") => Some(&BLENDER_NARROWED_BY_POPOVER),
+                _ => None,
+            };
             let space = (name == "space_data")
                 .then(|| space_subclass(db, env, space_type))
                 .flatten();
-            Some(place.map_type(|ty| space.unwrap_or_else(|| without_none(db, ty))))
+            let narrowed = place.map_type(|ty| space.unwrap_or_else(|| without_none(db, ty)));
+            if let Some(rule) = rule
+                && narrowed.place != place.place
+                && !is_tested_read(db, function, attribute)
+                && let Some(ty) = narrowed.place.ignore_possibly_undefined()
+                && let Some(builder) = context.report_lint(rule, attribute)
+            {
+                let reason = match callback.space_source {
+                    SpaceSource::Popover => format!(
+                        "the panel's `bl_space_type` is `'{space_type}'`, but the add-on opens it as \
+                         a popover, which is drawn with the area of the editor that opens it"
+                    ),
+                    _ => format!(
+                        "the menu's idname prefix names the editor `'{space_type}'`, but a menu \
+                         is drawn in whatever editor opens it"
+                    ),
+                };
+                builder.into_diagnostic(format_args!(
+                    "`context.{name}` is taken as `{}`: {reason}",
+                    ty.display(db, env),
+                ));
+            }
+            Some(narrowed)
         }
     }
 }
@@ -84,29 +131,41 @@ fn is_context_instance<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: 
         .is_some_and(|class| bpy_types_class_name(db, class) == Some("Context"))
 }
 
-/// The Blender callback that `attribute` is read in: the nearest enclosing function, when it is a
-/// callback, also from a lambda or a comprehension inside it. A nested `def` is no callback: it may
-/// run after the callback returns (a timer, a draw handler).
-fn enclosing_callback<'db>(
+/// The function scope `attribute` is read in: the nearest enclosing function, also from a lambda
+/// or a comprehension inside it. A nested `def` is a function of its own: it may run after the
+/// callback returns (a timer, a draw handler).
+pub(super) fn enclosing_function<'db>(
     db: &'db dyn Db,
     file: ProgramFile<'db>,
     attribute: &ast::ExprAttribute,
-) -> Option<&'db CallbackContext> {
+) -> Option<ScopeId<'db>> {
     let index = semantic_index(db, file);
     let scope = index.try_expression_scope_id(&*attribute.value)?;
     let function = index
         .ancestor_scopes(scope)
         .find_map(|(id, ancestor)| ancestor.node().as_function().map(|_| id))?;
-    callback_context(db, function.to_scope_id(db, file)).as_ref()
+    Some(function.to_scope_id(db, file))
 }
 
 /// What Blender fills in the context it passes to a callback.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize)]
 struct CallbackContext {
     /// The `bl_space_type` of the editor Blender calls the callback in: a literal one of a Panel,
-    /// Header or GizmoGroup ([`ty_blender::runs_in_editor`]). `None` when the callback has no
-    /// editor of a known type.
+    /// Header or GizmoGroup ([`ty_blender::runs_in_editor`]), or the one a menu's idname prefix
+    /// names. `None` when the callback has no editor of a known type.
     space_type: Option<String>,
+    space_source: SpaceSource,
+}
+
+/// Where the editor of a callback comes from.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize)]
+enum SpaceSource {
+    /// The class's `bl_space_type`, which Blender guarantees.
+    BlSpaceType,
+    /// A menu's idname prefix, a convention.
+    MenuPrefix,
+    /// The `bl_space_type` of a panel the add-on also opens as a popover.
+    Popover,
 }
 
 /// The context Blender passes when it calls the function scope `function`, when that is a Blender
@@ -130,10 +189,93 @@ fn callback_context<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<Call
     let class = nearest_enclosing_class(db, index, function)?;
     let root = callback_root(db, class)?;
     callback_of(root, name)?;
-    let space_type = runs_in_editor(root, name)
-        .then(|| bl_space_type(db, class).clone())
-        .flatten();
-    Some(CallbackContext { space_type })
+    let (space_type, space_source) = if runs_in_editor(root, name) {
+        let space_type = bl_space_type(db, class).clone();
+        let source = if root == "Panel" && space_type.is_some() && is_popover(db, file, class) {
+            SpaceSource::Popover
+        } else {
+            SpaceSource::BlSpaceType
+        };
+        (space_type, source)
+    } else if root == "Menu" && matches!(name, "draw" | "poll") {
+        let idname =
+            class_string(db, class, "bl_idname").unwrap_or_else(|| class.name(db).to_string());
+        (
+            menu_space_type(&idname).map(str::to_string),
+            SpaceSource::MenuPrefix,
+        )
+    } else {
+        (None, SpaceSource::BlSpaceType)
+    };
+    Some(CallbackContext {
+        space_type,
+        space_source,
+    })
+}
+
+/// Whether the panel `class`, defined in `file`, is opened as a popover by its add-on: its idname
+/// (`bl_idname`, or without one its class name) is the string literal panel name of a
+/// `popover(...)` call or a `call_panel(name=...)` in one of the add-on's files (or in `file`, when
+/// it belongs to no add-on).
+fn is_popover<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    class: StaticClassLiteral<'db>,
+) -> bool {
+    let idname = class_string(db, class, "bl_idname").unwrap_or_else(|| class.name(db).to_string());
+    let opens = |file| {
+        popover_panels(db, file)
+            .iter()
+            .any(|panel| *panel == idname)
+    };
+    match addon_in_program(db, file) {
+        Some(addon) => addon.files(db).any(opens),
+        None => opens(file),
+    }
+}
+
+/// The panel idnames `file` opens as a popover, by syntax alone: the string literal panel of
+/// `layout.popover("MY_PT_panel")` or `popover(panel="MY_PT_panel")`, and the `name` of
+/// `bpy.ops.wm.call_panel(name="MY_PT_panel")`.
+#[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
+fn popover_panels<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Box<[Name]> {
+    let module = parsed_module(db, file.python_file(db)).load(db);
+    let mut finder = PopoverPanels::default();
+    finder.visit_body(module.suite());
+    finder.panels.into_boxed_slice()
+}
+
+#[derive(Default)]
+struct PopoverPanels {
+    panels: Vec<Name>,
+}
+
+impl Visitor<'_> for PopoverPanels {
+    fn visit_expr(&mut self, expression: &Expr) {
+        if let Expr::Call(call) = expression
+            && let Expr::Attribute(callee) = &*call.func
+        {
+            let keyword = |name: &str| {
+                call.arguments
+                    .find_keyword(name)
+                    .map(|keyword| &keyword.value)
+            };
+            let panel = match callee.attr.id.as_str() {
+                "popover" => call.arguments.args.first().or_else(|| keyword("panel")),
+                "call_panel" => keyword("name"),
+                _ => None,
+            };
+            if let Some(Expr::StringLiteral(panel)) = panel
+                && !self
+                    .panels
+                    .iter()
+                    .any(|known| known == panel.value.to_str())
+            {
+                self.panels.push(Name::new(panel.value.to_str()));
+            }
+        }
+        walk_expr(self, expression);
+    }
 }
 
 /// The `bl_space_type` of `class` when it is a string literal, as Blender reads it from the class
@@ -150,7 +292,7 @@ fn bl_space_type<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> Option
 /// The `Space` subclass of the editor `space_type` (`SpaceView3D` for `'VIEW_3D'`), as an
 /// instance. `None` when no subclass declares that Type tag: the top bar, the status bar and an
 /// empty area have no subclass of their own, and stubs without Type tags declare none.
-fn space_subclass<'db>(
+pub(super) fn space_subclass<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
     space_type: &str,

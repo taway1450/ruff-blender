@@ -19,6 +19,10 @@
 //!   `blender-imprecise-annotations`, [`super::categories`]) are reported by [`super::imprecise`]:
 //!   an operator's result annotation and a callback's parameter annotations here, a returned
 //!   `set[str]` and an enum value where they are inferred.
+//! - The Implied narrowing rules (`blender-narrowed-by-*`, the category
+//!   `blender-implied-narrowings`) are reported at the narrowed read, while it is inferred: by
+//!   [`super::poll_checks`] for a pointer a `poll()` checked, by [`super::context_members`] for a
+//!   menu's idname prefix and a popover panel.
 //! - The class-shape rules, `blender-mixin-order` and `blender-invalid-base`, are reported on every
 //!   first-party file, by [`super::class_rules`], from the visitor of the property rules.
 
@@ -250,6 +254,33 @@ declare_lint! {
     }
 }
 
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-narrowed-by-poll.md")]
+    pub(crate) static BLENDER_NARROWED_BY_POLL = {
+        summary: "detects a read of a pointer the class's `poll()` checked, in a callback the poll gates",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-narrowed-by-menu-prefix.md")]
+    pub(crate) static BLENDER_NARROWED_BY_MENU_PREFIX = {
+        summary: "detects `context.space_data` or `context.area` in a menu, typed by the editor its idname prefix names",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-narrowed-by-popover.md")]
+    pub(crate) static BLENDER_NARROWED_BY_POPOVER = {
+        summary: "detects `context.space_data` in a panel the add-on opens as a popover, typed by its `bl_space_type`",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
 pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
@@ -274,6 +305,9 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_IMPRECISE_OPERATOR_RETURN);
     registry.register_lint(&BLENDER_IMPRECISE_ENUM_VALUE);
     registry.register_lint(&BLENDER_IMPRECISE_CALLBACK_PARAMETER);
+    registry.register_lint(&BLENDER_NARROWED_BY_POLL);
+    registry.register_lint(&BLENDER_NARROWED_BY_MENU_PREFIX);
+    registry.register_lint(&BLENDER_NARROWED_BY_POPOVER);
 }
 
 /// The Blender lints of `file`: the add-on lints when `file` is an add-on's root module (the

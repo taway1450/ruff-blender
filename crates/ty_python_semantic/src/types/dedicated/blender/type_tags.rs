@@ -61,6 +61,35 @@ pub(crate) fn narrow_type_tag<'db>(
         }
         _ => return None,
     };
+    // Whether the tag is one of `values` where the test narrows: the `if` branch of `==` and `in`,
+    // the `else` branch of `!=` and `not in`.
+    let is_one_of = matches!(operator, ast::CmpOp::Eq | ast::CmpOp::In) == is_positive;
+    narrow_by_values(db, env, value_ty, attribute, &values, is_one_of)
+}
+
+/// The type of the struct `value_ty` once its Type tag `attribute` is known to be one of `values`,
+/// as a `poll()` that tested it implies. `None` when `attribute` is no Type tag of its class or a
+/// value names no stub class.
+pub(super) fn narrow_to_tag_values<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    value_ty: Type<'db>,
+    attribute: &str,
+    values: &[Name],
+) -> Option<Type<'db>> {
+    narrow_by_values(db, env, value_ty, attribute, values, true)
+}
+
+/// The type of the struct `value_ty` once its Type tag `attribute` is known to be one of `values`
+/// (`is_one_of`) or none of them.
+fn narrow_by_values<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    value_ty: Type<'db>,
+    attribute: &str,
+    values: &[Name],
+    is_one_of: bool,
+) -> Option<Type<'db>> {
     if values.iter().any(|value| value == ADDON_TYPE_TAG) {
         return None;
     }
@@ -81,9 +110,6 @@ pub(crate) fn narrow_type_tag<'db>(
         .copied()
         .collect();
 
-    // Whether the tag is one of `values` where the test narrows: the `if` branch of `==` and `in`,
-    // the `else` branch of `!=` and `not in`.
-    let is_one_of = matches!(operator, ast::CmpOp::Eq | ast::CmpOp::In) == is_positive;
     if is_one_of {
         // Every value must name a class, or the struct may be one the table does not know.
         if values

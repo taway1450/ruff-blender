@@ -40,7 +40,7 @@ use super::evaluate::{PropertyValue, property_value};
 use super::index::{RegisteredProperty, registered_properties};
 use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
-use super::{context_members, operator_properties, operators, preferences};
+use super::{context_members, operator_properties, operators, poll_checks, preferences};
 
 /// The property that gives instances of `class` the attribute `name` in `file`.
 ///
@@ -168,7 +168,9 @@ fn registration_on_class<'db>(
     name: &str,
 ) -> Option<&'db RegisteredProperty<'db>> {
     class.iter_mro(db, None).find_map(|base| match base {
-        ClassBase::Class(base) => registered_on(db, file, base.class_literal(db).as_static()?, name),
+        ClassBase::Class(base) => {
+            registered_on(db, file, base.class_literal(db).as_static()?, name)
+        }
         _ => None,
     })
 }
@@ -455,8 +457,13 @@ pub(crate) fn on_load<'db>(
     if name == "layout" && is_drawn_layout(db, file, attribute) {
         return place.map_type(|ty| without_none(db, ty));
     }
-    // `context.scene` inside a Blender callback.
-    if let Some(member) = context_members::on_load(db, env, file, attribute, receiver, place) {
+    // `context.scene` inside a Blender callback, and a pointer its class's `poll()` checked
+    // (`context.object` in `draw`), narrowed further.
+    let guaranteed = context_members::on_load(context, attribute, receiver, place);
+    if let Some(member) = poll_checks::on_load(context, attribute, guaranteed.unwrap_or(place)) {
+        return member;
+    }
+    if let Some(member) = guaranteed {
         return member;
     }
     if place.place.is_definitely_bound() {
