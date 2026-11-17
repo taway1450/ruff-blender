@@ -24,6 +24,17 @@
         }
       ]
     },
+    "blender": {
+      "description": "Configures the Blender rules that accept code the type checker cannot prove right.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/BlenderOptions"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "environment": {
       "description": "Configures the type checking environment.",
       "anyOf": [
@@ -58,7 +69,7 @@
       ]
     },
     "rules": {
-      "description": "Configures the enabled rules and their severity.\n\nThe keys are either rule names or `all` to set a default severity for all rules.\nSee [the rules documentation](https://ty.dev/rules) for a list of all available rules.\n\nValid severities are:\n\n* `ignore`: Disable the rule.\n* `warn`: Enable the rule and create a warning diagnostic.\n* `error`: Enable the rule and create an error diagnostic.\n\nBy default, ty exits with code 1 if it emits any warning or error diagnostics.\nSet `terminal.error-on-warning` to `false` to exit with code 0 if all diagnostics have `warning` severity.\n\nIf the same table specifies both a rule's current name and an alias, the current name takes precedence.",
+      "description": "Configures the enabled rules and their severity.\n\nThe keys are either rule names or `all` to set a default severity for all rules.\nSee [the rules documentation](https://ty.dev/rules) for a list of all available rules.\n\nA Blender rule category (`blender-assumptions`, `blender-implied-narrowings`,\n`blender-imprecise-annotations`) sets all its rules, below a rule's own name and above `all`.\n\nValid severities are:\n\n* `ignore`: Disable the rule.\n* `warn`: Enable the rule and create a warning diagnostic.\n* `error`: Enable the rule and create an error diagnostic.\n\nBy default, ty exits with code 1 if it emits any warning or error diagnostics.\nSet `terminal.error-on-warning` to `false` to exit with code 0 if all diagnostics have `warning` severity.\n\nIf the same table specifies both a rule's current name and an alias, the current name takes precedence.",
       "anyOf": [
         {
           "$ref": "#/definitions/Rules"
@@ -154,6 +165,23 @@
       "items": {
         "$ref": "#/definitions/string"
       }
+    },
+    "BlenderOptions": {
+      "type": "object",
+      "properties": {
+        "strictness": {
+          "description": "How much the Blender rules may assume: the level of each category of the Blender rules that\naccept code the typechecker cannot prove right and only report it.\n\n- `\"lenient\"`: Assumptions warn; Implied narrowings and Imprecise annotations are ignored.\n- `\"default\"`: all three categories warn.\n- `\"strict\"`: all three categories are errors.\n\nThe code is accepted under every preset. A level set in `[rules]` for a category\n(`blender-imprecise-annotations = \"ignore\"`), a rule or `all` overrides the preset.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Strictness"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
     },
     "EnvironmentOptions": {
       "type": "object",
@@ -503,6 +531,343 @@
           "title": "detects blanket `ty: ignore` comments",
           "description": "## What it does\n\nChecks for `ty: ignore` comments that don't specify which rules to ignore.\n\n## Why is this bad?\n\nA blanket `ty: ignore` comment suppresses every type-checking diagnostic on the applicable line or\nfile. Specifying rule codes documents which diagnostics are expected and prevents the comment from\nsilencing unrelated errors.\n\n## Examples\n\n```py\n# error\nvalue = unknown  # ty: ignore\n```\n\nUse instead:\n\n```py\nvalue = unknown  # ty: ignore[unresolved-reference]\n```",
           "default": "ignore",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-assumed-complete-registration": {
+          "title": "detects where the checker gave up following `register()` and counts every class of the add-on as registered",
+          "description": "## What it does\n\nReports, once per add-on, where `register()` registers a value the typechecker cannot follow: a\nclass found at run time (`getattr`, `importlib.import_module`, an `auto_load` module), or a call it\ncannot resolve. From there on every class and Registered property in the add-on's files counts as\nregistered, and the checks for classes that `register()` misses (`blender-unregistered-class`,\n`blender-unreachable-registration`, ...) are off.\n\nThe rule belongs to the category `blender-assumptions`.\n\n## Why is this bad?\n\nA class or property the add-on defines but never registers is then typed as present, and nothing\nreports it: silence here does not mean the add-on registers everything it uses.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport sys\n\nimport bpy\nfrom bpy.types import Operator\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\nCLASS_NAMES = (\"MY_OT_run\",)\n\n\nclass MY_OT_run(Operator):\n    bl_idname = \"my.run\"\n\n\ndef register():\n    module = sys.modules[__name__]\n    for name in CLASS_NAMES:\n        bpy.utils.register_class(getattr(module, name))  # error: [blender-assumed-complete-registration]\n\n\ndef unregister():\n    bpy.utils.unregister_class(MY_OT_run)\n```\n\nList the classes in `register()` (or in a tuple it registers) to have them checked.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types, utils as utils\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-assumed-context-member": {
+          "title": "detects `context.scene`, `view_layer` or `tool_settings` read where Blender does not guarantee them",
+          "description": "## What it does\n\nChecks the reads of `scene`, `view_layer` and `tool_settings` on a `bpy.types.Context` where\nBlender does not guarantee them: outside a Blender callback (at module level, in a helper function,\na method of a class that is no Blender class, a nested function, an app handler or a timer), and\n`scene` and `tool_settings` in a callback of an operator that a `FileHandler` of the same add-on\nnames as its `bl_import_operator`.\n\nThe read is typed without `None`. A read that the code only tests for truth or `None`\n(`if bpy.context.scene:`) is not reported. Inside other Blender callbacks the members are always\nset and the read is narrowed silently.\n\nThe rule belongs to the category `blender-assumptions`.\n\n## Why is this bad?\n\nBlender fills these members whenever it calls a callback. Elsewhere they hold the window's or the\nloaded file's scene in ordinary use (a timer, a handler, a script, a test), but nothing promises\nit: `context.temp_override(scene=None)` empties them, and the collection importer runs a file\nhandler's import operator with no scene. While an add-on is imported or registered, `bpy.context`\nhas no `scene` at all.\n\n## Examples\n\n```py\nimport bpy\n\n\ndef current_frame() -> int:\n    return bpy.context.scene.frame_current  # error: [blender-assumed-context-member]\n```\n\nTake the context as a callback's parameter, or check the scene before using it.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types\nfrom .types import Context\n\ncontext: Context\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass Scene(bpy_struct):\n    frame_current: int\n\nclass Context(bpy_struct):\n    scene: Scene | None\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-assumed-list-item": {
+          "title": "detects a read of `UIList.draw_item`'s `item`, taken as not `None`",
+          "description": "## What it does\n\nChecks the reads of the `item` parameter of a `UIList.draw_item` override that leaves it\nunannotated. The parameter is typed without `None`; a read that the method only tests for truth\nor `None` (`if item is None: return`) is not reported, nor are the reads it narrows itself.\n\nThe rule belongs to the category `blender-assumptions`.\n\n## Why is this bad?\n\nBlender passes `None` as the item only for an empty slot of an array of ID pointers. A list of an\nadd-on's own collection never has one, so the read is safe there, but the stubs cannot tell which\nlist the class draws.\n\n## Examples\n\n```py\nfrom bpy.types import UIList\n\n\nclass MY_UL_items(UIList):\n    def draw_item(self, context, layout, data, item, icon, active_data, active_property):\n        layout.prop(item, \"name\")  # error: [blender-assumed-list-item]\n```\n\nCheck `item` for `None` first when the list may show empty slots.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\nclass Context(bpy_struct): ...\n\nclass UILayout(bpy_struct):\n    def prop(self, data: bpy_struct, property: str) -> None: ...\n\nclass UIList(bpy_struct):\n    def draw_item(\n        self,\n        context: Context,\n        layout: UILayout,\n        data: bpy_struct,\n        item: bpy_struct | None,\n        icon: int,\n        active_data: bpy_struct | None,\n        active_property: str,\n    ) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-assumed-preferences": {
+          "title": "detects `addons[...].preferences` read while the add-on's preferences class is not registered",
+          "description": "## What it does\n\nChecks the reads of the add-on's own preferences, `preferences.addons[KEY].preferences`, that run\nwhile its `AddonPreferences` class is not registered: in `register()` (or a function it calls)\nbefore `register_class` of the class, and in `unregister()` after `unregister_class`. The read is\nstill typed as the add-on's preferences class. A read in a callback, or after the class is\nregistered, is not reported.\n\nThe rule belongs to the category `blender-assumptions`.\n\n## Why is this bad?\n\nBlender adds the add-on's entry before it calls `register()`, but its `preferences` is `None` until\nthe preferences class is registered, and `None` again once it is unregistered. Reading a setting\nthere raises `AttributeError`.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport bpy\nfrom bpy.types import AddonPreferences\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\n\nclass MyPreferences(AddonPreferences):\n    bl_idname = __package__\n\n\ndef register():\n    prefs = bpy.context.preferences.addons[__package__].preferences  # error: [blender-assumed-preferences]\n    bpy.utils.register_class(MyPreferences)\n\n\ndef unregister():\n    bpy.utils.unregister_class(MyPreferences)\n```\n\nRegister the preferences class first.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types, utils as utils\nfrom .types import Context\n\ncontext: Context\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass AddonPreferences(bpy_struct):\n    bl_idname: str\n\nclass Addon(bpy_struct):\n    preferences: AddonPreferences | None\n\nclass Addons(bpy_struct):\n    def __getitem__(self, key: str) -> Addon: ...\n\nclass Preferences(bpy_struct):\n    addons: Addons\n\nclass Context(bpy_struct):\n    preferences: Preferences\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-assumed-registration": {
+          "title": "detects a use of a Blender class or property that `register()` registers only on a branch",
+          "description": "## What it does\n\nChecks the uses of a class or a Registered property that `register()` registers only on a branch:\nin an arm of an `if` or `match`, in an `except` handler, in a function Blender calls later (a timer\nor a handler), or from a list extended at run time. The uses are an operator call\n`bpy.ops.<category>.<name>`, a read of the Registered property and a read of the add-on's\n`preferences`. The class or property is taken as registered.\n\nThe rule belongs to the category `blender-assumptions`.\n\n## Why is this bad?\n\nThe class or property exists only when the condition held. Usually the code that uses it runs under\nthe same condition, but the typechecker cannot see that: on a Blender version or a build where the\nbranch did not run, the operator call fails and the property read raises `AttributeError`.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport os\n\nimport bpy\nfrom bpy.types import Operator\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\n\nclass MY_OT_new(Operator):\n    bl_idname = \"my.new\"\n\n\nclass MY_OT_run(Operator):\n    bl_idname = \"my.run\"\n\n    def execute(self, context):\n        bpy.ops.my.new()  # error: [blender-assumed-registration]\n        return {\"FINISHED\"}\n\n\ndef register():\n    bpy.utils.register_class(MY_OT_run)\n    if os.environ.get(\"MY_ADDON_NEW\") is not None:\n        bpy.utils.register_class(MY_OT_new)\n\n\ndef unregister():\n    if MY_OT_new.is_registered:\n        bpy.utils.unregister_class(MY_OT_new)\n    bpy.utils.unregister_class(MY_OT_run)\n```\n\nCheck the same condition where the class is used.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import ops as ops, types as types, utils as utils\n```\n\n`/.venv/<path-to-site-packages>/bpy/ops/__init__.pyi`:\n\n```pyi\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct:\n    is_registered: bool\n\nclass Context(bpy_struct): ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n    def execute(self, context: Context) -> set[str]: ...\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-assumptions": {
+          "title": "set the severity level of the Blender rules: blender-assumed-context-member, blender-assumed-list-item, blender-assumed-registration, blender-assumed-complete-registration, blender-assumed-preferences",
+          "description": "Configure the severity level of every rule of this Blender rule category. Individual rule settings override it; it overrides `all`.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-duplicate-registration": {
+          "title": "detects a Blender class registered twice, or two Blender classes registered with one idname",
+          "description": "## What it does\n\nChecks for a class that `register()` registers while it is still registered, and for two classes of\none kind (operators and macros; panels; menus; headers; UI lists) that register under the same\nidname. A panel, menu, header or UI list without a `bl_idname` registers under its class name, and a\nsubclass that sets none inherits its parent's.\n\nRegistrations in different branches of an `if`, and registrations that Blender runs later (timers,\nhandlers), are not compared.\n\n## Why is this bad?\n\nRegistering a class twice raises `ValueError`, so the add-on fails to enable. A second class with\nthe same idname silently replaces the first: the first operator or panel is gone, and unregistering\nit later fails.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport bpy\nfrom bpy.types import Operator\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\n\nclass SimpleOperator(Operator):\n    bl_idname = \"object.simple\"\n\n\ndef register():\n    bpy.utils.register_class(SimpleOperator)\n    bpy.utils.register_class(SimpleOperator)  # error: [blender-duplicate-registration]\n\n\ndef unregister():\n    bpy.utils.unregister_class(SimpleOperator)\n```\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types, utils as utils\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "error",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-implied-narrowings": {
+          "title": "set the severity level of the Blender rules: blender-narrowed-by-poll, blender-narrowed-by-menu-prefix, blender-narrowed-by-popover",
+          "description": "Configure the severity level of every rule of this Blender rule category. Individual rule settings override it; it overrides `all`.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-imprecise-annotations": {
+          "title": "set the severity level of the Blender rules: blender-imprecise-operator-return, blender-imprecise-enum-value, blender-imprecise-callback-parameter",
+          "description": "Configure the severity level of every rule of this Blender rule category. Individual rule settings override it; it overrides `all`.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-imprecise-callback-parameter": {
+          "title": "detects a Blender callback parameter annotated narrower than the parent's, with the subclass Blender passes",
+          "description": "## What it does\n\nChecks the parameters of a Blender callback override (`UIList.draw_item`, `Operator.description`,\n...) for an annotation narrower than the parent's parameter type: a subtype of it, without `None`,\nsuch as the add-on's own `PropertyGroup` for `draw_item`'s `item` or `Armature` for its `data`.\n\nThe override is accepted, and its body sees the annotated type. An annotation that is no subtype of\nthe parent's type is still ty's `invalid-method-override`.\n\nThe rule belongs to the category `blender-imprecise-annotations`.\n\n## Why is this bad?\n\nA narrower parameter type breaks the override for callers that go through the parent's type. Only\nBlender calls a callback, and it passes what the add-on gave it (`template_list(data, ...)`), so the\nannotation is right as long as the add-on passes that type: the typechecker cannot check that.\n\n## Examples\n\n```py\nfrom bpy.types import Armature, UIList\n\n\nclass MY_UL_layers(UIList):\n    def draw_item(self, context, layout, data: Armature, item, icon, active_data, active_property):  # error: [blender-imprecise-callback-parameter]\n        layout.label(text=data.name)\n```\n\nLeave the parameter unannotated (it has the parent's type) and check its type where it matters.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct:\n    name: str\n\nclass Context(bpy_struct): ...\nclass Armature(bpy_struct): ...\n\nclass UILayout(bpy_struct):\n    def label(self, *, text: str = \"\") -> None: ...\n\nclass UIList(bpy_struct):\n    def draw_item(\n        self,\n        context: Context,\n        layout: UILayout,\n        data: bpy_struct,\n        item: bpy_struct | None,\n        icon: int,\n        active_data: bpy_struct | None,\n        active_property: str,\n    ) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-imprecise-enum-value": {
+          "title": "detects a `str` value where a Blender enum takes one of its item names",
+          "description": "## What it does\n\nChecks the values passed where Blender takes an enum item, for a value typed `str` (or `set[str]`\nfor an enum flag set): an argument of a function, method or operator of Blender's API, or the value\nassigned to an enum property of a Blender object, whose stubs spell the enum as a `Literal`.\n\nThe value is accepted as the enum. A string literal is precise: one that is not an item is still\nan error, alone (`mode=\"OBJCT\"`) or in a set display (`{\"VERT\", \"EDGEE\"}`), and an add-on's own\n`Literal` parameter keeps ty's check.\n\nThe rule belongs to the category `blender-imprecise-annotations`.\n\n## Why is this bad?\n\nBlender checks the name itself and raises for one that is not an item (`TypeError: enum \"OBJCT\"\nnot found in (...)`). A value computed at runtime hides a wrong name from the typechecker.\n\n## Examples\n\n```py\nfrom bpy.types import Light, LightCollection\n\n\ndef add_light(lights: LightCollection, light_type: str) -> None:\n    lights.new(\"Light\", light_type)  # error: [blender-imprecise-enum-value]\n    lights.new(\"Light\", \"SUN\")\n\n\ndef set_type(light: Light, light_type: str) -> None:\n    light.type = light_type  # error: [blender-imprecise-enum-value]\n    light.type = \"SUNN\"  # error: [invalid-assignment]\n```\n\nAnnotate the value with the enum's `Literal` type where it is computed.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nfrom typing import Literal\n\nclass bpy_struct: ...\n\nclass Light(bpy_struct):\n    type: Literal[\"POINT\", \"SUN\", \"SPOT\", \"AREA\"]\n\nclass LightCollection(bpy_struct):\n    def new(self, name: str, type: Literal[\"POINT\", \"SUN\", \"SPOT\", \"AREA\"]) -> Light: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-imprecise-operator-return": {
+          "title": "detects an operator result typed `set[str]` where Blender takes a set of result names",
+          "description": "## What it does\n\nChecks the result of an operator's `execute`, `invoke` and `modal` (and of any other Blender\ncallback whose result is a set of names) for a type less precise than the set of names Blender\naccepts:\n\n- a return annotation that is the parent's result with the names widened to `str`: `-> set[str]` or\n  `-> typing.Set[str]` where the stubs say `set[Literal[\"RUNNING_MODAL\", \"CANCELLED\", ...]]`. This\n  also covers a mixin's method that a Blender class gets the callback from;\n- a returned `set[str]` that is no set display, such as a set held in a variable\n  (`ret = {\"CANCELLED\"}` ... `return ret`).\n\nThe code is accepted, and typed as the precise form: a method annotated `-> set[str]` has the\nparent's result type for its callers, and its `return` statements are checked against it, so a\nname that is not a result (`return {\"FINSHED\"}`) is still an `invalid-explicit-return` error.\n\nThe rule belongs to the category `blender-imprecise-annotations`.\n\n## Why is this bad?\n\nThe names are `Literal` types only in the stubs; Blender checks each name itself when the method\nreturns and raises for one that is not a result. A `set[str]` hides a misspelt name from the\ntypechecker until Blender runs the operator.\n\n## Examples\n\n```py\nfrom typing import Literal\n\nfrom bpy.types import Operator\n\n\nclass MY_OT_run(Operator):\n    bl_idname = \"my.run\"\n    bl_label = \"Run\"\n\n    def execute(self, context) -> set[str]:  # error: [blender-imprecise-operator-return]\n        return {\"FINSHED\"}  # error: [invalid-explicit-return]\n\n    def invoke(self, context, event):\n        result = {\"CANCELLED\"}\n        return result  # error: [blender-imprecise-operator-return]\n```\n\nAnnotate the method with the precise result type, or leave the annotation out: an unannotated\noverride has its parent's result type.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nfrom typing import Literal\n\nclass bpy_struct: ...\nclass Context(bpy_struct): ...\nclass Event(bpy_struct): ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n    bl_label: str\n    def execute(self, context: Context) -> set[Literal[\"FINISHED\", \"CANCELLED\"]]: ...\n    def invoke(self, context: Context, event: Event) -> set[Literal[\"FINISHED\", \"CANCELLED\"]]: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-invalid-addon-metadata": {
+          "title": "detects malformed `bl_info` or `blender_manifest.toml` in a Blender add-on",
+          "description": "## What it does\n\nChecks the metadata Blender reads before it loads an add-on: the `bl_info` dict of a legacy add-on, and the\n`blender_manifest.toml` of an extension.\n\n- `bl_info` must be a dict display with a `\"name\"` entry, and its `\"blender\"` entry must be a tuple of three\n  ints.\n- `blender_manifest.toml` must be valid TOML with the keys `schema_version`, `id`, `version`, `name`,\n  `tagline`, `maintainer`, `type`, `blender_version_min` and `license`, and `type` must be `\"add-on\"` or\n  `\"theme\"`.\n\n## Why is this bad?\n\nBlender refuses to list or install an add-on whose metadata is missing or malformed, so the mistake only shows\nwhen someone tries to enable it.\n\nProblems in `bl_info` are reported on the name `bl_info` or on the entry. Problems in\n`blender_manifest.toml` are reported at the start of the add-on's `__init__.py`, because a TOML file\ncannot carry a `# ty: ignore` comment.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nbl_info = {  # error: [blender-invalid-addon-metadata] \"has no\"\n    \"version\": (1, 0, 0),\n    \"blender\": (4, 2),  # error: [blender-invalid-addon-metadata] \"three ints\"\n}\n\ndef register(): ...\ndef unregister(): ...\n```",
+          "default": "error",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-invalid-base": {
+          "title": "detects a class with two unrelated Blender bases",
+          "description": "## What it does\n\nChecks for a class with two Blender bases where neither derives from the other, such as an\n`Operator` that is also a `Panel`.\n\nty's own checks of the conflicts between the two bases (`invalid-attribute-override`,\n`invalid-method-override`) are left out on such a class, since they all come from this one mistake.\n\n## Why is this bad?\n\nBlender registers the class as its first Blender base only, so the class is never what it was\nmeant to be: an `Operator` and `Panel` is registered as an operator, and never drawn as a panel.\n\n## Examples\n\n```py\nfrom bpy.types import Operator, Panel\n\n\nclass MY_OT_run(Operator, Panel):  # error: [blender-invalid-base]\n    bl_idname = \"my.run\"\n    bl_label = \"Run\"\n```\n\nSplit it into two classes, one per Blender base.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n    bl_label: str\n\nclass Panel(bpy_struct):\n    bl_idname: str\n    bl_label: str\n```",
+          "default": "error",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-invalid-idname": {
+          "title": "detects a `bl_idname` that Blender refuses or warns about when it registers the class",
+          "description": "## What it does\n\nChecks the `bl_idname` of the classes the add-on registers. An operator or macro idname is\n`category.name`: lower-case letters, digits and `_`, with exactly one `.` that is neither first nor\nlast, and at most 60 characters. A panel, menu, header or UI list idname is an upper-case prefix,\n`_PT_`, `_MT_`, `_HT_` or `_UL_`, then a suffix (`MYADDON_PT_settings`); without a `bl_idname`, the\nclass name is the idname.\n\nAn idname that is not a string literal is not checked.\n\n## Why is this bad?\n\nBlender refuses an invalid operator idname, and an operator without one, with `RuntimeError`, so the\nadd-on fails to enable. For panels, menus, headers and UI lists it prints a warning, and code that\nlooks the class up by the conventional name does not find it.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport bpy\nfrom bpy.types import Operator\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\n\nclass SimpleOperator(Operator):\n    bl_idname = \"OBJECT_OT_simple\"  # error: [blender-invalid-idname]\n\n\ndef register():\n    bpy.utils.register_class(SimpleOperator)\n\n\ndef unregister():\n    bpy.utils.unregister_class(SimpleOperator)\n```\n\nUse `bl_idname = \"object.simple\"` instead.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types, utils as utils\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "error",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-invalid-operator-property": {
+          "title": "detects an operator property that Blender refuses, which drops it and every property after it",
+          "description": "## What it does\n\nChecks the properties of an operator or a macro for one that Blender refuses: a pointer to a\ndata-block (`PointerProperty(type=Object)`), or a pointer or collection to a `PropertyGroup` that\nholds one, at any depth. It is reported on the property's name, or on the operator's class name when\nthe property comes from a mixin that is not an operator.\n\nIt also checks where an operator's properties are named by a string: the `property` argument of\n`layout.operator_enum(...)` and `layout.operator_menu_enum(...)` must be an enum property of the\noperator, and the `(\"name\", value)` pairs of a tool's `bl_keymap` items must name a property of the\noperator and give it a value it accepts. Blender only prints a warning for those, and the menu or\nthe key-map item does not do what was meant.\n\n## Why is this bad?\n\nAn operator's properties cannot point to data-blocks. Blender prints a `ValueError` when it\nregisters the operator, and registers it without that property **and every property after it**:\n`bpy.ops.my_addon.run(after=1)` then raises `TypeError`, and the properties are missing from\n`self.properties` and the operator's panel.\n\nStore the name of the data-block instead (`StringProperty()`), and look it up in `bpy.data` when the\noperator runs.\n\n## Examples\n\n```py\nfrom bpy.props import IntProperty, PointerProperty\nfrom bpy.types import Object, Operator\n\n\nclass MY_OT_run(Operator):\n    bl_idname = \"my.run\"\n    bl_label = \"Run\"\n\n    before: IntProperty()\n    target: PointerProperty(type=Object)  # error: [blender-invalid-operator-property]\n    after: IntProperty()\n```\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import props as props, types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/props.pyi`:\n\n```pyi\nfrom typing import Any\n\nclass _PropertyDeferred: ...\n\ndef IntProperty(**kwargs: Any) -> _PropertyDeferred: ...\ndef PointerProperty(*, type: type, **kwargs: Any) -> _PropertyDeferred: ...\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\nclass ID(bpy_struct): ...\nclass Object(ID): ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n    bl_label: str\n```",
+          "default": "error",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-invalid-override": {
+          "title": "detects a Blender callback with the wrong number of parameters, or the wrong kind of method",
+          "description": "## What it does\n\nChecks the methods of a class deriving from a Blender class that `register_class` accepts\n(`Operator`, `Panel`, `UIList`, `Node`, ...) that Blender calls: `execute`, `invoke`, `poll`,\n`draw`, `draw_item` and the other callbacks of that class. Blender refuses such a method when:\n\n- it has the wrong number of positional parameters, counting `self` or `cls` and parameters with\n  defaults, but not `*args`, keyword-only parameters or `**kwargs`. `UIList.draw_item` accepts 7 to\n  10;\n- it is a plain method where Blender needs a classmethod (`poll`, `description`, ...), or a\n  classmethod where Blender needs a plain method (`execute`, `draw`, ...). A `staticmethod` passes\n  where a plain method is needed.\n\nEvery class deriving from a Blender class is checked, registered or not, since a registered\nsubclass inherits the method.\n\nBlender passes a callback's arguments by position, as many as it has parameters, so a renamed\nparameter (`def execute(self, ctx)`) or a short `draw_item` is fine. ty's `invalid-method-override`\naccepts them too, and leaves a method that this rule reports to it.\n\n## Why is this bad?\n\nBlender raises `ValueError` when it registers the class (`expected Operator, MY_OT_run class\n\"invoke\" function to have 3 args, found 2`), so the add-on fails to enable.\n\n## Examples\n\n```py\nfrom bpy.types import Operator\n\n\nclass MY_OT_run(Operator):\n    bl_idname = \"my.run\"\n    bl_label = \"Run\"\n\n    def execute(self, ctx):  # ok: Blender passes the context by position\n        return {\"FINISHED\"}\n\n    def invoke(self, context):  # error: [blender-invalid-override]\n        return self.execute(context)\n```\n\nBlender calls `invoke` with the context and the event: use `def invoke(self, context, event)`.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\nclass Context(bpy_struct): ...\nclass Event(bpy_struct): ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n    bl_label: str\n    def execute(self, context: Context) -> set[str]: ...\n    def invoke(self, context: Context, event: Event) -> set[str]: ...\n```",
+          "default": "error",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-invalid-property": {
+          "title": "detects a Blender property declaration that Blender rejects when it registers the property",
+          "description": "## What it does\n\nChecks the `bpy.props` calls of a Blender add-on (`IntProperty(...)`, `EnumProperty(...)`, ...) for arguments\nthat Blender rejects when it registers the property:\n\n- an enum default that is not one of the static items, by identifier or by number;\n- with `options={\"ENUM_FLAG\"}`, a default that is not a set of item identifiers, or more than 32 items;\n- a set default without `ENUM_FLAG`;\n- a `str` default with function `items=`;\n- a vector default whose length or nesting differs from `size=` (3 when it is not given);\n- a `size=` outside 1 to 32, or with more than three dimensions;\n- `set=` without `get=`;\n- a property name that starts with `_`;\n- a pointer to a data-block (`PointerProperty(type=Object)`), or to a group that holds one, on a class that\n  cannot hold one, such as `AddonPreferences` (on an operator or a macro, this is `blender-invalid-operator-property`).\n\n## Why is this bad?\n\nBlender reads a declaration only when it registers the property: when `register_class` registers the class that\nannotates it, or at the assignment `bpy.types.Scene.x = IntProperty(...)`. A declaration Blender rejects raises a\n`ValueError` there, so the add-on fails to enable.\n\nA call is checked where it is written, so a shared declaration (`COMMON = IntProperty(...)`) is reported once, at\nits definition. Each problem is reported on the offending argument, or on the name for a name that starts with `_`.\nArguments the checker cannot read (a name it cannot follow, a `**mapping`) are not reported. Annotations on a class\nwhose annotations Blender ignores (a `Panel`) are not checked, as Blender never evaluates them.\n\nArguments that the stubs already reject, such as `IntProperty(default=1.5)` or a `type=` of the wrong kind, are\nleft to `invalid-argument-type`. `min` and `max` are not checked: Blender accepts any of them.\n\n## Examples\n\n```py\nfrom bpy.props import EnumProperty, FloatVectorProperty, IntProperty\nfrom bpy.types import PropertyGroup\n\nclass Settings(PropertyGroup):\n    mode: EnumProperty(items=[(\"A\", \"A\", \"\"), (\"B\", \"B\", \"\")], default=\"C\")  # error: [blender-invalid-property]\n    offset: FloatVectorProperty(size=3, default=(1.0, 2.0))  # error: [blender-invalid-property]\n    count: IntProperty(set=lambda self, value: None)  # error: [blender-invalid-property]\n```\n\nThe examples use these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import props as props, types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/props.pyi`:\n\n```pyi\nfrom typing import Any\n\nclass _PropertyDeferred: ...\n\ndef EnumProperty(**kwargs: Any) -> _PropertyDeferred: ...\ndef FloatVectorProperty(**kwargs: Any) -> _PropertyDeferred: ...\ndef IntProperty(**kwargs: Any) -> _PropertyDeferred: ...\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\nclass PropertyGroup(bpy_struct): ...\n```",
+          "default": "error",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-invalid-register": {
+          "title": "detects a Blender add-on whose `register` or `unregister` is missing or takes arguments",
+          "description": "## What it does\n\nChecks that a Blender add-on's root module (the package's `__init__.py`, or a single-file add-on) defines\n`register` and `unregister`, and that both can be called with no arguments.\n\n## Why is this bad?\n\nBlender calls `register()` when the add-on is enabled and `unregister()` when it is disabled, with no\narguments. An add-on without one of them, or with one that requires a parameter, fails to enable or to\ndisable.\n\nThe functions are found the way Blender finds them: as module-level names of the root module, so an alias\n(`register = _register`), an import from a submodule and `register, unregister =\nbpy.utils.register_classes_factory(classes)` all count. Nothing is reported when the type of the name is unknown.\n\nA missing function is reported at the start of the root module; a function with a wrong signature is reported\nwhere the name is bound.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}  # error: [blender-invalid-register] \"no `unregister`\"\n\ndef register(context):  # error: [blender-invalid-register] \"callable with no arguments\"\n    ...\n```",
+          "default": "error",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-legacy-property": {
+          "title": "detects a Blender property assigned in a class body instead of annotated",
+          "description": "## What it does\n\nChecks for a property declaration assigned in the body of a class with a Blender base class (`value =\nIntProperty()`), instead of annotated (`value: IntProperty()`).\n\n## Why is this bad?\n\nBefore Blender 2.80, properties were declared as class attributes. Since then Blender only reads a class's\nannotations: an assigned declaration stays a plain class attribute, no property is created, and Blender prints no\nwarning. Reading `self.value` then gives the declaration object, not the property's value.\n\nClasses without a Blender base are not reported: a plain class may hold declarations on purpose, for example to\nregister them later with `setattr(bpy.types.Scene, name, Holder.value)`.\n\n## Examples\n\n```py\nfrom bpy.props import IntProperty\nfrom bpy.types import PropertyGroup\n\nclass Settings(PropertyGroup):\n    value = IntProperty()  # error: [blender-legacy-property]\n    count: IntProperty()  # what Blender reads\n```\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import props as props, types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/props.pyi`:\n\n```pyi\nfrom typing import Any\n\nclass _PropertyDeferred: ...\n\ndef IntProperty(**kwargs: Any) -> _PropertyDeferred: ...\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\nclass PropertyGroup(bpy_struct): ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-missing-callback": {
+          "title": "detects a registered Blender class without a callback Blender requires, such as a panel's `draw`",
+          "description": "## What it does\n\nChecks the classes that `register()` registers for a callback that Blender requires: `draw` on a\n`Panel`, `Menu`, `Header`, `NodeSocket` or `Gizmo`, `setup` on a `GizmoGroup`, and `poll`,\n`iterator` and `generate` on a `KeyingSetInfo`. The callback may come from any class of the add-on\nor mixin the class derives from.\n\n## Why is this bad?\n\nBlender refuses to register the class, so `register()` raises and the add-on fails to enable.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport bpy\nfrom bpy.types import Panel\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\n\nclass MY_PT_panel(Panel):  # error: [blender-missing-callback]\n    bl_label = \"My panel\"\n    bl_space_type = \"VIEW_3D\"\n    bl_region_type = \"UI\"\n\n\ndef register():\n    bpy.utils.register_class(MY_PT_panel)\n\n\ndef unregister():\n    bpy.utils.unregister_class(MY_PT_panel)\n```\n\nDefine `def draw(self, context)` on the panel.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types, utils as utils\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass Panel(bpy_struct):\n    bl_label: str\n    bl_space_type: str\n    bl_region_type: str\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "error",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-mixin-order": {
+          "title": "detects a mixin listed after a Blender base that hides the mixin's method",
+          "description": "## What it does\n\nChecks the bases of a class deriving from a Blender class for a mixin listed after the Blender base\nthat defines a method Blender's own Python base class defines too: `Operator.as_keywords`,\n`Menu.append`, `prepend` and `remove` (also on `Panel`, `Header` and `UIList`), `Menu.draw_preset`,\n`Node.poll`, and a few more.\n\nThe callbacks Blender looks up when it registers the class (`execute`, `draw`, `Operator.poll`, ...)\nare not affected: Blender finds them anywhere on the class, so a mixin's `poll` is used in either\norder.\n\n## Why is this bad?\n\nPython looks a method up along the class's method resolution order, so Blender's base class wins\nover a mixin listed after it, and the mixin's method is never called. Nothing reports it at runtime.\n\n## Examples\n\n```py\nfrom bpy.types import Operator\n\n\nclass KeywordsMixin:\n    def as_keywords(self, *, ignore=()):\n        return {}\n\n\nclass MY_OT_run(Operator, KeywordsMixin):  # error: [blender-mixin-order]\n    bl_idname = \"my.run\"\n    bl_label = \"Run\"\n\n\nclass MY_OT_other(KeywordsMixin, Operator):  # ok: the mixin comes first\n    bl_idname = \"my.other\"\n    bl_label = \"Other\"\n```\n\nList the mixin before the Blender base.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n    bl_label: str\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-narrowed-by-menu-prefix": {
+          "title": "detects `context.space_data` or `context.area` in a menu, typed by the editor its idname prefix names",
+          "description": "## What it does\n\nChecks the reads of `context.space_data` and `context.area` in a Menu's `draw` and `poll` when the\nmenu's idname (its `bl_idname`, or without one its class name) starts with an editor's prefix:\n`CLIP_MT_view` belongs to the clip editor, whose header is `CLIP_HT_header`. The 19 header prefixes\nof Blender's editors, `TIME` (the dope sheet) and `ASSETBROWSER` (the file browser) count.\n\n`space_data` is typed as that editor's `Space` subclass (`SpaceClipEditor`), or `Space` for the top\nbar and the status bar, and `area` without `None`. Another prefix, such as the add-on's own, gives\nnothing.\n\nThe rule belongs to the category `blender-implied-narrowings`.\n\n## Why is this bad?\n\nA menu has no `bl_space_type`: Blender draws it in whatever editor `layout.menu(...)`,\n`wm.call_menu` or a key map item opens it from. Blender's own menus follow the naming convention\nand menu search relies on it, but a menu drawn from another editor (a submenu shared between\neditors, a user's key map entry) gets that editor's space.\n\n## Examples\n\n```py\nfrom bpy.types import Menu\n\n\nclass CLIP_MT_my_tools(Menu):\n    def draw(self, context):\n        clip = context.space_data.clip  # error: [blender-narrowed-by-menu-prefix]\n\n\nclass MY_MT_tools(Menu):\n    def draw(self, context):\n        clip = context.space_data.clip  # error: [unresolved-attribute]\n```\n\nCheck `context.space_data.type` (or `context.area.type`) in the menu's `poll`.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nfrom typing import Literal\n\nclass bpy_struct: ...\n\nclass Space(bpy_struct):\n    type: Literal[\"EMPTY\", \"CLIP_EDITOR\", \"VIEW_3D\"]\n\nclass MovieClip(bpy_struct): ...\n\nclass SpaceClipEditor(Space):\n    type: Literal[\"CLIP_EDITOR\"]\n    clip: MovieClip | None\n\nclass Area(bpy_struct): ...\n\nclass Context(bpy_struct):\n    area: Area | None\n    space_data: Space | None\n\nclass Menu(bpy_struct):\n    @classmethod\n    def poll(cls, context: Context) -> bool: ...\n    def draw(self, context: Context) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-narrowed-by-poll": {
+          "title": "detects a read of a pointer the class's `poll()` checked, in a callback the poll gates",
+          "description": "## What it does\n\nChecks the reads of a pointer that the class's `poll()` checked, in a callback the poll gates: a\nPanel's `draw`, `draw_header` and `draw_header_preset`, a Menu's `draw`, an Operator's `invoke` and\n`execute`, and a GizmoGroup's `setup`, `refresh`, `draw_prepare` and `invoke_prepare`.\n\nThe read is typed without `None`, and a Type tag test in the poll (`ob.type == 'MESH'`) narrows it\nas the same test would in the callback. The poll's checks are read from its code: the conjuncts of\nits `return`, attribute reads always evaluated while it computes the result (a poll that raises\ncounts as `False`), early `return False` guards, local aliases, `super().poll(context)`, an\ninherited poll and helper functions taking the context. A check is about one path from the context\n(`context.object.active_material`), so a pointer the poll did not check is still an error. A read\nthe callback only tests for truth or `None` is not reported.\n\nThe rule belongs to the category `blender-implied-narrowings`.\n\n## Why is this bad?\n\nBlender calls these callbacks only right after `poll()` returned `True`, with the same context, so\nthe read is safe while the callback runs that way. It is not when the callback is called another\nway (`self.execute(context)` from `modal`, which Blender calls without a new poll) or when it\nchanges the context before the read, which the typechecker cannot see.\n\n## Examples\n\n```py\nfrom bpy.types import Panel\n\n\nclass MY_PT_material(Panel):\n    @classmethod\n    def poll(cls, context):\n        return context.object is not None\n\n    def draw(self, context):\n        self.layout.label(text=context.object.name)  # error: [blender-narrowed-by-poll]\n        self.layout.label(text=context.material.name)  # error: [unresolved-attribute]\n```\n\nCheck the pointer in the callback too, or read it once into a checked local.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass Object(bpy_struct):\n    name: str\n\nclass Material(bpy_struct):\n    name: str\n\nclass Context(bpy_struct):\n    object: Object | None\n    material: Material | None\n\nclass UILayout(bpy_struct):\n    def label(self, *, text: str = \"\") -> None: ...\n\nclass Panel(bpy_struct):\n    layout: UILayout | None\n    @classmethod\n    def poll(cls, context: Context) -> bool: ...\n    def draw(self, context: Context) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-narrowed-by-popover": {
+          "title": "detects `context.space_data` in a panel the add-on opens as a popover, typed by its `bl_space_type`",
+          "description": "## What it does\n\nChecks the reads of `context.space_data` in a Panel that the same add-on opens as a popover, with\n`layout.popover(...)` or `wm.call_panel`: its `space_data` is typed as the `Space` subclass of the\npanel's `bl_space_type`, as in any panel, and reported. A panel the add-on never opens as a popover\ngets the same type without a report.\n\nThe rule belongs to the category `blender-implied-narrowings`.\n\n## Why is this bad?\n\nBlender draws a panel in an editor of its `bl_space_type`, but a popover is drawn with the area of\nwhatever editor opened it, whatever `bl_space_type` says. Blender's own popover-only panels often\ngive a dummy `bl_space_type`. The panel's `space_data` is that editor's only when every place that\nopens it is in that editor.\n\n## Examples\n\n```py\nfrom bpy.types import Panel\n\n\nclass MY_PT_settings(Panel):\n    bl_space_type = \"VIEW_3D\"\n\n    def draw(self, context):\n        lens = context.space_data.lens  # error: [blender-narrowed-by-popover]\n\n\nclass MY_PT_tools(Panel):\n    bl_space_type = \"VIEW_3D\"\n\n    def draw(self, context):\n        lens = context.space_data.lens\n        self.layout.popover(\"MY_PT_settings\")\n```\n\nCheck `context.space_data.type` before reading what only one editor's space has.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nfrom typing import Literal\n\nclass bpy_struct: ...\n\nclass Space(bpy_struct):\n    type: Literal[\"EMPTY\", \"VIEW_3D\"]\n\nclass SpaceView3D(Space):\n    type: Literal[\"VIEW_3D\"]\n    lens: float\n\nclass Context(bpy_struct):\n    space_data: Space | None\n\nclass UILayout(bpy_struct):\n    def popover(self, panel: str) -> None: ...\n\nclass Panel(bpy_struct):\n    layout: UILayout | None\n    bl_space_type: str\n    def draw(self, context: Context) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-preferences-idname": {
+          "title": "detects an `AddonPreferences` class whose `bl_idname` never makes it the add-on's preferences",
+          "description": "## What it does\n\nChecks the `bl_idname` of the add-on's `AddonPreferences` classes. Blender finds an add-on's\npreferences by the add-on's module name, so `bl_idname` must be the root package's name: `__package__`\nin the root `__init__.py` or a direct submodule, `__name__` in the root `__init__.py`, or a legacy\nadd-on's folder name as a string. Reported are:\n\n- a `bl_idname` that names something else, such as `__name__` in a submodule or another string;\n- a preferences class without a `bl_idname`;\n- a second registered preferences class with the add-on's `bl_idname`.\n\nA `bl_idname` the checker cannot read (a parameter, a call) is not checked. The second class is only\nreported when the checker can follow `register()` to its end, since that needs the order.\n\n## Why is this bad?\n\nSuch a class registers without an error, but it is never the add-on's preferences:\n`preferences.addons[__package__].preferences` is `None`, and the preferences are not drawn. A second\nclass with the add-on's `bl_idname` silently replaces the first, and unregistering the first then\nfails.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport bpy\nfrom bpy.types import AddonPreferences\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\n\nclass MyPreferences(AddonPreferences):\n    bl_idname = \"my_preferences\"  # error: [blender-preferences-idname]\n\n\ndef register():\n    bpy.utils.register_class(MyPreferences)\n\n\ndef unregister():\n    bpy.utils.unregister_class(MyPreferences)\n```\n\nUse `bl_idname = __package__` (or `__name__` in `__init__.py`) instead.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types, utils as utils\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass AddonPreferences(bpy_struct):\n    bl_idname: str\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-register-order": {
+          "title": "detects a Blender class or property registered before the class it points to",
+          "description": "## What it does\n\nChecks the order in which `register()` registers classes and adds properties. A class with a\n`PointerProperty` or `CollectionProperty` to a `PropertyGroup` of the add-on, and a property\nassigned to a Blender class with such a `type=`, need that `PropertyGroup` registered first. A\nsubpanel (`bl_parent_id`) needs its parent panel registered first.\n\nThe check follows `register()` through the functions it calls, the modules it imports, loops over\nclass lists and `bpy.utils.register_classes_factory`. Registrations that Blender runs later (timers,\nhandlers) have no known order and are not checked.\n\n## Why is this bad?\n\nBlender refuses the registration: a pointer to a `PropertyGroup` that is not registered yet raises\n`ValueError`, and a subpanel before its parent raises `RuntimeError`, so the add-on fails to enable.\nUnregistering in the wrong order works, so it is not reported.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport bpy\nfrom bpy.props import PointerProperty\nfrom bpy.types import PropertyGroup\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\n\nclass Leaf(PropertyGroup): ...\n\n\nclass Settings(PropertyGroup):\n    leaf: PointerProperty(type=Leaf)\n\n\ndef register():\n    bpy.utils.register_class(Settings)  # error: [blender-register-order]\n    bpy.utils.register_class(Leaf)\n\n\ndef unregister():\n    bpy.utils.unregister_class(Leaf)\n    bpy.utils.unregister_class(Settings)\n```\n\nRegister `Leaf` before `Settings` instead.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import props as props, types as types, utils as utils\n```\n\n`/.venv/<path-to-site-packages>/bpy/props.pyi`:\n\n```pyi\nfrom typing import Any\n\nclass _PropertyDeferred: ...\n\ndef PointerProperty(type: type, **kwargs: Any) -> _PropertyDeferred: ...\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\nclass PropertyGroup(bpy_struct): ...\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "error",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-registered-base": {
+          "title": "detects a registered Blender class that derives from another registered class",
+          "description": "## What it does\n\nChecks for a class that `register()` registers while it also registers a class the first one\nderives from, in either order. A `PropertyGroup` deriving from another registered `PropertyGroup` is\nfine, and registrations in different branches of an `if` are not compared.\n\n## Why is this bad?\n\nWhen Blender registers a subclass of a registered class, it detaches the base from its Python\nclass. The base stays registered but its callbacks are no longer called: an operator returns\n`{'FINISHED'}` without running `execute`, a panel or menu draws nothing, a node can no longer be\nadded. Blender only logs that it is \"unable to get Python class\". Registered the other way round,\nboth work, but only because of the order; Blender's `--debug-python` check warns about either order.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport bpy\nfrom bpy.types import Operator\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\n\nclass MY_OT_base(Operator):\n    bl_idname = \"my.base\"\n\n\nclass MY_OT_child(MY_OT_base):  # error: [blender-registered-base]\n    bl_idname = \"my.child\"\n\n\ndef register():\n    bpy.utils.register_class(MY_OT_base)\n    bpy.utils.register_class(MY_OT_child)\n\n\ndef unregister():\n    bpy.utils.unregister_class(MY_OT_child)\n    bpy.utils.unregister_class(MY_OT_base)\n```\n\nShare the code through a base class that is not registered, or through a mixin.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types, utils as utils\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "error",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-unknown-operator": {
+          "title": "detects an operator idname that names neither an operator of the add-on nor one of Blender's",
+          "description": "## What it does\n\nChecks the operator idnames given as strings to Blender's functions that take one\n(`layout.operator(...)`, `operator_menu_hold`, `operator_menu_enum`, `operator_enum`,\n`template_popup_confirm`, `keymap_items.new(...)`, `operator_properties_last`,\n`Gizmo.target_set_operator`, `WorkSpaceTool.operator_properties`, `Macro.define`) and in the\n`bl_keymap` of a tool, for an idname that names neither an operator the add-on registers nor one of\nBlender's own. Both forms are looked up as Blender does: `\"object.select_all\"` and\n`\"OBJECT_OT_select_all\"`. A conditional idname (`\"a\" if c else \"b\"`) is checked for each operator.\n\nAnother add-on's operator counts as unknown. When `register()` does something the checker cannot\nfollow, or the file belongs to no add-on, nothing is reported: the operator may be registered where\nthe checker cannot see it.\n\n## Why is this bad?\n\nBlender only prints a warning for an unknown operator: the button or menu entry is missing,\n`layout.operator(...)` returns `None` (so setting one of its properties raises `AttributeError`),\nand a key-map item does nothing. Often the idname has a typo, or the operator is not registered.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport bpy\nfrom bpy.types import Operator, UILayout\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\n\nclass MY_OT_run(Operator):\n    bl_idname = \"my.run\"\n\n\ndef draw(layout: UILayout) -> None:\n    layout.operator(\"my.run\")\n    layout.operator(\"my.rnu\")  # error: [blender-unknown-operator]\n\n\ndef register():\n    bpy.utils.register_class(MY_OT_run)\n\n\ndef unregister():\n    bpy.utils.unregister_class(MY_OT_run)\n```\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types, utils as utils\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\nclass OperatorProperties(bpy_struct): ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n\nclass UILayout(bpy_struct):\n    def operator(self, operator: str) -> OperatorProperties | None: ...\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-unreachable-registration": {
+          "title": "detects a function that registers Blender classes but that `register()` never calls",
+          "description": "## What it does\n\nChecks for a function of the add-on that registers classes (it calls `bpy.utils.register_class`, or\nthe register function of `bpy.utils.register_classes_factory`) but that `register()` never calls,\ndirectly or through other functions. A function that `register()` hands to Blender, such as a timer,\ncounts as called.\n\nWhen `register()` does something the checker cannot follow, nothing is reported. The classes such a\nfunction registers are not also reported as `blender-unregistered-class`.\n\n## Why is this bad?\n\nBlender only runs `register()`, so the classes the function registers are never registered. Often a\nsubmodule's `register()` is not called from the add-on's.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport bpy\nfrom bpy.types import Operator\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\n\nclass SimpleOperator(Operator):\n    bl_idname = \"object.simple\"\n\n\ndef register_simple():  # error: [blender-unreachable-registration]\n    bpy.utils.register_class(SimpleOperator)\n\n\ndef register():\n    pass\n\n\ndef unregister():\n    pass\n```\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types, utils as utils\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-unregister-mismatch": {
+          "title": "detects what `register()` adds and `unregister()` leaves behind, and what `unregister()` removes that was never added",
+          "description": "## What it does\n\nCompares `unregister()` with `register()`. It reports a class that `register()` registers and\n`unregister()` never unregisters, a property `register()` adds to a Blender class and `unregister()`\nnever deletes, a handler or menu function `register()` appends and `unregister()` never removes, and\na class `unregister()` unregisters that `register()` never registers.\n\nWhen either function does something the checker cannot follow, what depends on it is not reported.\nDeleting or removing something that was never added is not reported either.\n\n## Why is this bad?\n\nWhatever `unregister()` leaves behind stays in Blender after the add-on is disabled: its operators\nand panels, its properties, and its handlers, which keep running. Enabling the add-on again then\nregisters the classes twice. Unregistering a class that is not registered raises `RuntimeError`, so\ndisabling the add-on fails.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport bpy\nfrom bpy.props import IntProperty\nfrom bpy.types import Operator\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\n\nclass SimpleOperator(Operator):\n    bl_idname = \"object.simple\"\n\n\ndef register():\n    bpy.utils.register_class(SimpleOperator)\n    bpy.types.Scene.count = IntProperty()  # error: [blender-unregister-mismatch]\n\n\ndef unregister():\n    bpy.utils.unregister_class(SimpleOperator)\n```\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import props as props, types as types, utils as utils\n```\n\n`/.venv/<path-to-site-packages>/bpy/props.pyi`:\n\n```pyi\nfrom typing import Any\n\nclass _PropertyDeferred: ...\n\ndef IntProperty(**kwargs: Any) -> _PropertyDeferred: ...\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\nclass ID(bpy_struct): ...\nclass Scene(ID): ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-unregistered-class": {
+          "title": "detects a Blender class of an add-on that `register()` never registers",
+          "description": "## What it does\n\nChecks for a class of the add-on that `bpy.utils.register_class` accepts (an operator, panel, menu,\nUI list, `PropertyGroup`, `AddonPreferences`, ...) but that `register()` never registers, in any\nmodule of the add-on, imported or not.\n\nA class that another class of the add-on derives from is a base and needs no registration, and a\nmixin derives from no Blender class. When `register()` does something the checker cannot follow (a\nclass list built at run time, or a call it cannot resolve), nothing is reported.\n\n## Why is this bad?\n\nBlender only knows the classes that are registered: an unregistered operator is not in `bpy.ops`, an\nunregistered panel is never drawn, and unregistered add-on preferences are not the add-on's\npreferences. Often the class was left out of the class list.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport bpy\nfrom bpy.types import Operator\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\n\nclass SimpleOperator(Operator):\n    bl_idname = \"object.simple\"\n\n\nclass OtherOperator(Operator):  # error: [blender-unregistered-class]\n    bl_idname = \"object.other\"\n\n\ndef register():\n    bpy.utils.register_class(SimpleOperator)\n\n\ndef unregister():\n    bpy.utils.unregister_class(SimpleOperator)\n```\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types, utils as utils\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\n\nclass Operator(bpy_struct):\n    bl_idname: str\n```\n\n`/.venv/<path-to-site-packages>/bpy/utils.pyi`:\n\n```pyi\ndef register_class(cls: type) -> None: ...\ndef unregister_class(cls: type) -> None: ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-unsupported-property-host": {
+          "title": "detects a Blender property annotation on a class whose annotations Blender ignores",
+          "description": "## What it does\n\nChecks for property annotations (`value: IntProperty()`) in the body of a Blender class whose annotations Blender\nignores: a `Panel`, `Menu`, `Header`, `KeyingSetInfo`, `RenderEngine`, `FileHandler`, `AssetShelf` and the\nlike. Only `PropertyGroup`, `Operator`, `Macro`, `AddonPreferences`, `UIList`, `Node`, `NodeSocket`, `NodeTree`,\n`NodeTreeInterfaceSocket`, `KeyConfigPreferences` and `Gizmo` turn their annotations into properties.\n\n## Why is this bad?\n\nBlender registers such a class without an error, but creates no property from the annotation, so reading\n`self.value` raises `AttributeError`. To store a setting for a panel, declare it on a `PropertyGroup` (or as a\nRegistered property of the scene) and draw that.\n\nA plain class that is used as a mixin is not reported: its annotations become properties of the hosts that\ninherit them.\n\n## Examples\n\n```py\nfrom bpy.props import IntProperty\nfrom bpy.types import Panel\n\nclass VIEW3D_PT_settings(Panel):\n    bl_label = \"Settings\"\n    bl_space_type = \"VIEW_3D\"\n    bl_region_type = \"UI\"\n\n    value: IntProperty()  # error: [blender-unsupported-property-host]\n```\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import props as props, types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/props.pyi`:\n\n```pyi\nfrom typing import Any\n\nclass _PropertyDeferred: ...\n\ndef IntProperty(**kwargs: Any) -> _PropertyDeferred: ...\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\nclass Panel(bpy_struct): ...\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
+        "blender-unsupported-property-target": {
+          "title": "detects a Blender property assigned to a class that does not accept Registered properties",
+          "description": "## What it does\n\nChecks for a property declaration assigned to a Blender class that does not accept Registered properties\n(`bpy.types.Area.value = IntProperty()`).\n\nEvery ID type (`Scene`, `Object`, `Material`, ...) accepts them, and so do `PropertyGroup`, nodes and sockets,\nbones, `BoneCollection`, `ViewLayer`, strips, `TimelineMarker`, `View3DShading` and a few structs that hold\noperator, gizmo and modifier settings. Other classes, such as `Area`, `Modifier`, `Window`, `Preferences`,\n`Context`, `Operator` and `Panel`, do not.\n\n## Why is this bad?\n\nBlender turns an assignment to an accepting class into a property of every instance. On any other class the\nassignment silently stores the declaration as a plain class attribute: no property is created, no error is raised,\nand `area.value` raises `AttributeError` on an instance.\n\n## Examples\n\n`my_addon/__init__.py`:\n\n```py\nimport bpy\nfrom bpy.props import IntProperty\n\nbl_info = {\"name\": \"My add-on\", \"blender\": (4, 2, 0)}\n\ndef register():\n    bpy.types.Scene.value = IntProperty()\n    bpy.types.Area.value = IntProperty()  # error: [blender-unsupported-property-target]\n\ndef unregister():\n    del bpy.types.Scene.value\n```\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import props as props, types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/props.pyi`:\n\n```pyi\nfrom typing import Any\n\nclass _PropertyDeferred: ...\n\ndef IntProperty(**kwargs: Any) -> _PropertyDeferred: ...\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nclass bpy_struct: ...\nclass ID(bpy_struct): ...\nclass Scene(ID): ...\nclass Area(bpy_struct): ...\n```",
+          "default": "warn",
           "oneOf": [
             {
               "$ref": "#/definitions/Level"
@@ -2133,6 +2498,26 @@
         }
       },
       "additionalProperties": false
+    },
+    "Strictness": {
+      "description": "A `[blender] strictness` preset.",
+      "oneOf": [
+        {
+          "description": "Assumptions warn; Implied narrowings and Imprecise annotations are ignored.",
+          "type": "string",
+          "const": "lenient"
+        },
+        {
+          "description": "Assumptions, Implied narrowings and Imprecise annotations warn.",
+          "type": "string",
+          "const": "default"
+        },
+        {
+          "description": "Assumptions, Implied narrowings and Imprecise annotations are errors.",
+          "type": "string",
+          "const": "strict"
+        }
+      ]
     },
     "SupportedPythonVersion": {
       "description": "A Python version explicitly supported by ty configuration and CLI parsing.",

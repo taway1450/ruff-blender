@@ -8,7 +8,7 @@
 //! ```python
 //! class MY_OT_run(Operator):
 //!     def execute(self, context):
-//!         return {"DONE"}  # error: [invalid-return-type]
+//!         return {"DONE"}  # error: [invalid-explicit-return]
 //! ```
 //!
 //! A returned `set[str]` that is no set display (a set held in a variable) is accepted where the
@@ -19,7 +19,7 @@ use ruff_text_size::Ranged;
 use ty_python_core::scope::NodeWithScopeRef;
 
 use crate::reachability::is_end_of_scope_reachable;
-use crate::types::diagnostic::{report_implicit_return_type, report_invalid_return_type};
+use crate::types::diagnostic::{report_implicit_return_type, report_invalid_explicit_return};
 use crate::types::function::{FunctionBodyKind, function_body_kind};
 use crate::types::infer::builder::TypeInferenceBuilder;
 use crate::types::{Type, blender};
@@ -40,7 +40,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
         )
     }
 
-    /// Reports `invalid-return-type` on the returns of `function`, an override of a Blender
+    /// Reports `invalid-explicit-return` on the returns of `function`, an override of a Blender
     /// callback without a return annotation, that do not fit the parent's return type, and on its
     /// name when the end of its body is reachable and `None` does not fit.
     ///
@@ -80,7 +80,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     expected,
                 )
             {
-                report_invalid_return_type(
+                report_invalid_explicit_return(
                     &self.context,
                     statement.range,
                     name,

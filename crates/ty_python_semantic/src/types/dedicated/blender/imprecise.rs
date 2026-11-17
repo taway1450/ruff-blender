@@ -9,7 +9,7 @@
 //! ```python
 //! class MY_OT_run(Operator):
 //!     def execute(self, context) -> set[str]:  # blender-imprecise-operator-return
-//!         return {"FINSHED"}  # error: [invalid-return-type], checked as the parent's result type
+//!         return {"FINSHED"}  # error: [invalid-explicit-return], checked as the parent's result type
 //!
 //! def set_mode(mode: str) -> None:
 //!     bpy.ops.object.mode_set(mode=mode)  # blender-imprecise-enum-value
@@ -166,7 +166,7 @@ pub(crate) fn is_imprecise_result<'db>(
 
 /// Reports `blender-imprecise-operator-return` on a returned `set[str]`, `value`, that is no set
 /// display: a set display gets its item types from the result type, so a display that is still a
-/// `set[str]` holds a name that is not a result, which stays `invalid-return-type`. Returns whether
+/// `set[str]` holds a name that is not a result, which stays `invalid-explicit-return`. Returns whether
 /// it was reported (the return is then accepted).
 pub(crate) fn check_imprecise_result<'db>(
     context: &InferContext<'db, '_>,
