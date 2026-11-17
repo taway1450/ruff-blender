@@ -71,6 +71,14 @@ impl Callback {
             .then(|| self.positional.end().saturating_sub(1))
     }
 
+    /// The position of the parameter (`self` / `cls` being 0) that is taken as not `None` although
+    /// the stubs say it may be: `UIList.draw_item`'s `item`, `None` only for an empty slot of an
+    /// array of ID pointers (`rna_ui.cc`, `uilist_draw_item`), which an add-on's collection never
+    /// has. An Assumption: `None` for every other callback.
+    pub fn assumed_item_position(&self) -> Option<usize> {
+        (self.root == "UIList" && self.name == "draw_item").then_some(4)
+    }
+
     /// Why Blender refuses `shape` for this callback, or `None` when it accepts it.
     pub fn problem(&self, shape: CallbackShape) -> Option<String> {
         let mistake = self.mistake(shape)?;

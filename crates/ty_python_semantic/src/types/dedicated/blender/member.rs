@@ -40,7 +40,9 @@ use super::evaluate::{PropertyValue, property_value};
 use super::index::{RegisteredProperty, registered_properties};
 use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
-use super::{context_members, operator_properties, operators, poll_checks, preferences};
+use super::{
+    assumptions, context_members, operator_properties, operators, poll_checks, preferences,
+};
 
 /// The property that gives instances of `class` the attribute `name` in `file`.
 ///
@@ -430,7 +432,18 @@ pub(crate) fn on_load<'db>(
     if name == "preferences"
         && let Some(ty) = preferences::preferences_load(db, env, file, attribute, receiver)
     {
+        assumptions::report_preferences_read(context, attribute);
         return Place::bound(ty).into();
+    }
+    if attribute.ctx.is_load()
+        && let Some(class) = operators::conditional_operator(db, file, attribute)
+    {
+        assumptions::report_conditional_class(
+            context,
+            attribute,
+            &format!("`{}`", display_dotted(attribute)),
+            class,
+        );
     }
     if let Type::ModuleLiteral(module) = receiver
         && let Some(ty) = operators::module_attribute(
@@ -480,8 +493,31 @@ pub(crate) fn on_load<'db>(
         };
     }
     match instance_value_type(db, env, file, receiver, name) {
-        Some(ty) => Place::bound(ty).into(),
+        Some(ty) => {
+            if attribute.ctx.is_load()
+                && let Type::NominalInstance(instance) = receiver
+                && let Some(class) = instance.class(db, env).class_literal(db).as_static()
+                && let Some(property) = registration_on_class(db, file, class, name)
+            {
+                assumptions::report_conditional_property(
+                    context,
+                    attribute,
+                    property.owner,
+                    &property.name,
+                );
+            }
+            Place::bound(ty).into()
+        }
         None => place,
+    }
+}
+
+/// The dotted source of `expression`, as far as it is names and attributes (`bpy.ops.my.run`).
+fn display_dotted(expression: &ast::ExprAttribute) -> String {
+    match &*expression.value {
+        ast::Expr::Name(name) => format!("{}.{}", name.id, expression.attr.id),
+        ast::Expr::Attribute(value) => format!("{}.{}", display_dotted(value), expression.attr.id),
+        _ => expression.attr.id.to_string(),
     }
 }
 

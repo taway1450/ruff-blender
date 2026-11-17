@@ -414,6 +414,9 @@ pub(crate) struct OverrideTypes<'db> {
     /// The position of the parameter Blender passes the operator's own properties to
     /// ([`ty_blender::Callback::own_properties_position`]).
     own_properties_position: Option<usize>,
+    /// The position of the parameter taken as not `None` in the body
+    /// ([`ty_blender::Callback::assumed_item_position`]).
+    pub(super) assumed_item_position: Option<usize>,
 }
 
 impl<'db> OverrideTypes<'db> {
@@ -517,6 +520,7 @@ pub(super) fn parent_callback_types<'db>(
             return_ty: bound.return_ty,
             bool_result: callback.bool_result,
             own_properties_position: callback.own_properties_position(),
+            assumed_item_position: callback.assumed_item_position(),
         });
     }
     None
@@ -615,6 +619,13 @@ pub(crate) fn override_parameter_type<'db>(
             && let Some(properties) = class_properties_type(db, env, file, class)
         {
             return Some(properties);
+        }
+        // `UIList.draw_item`'s `item`: an Assumption, reported at its reads
+        // ([`super::assumptions`]). Callers and the override check keep the parent's type.
+        if types.assumed_item_position == Some(position) {
+            return types
+                .positional(position)
+                .map(|ty| super::member::without_none(db, ty));
         }
         return types.positional(position);
     }

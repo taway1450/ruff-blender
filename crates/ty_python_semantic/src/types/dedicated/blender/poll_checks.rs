@@ -373,7 +373,7 @@ fn function_facts<'db>(
     let scope = semantic_index(db, file)
         .node_scope(NodeWithScopeRef::Function(function))
         .to_scope_id(db, file);
-    let aliases = aliases(function, context);
+    let aliases = aliases(Some(&function.parameters), &function.body, context);
     let reader = PollReader {
         db,
         scope,
@@ -917,15 +917,19 @@ fn path_of(
     }
 }
 
-/// The names of `function` assigned exactly once, by `name = value`, to a path from `context`. A
-/// name bound any other way (a parameter, a loop target, an augmented assignment, ...) or twice is
-/// no alias.
-fn aliases(function: &ast::StmtFunctionDef, context: &Name) -> FxHashMap<Name, Alias> {
+/// The names of a function with `parameters` and `body` (or of a module, without parameters)
+/// assigned exactly once, by `name = value`, to a path from `context`. A name bound any other way
+/// (a parameter, a loop target, an augmented assignment, ...) or twice is no alias.
+fn aliases(
+    parameters: Option<&ast::Parameters>,
+    body: &[Stmt],
+    context: &Name,
+) -> FxHashMap<Name, Alias> {
     let mut bindings = Bindings::default();
-    for parameter in function.parameters.iter() {
+    for parameter in parameters.into_iter().flat_map(|parameters| parameters.iter()) {
         bindings.other(parameter.name().id.clone());
     }
-    bindings.block(&function.body);
+    bindings.block(body);
     let values: FxHashMap<Name, &Expr> = bindings
         .assigned
         .into_iter()
@@ -1159,34 +1163,48 @@ pub(super) fn is_tested_read<'db>(
         .is_some_and(|path| paths.skips(attribute.range(), &path))
 }
 
-/// The paths and tested reads of the function scope `function`, a method whose second parameter
-/// is the context.
+/// The paths and tested reads of the scope `scope`: a function, whose context is its first
+/// parameter annotated `Context` or else its second one (a callback's), or a module, where only
+/// `bpy.context` is the context.
 #[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
-fn function_paths<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> FunctionPaths {
-    let file: ProgramFile<'db> = function.program_file(db);
-    let Some(node) = function.node(db).as_function() else {
-        return FunctionPaths::default();
-    };
+fn function_paths<'db>(db: &'db dyn Db, scope: ScopeId<'db>) -> FunctionPaths {
+    let file: ProgramFile<'db> = scope.program_file(db);
     let module = parsed_module(db, file.python_file(db)).load(db);
-    let node = node.node(&module);
-    let parameters = &node.parameters;
-    let Some(context) = parameters
-        .posonlyargs
-        .iter()
-        .chain(&parameters.args)
-        .nth(1)
-        .map(|parameter| parameter.parameter.name.id.clone())
-    else {
+    let node = scope.node(db);
+    let (parameters, body, context) = if let Some(function) = node.as_function() {
+        let function = function.node(&module);
+        let parameters = &function.parameters;
+        let mut positional = parameters.posonlyargs.iter().chain(&parameters.args);
+        let annotated = parameters.iter().find(|parameter| {
+            parameter.annotation().is_some_and(|annotation| match annotation {
+                Expr::Name(name) => name.id == "Context",
+                Expr::Attribute(attribute) => attribute.attr.id == "Context",
+                Expr::StringLiteral(string) => string.value.to_str().ends_with("Context"),
+                _ => false,
+            })
+        });
+        let context = match annotated {
+            Some(parameter) => parameter.name().id.clone(),
+            None => match positional.nth(1) {
+                Some(parameter) => parameter.parameter.name.id.clone(),
+                None => Name::new_static(""),
+            },
+        };
+        (Some(&*function.parameters), &function.body[..], context)
+    } else if scope.file_scope_id(db).is_global() {
+        (None, &module.suite()[..], Name::new_static(""))
+    } else {
         return FunctionPaths::default();
     };
-    let aliases = aliases(node, &context);
+    let aliases = aliases(parameters, body, &context);
     let mut tests = Tests {
         context: &context,
         aliases: &aliases,
         tested: Vec::new(),
         regions: Vec::new(),
+        own_reads: false,
     };
-    tests.block(&node.body);
+    tests.block(body);
     let Tests {
         tested, regions, ..
     } = tests;
@@ -1201,12 +1219,44 @@ fn function_paths<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> FunctionPaths
     }
 }
 
+/// The reads of the local name `name` in `body` that are only tested for truth or `None`, and the
+/// ranges where `body`'s own test says `name` is not `None`: the body of `if name:` or
+/// `if name is not None:`, and the rest of the block after `if name is None: return`.
+pub(super) fn name_tests(body: &[Stmt], name: &Name) -> (Vec<TextRange>, Vec<TextRange>) {
+    let mut aliases = FxHashMap::default();
+    aliases.insert(
+        name.clone(),
+        Alias {
+            path: vec![name.clone()],
+            value: TextRange::default(),
+        },
+    );
+    let context = Name::new_static("");
+    let mut tests = Tests {
+        context: &context,
+        aliases: &aliases,
+        tested: Vec::new(),
+        regions: Vec::new(),
+        own_reads: true,
+    };
+    tests.block(body);
+    let regions = tests
+        .regions
+        .into_iter()
+        .filter(|(path, _)| **path == [name.clone()])
+        .map(|(_, range)| range)
+        .collect();
+    (tests.tested, regions)
+}
+
 /// Finds the tests of a callback body for truth or `None`.
 struct Tests<'a> {
     context: &'a Name,
     aliases: &'a FxHashMap<Name, Alias>,
     tested: Vec<TextRange>,
     regions: Vec<(Path, TextRange)>,
+    /// Whether a tested alias records the read of the name itself rather than its value.
+    own_reads: bool,
 }
 
 impl Tests<'_> {
@@ -1313,10 +1363,7 @@ impl Tests<'_> {
                 }
             }
             Expr::Call(call) => {
-                if let Expr::Name(function) = &*call.func
-                    && function.id == "bool"
-                    && let [argument] = &*call.arguments.args
-                {
+                if let Some(argument) = checked_argument(call) {
                     self.tested_read(argument);
                 }
             }
@@ -1330,7 +1377,11 @@ impl Tests<'_> {
             Expr::Attribute(_) => self.tested.push(expression.range()),
             Expr::Name(name) => {
                 if let Some(alias) = self.aliases.get(&name.id) {
-                    self.tested.push(alias.value);
+                    self.tested.push(if self.own_reads {
+                        name.range
+                    } else {
+                        alias.value
+                    });
                 }
             }
             _ => {}

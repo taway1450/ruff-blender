@@ -23,6 +23,10 @@
 //!   `blender-implied-narrowings`) are reported at the narrowed read, while it is inferred: by
 //!   [`super::poll_checks`] for a pointer a `poll()` checked, by [`super::context_members`] for a
 //!   menu's idname prefix and a popover panel.
+//! - The Assumption rules (`blender-assumed-*`, the category `blender-assumptions`): the context
+//!   members by [`super::context_members`] and the uses of a class or property registered on a
+//!   branch and of the add-on's preferences by [`super::assumptions`], at the read while it is
+//!   inferred; the reads of a list item and where the `register()` walk gave up here.
 //! - The class-shape rules, `blender-mixin-order` and `blender-invalid-base`, are reported on every
 //!   first-party file, by [`super::class_rules`], from the visitor of the property rules.
 
@@ -39,6 +43,7 @@ use crate::types::diagnostic::TypeCheckDiagnostics;
 use crate::{Db, ProgramEnvironment, declare_lint};
 
 use super::addon::is_first_party;
+use super::assumptions::check_assumptions;
 use super::addon_of_file;
 use super::index::addon_in_program;
 use super::operator_properties::check_keymaps;
@@ -281,6 +286,51 @@ declare_lint! {
     }
 }
 
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-context-member.md")]
+    pub(crate) static BLENDER_ASSUMED_CONTEXT_MEMBER = {
+        summary: "detects `context.scene`, `view_layer` or `tool_settings` read where Blender does not guarantee them",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-list-item.md")]
+    pub(crate) static BLENDER_ASSUMED_LIST_ITEM = {
+        summary: "detects a read of `UIList.draw_item`'s `item`, taken as not `None`",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-registration.md")]
+    pub(crate) static BLENDER_ASSUMED_REGISTRATION = {
+        summary: "detects a use of a Blender class or property that `register()` registers only on a branch",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-complete-registration.md")]
+    pub(crate) static BLENDER_ASSUMED_COMPLETE_REGISTRATION = {
+        summary: "detects where the checker gave up following `register()` and counts every class of the add-on as registered",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-preferences.md")]
+    pub(crate) static BLENDER_ASSUMED_PREFERENCES = {
+        summary: "detects `addons[...].preferences` read while the add-on's preferences class is not registered",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
 pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
@@ -308,6 +358,11 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_NARROWED_BY_POLL);
     registry.register_lint(&BLENDER_NARROWED_BY_MENU_PREFIX);
     registry.register_lint(&BLENDER_NARROWED_BY_POPOVER);
+    registry.register_lint(&BLENDER_ASSUMED_CONTEXT_MEMBER);
+    registry.register_lint(&BLENDER_ASSUMED_LIST_ITEM);
+    registry.register_lint(&BLENDER_ASSUMED_REGISTRATION);
+    registry.register_lint(&BLENDER_ASSUMED_COMPLETE_REGISTRATION);
+    registry.register_lint(&BLENDER_ASSUMED_PREFERENCES);
 }
 
 /// The Blender lints of `file`: the add-on lints when `file` is an add-on's root module (the
@@ -343,6 +398,9 @@ pub(crate) fn file_diagnostics<'db>(
         check_properties(&context, &module);
         check_keymaps(&context, &module);
         check_overrides(&context, file);
+    }
+    if first_party {
+        check_assumptions(&context, file, &module);
     }
     if let Some(key) = addon_in_program(db, file) {
         report_findings(&context, registration_findings(db, key));
