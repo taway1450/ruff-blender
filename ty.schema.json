@@ -627,8 +627,18 @@
             }
           ]
         },
+        "blender-assumed-subclass-member": {
+          "title": "detects a member read on a refined base of `bpy.types` that only some of its tagged subclasses declare, taken as one of them",
+          "description": "## What it does\n\nChecks the reads of a member that a refined base of `bpy.types` (a class with a Type tag, such as\n`Constraint`, `Modifier`, `Light`, `Node` or `NodeSocket`) lacks, but some of the subclasses its\ntag names declare: `ob.constraints[0].target`, `bpy.data.lights[\"Key\"].spot_size`,\n`node.inputs[\"Color\"].default_value`.\n\nThe read is typed as the union of those subclasses' declarations of the member. A member no\nsubclass declares is still an error, and so is a member read on `bpy_struct`, `ID` or a class\nwithout a Type tag.\n\nThe rule belongs to the category `blender-assumptions`.\n\n## Why is this bad?\n\nBlender always hands out a struct of a refined base as the subclass its Type tag names, so the\nmember is there when the struct is one of the subclasses that declare it. A lookup by index or by\nname does not say which one it is: the code takes for granted that the first constraint has a\ntarget, or that the light called \"Key\" is a spot light.\n\n## Examples\n\n```py\nimport bpy\n\n\ndef first_target(ob: bpy.types.Object) -> bpy.types.Object | None:\n    return ob.constraints[0].target  # error: [blender-assumed-subclass-member]\n\n\ndef copied_target(ob: bpy.types.Object) -> bpy.types.Object | None:\n    con = ob.constraints[0]\n    if con.type == 'COPY_LOCATION':\n        return con.target  # ok: narrowed by the Type tag\n    return None\n```\n\nTest the tag first, as `copied_target` does, so that the struct is narrowed to the subclass.\n\nThe example uses these minimal Blender stubs:\n\n```toml\n[environment]\npython = \"/.venv\"\n```\n\n`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:\n\n```pyi\nfrom . import types as types\n```\n\n`/.venv/<path-to-site-packages>/bpy/types.pyi`:\n\n```pyi\nfrom typing import Literal\n\nclass bpy_struct: ...\n\nclass Constraint(bpy_struct):\n    type: Literal['COPY_LOCATION', 'LIMIT_SCALE']\n\nclass CopyLocationConstraint(Constraint):\n    type: Literal['COPY_LOCATION']\n    target: Object | None\n\nclass LimitScaleConstraint(Constraint):\n    type: Literal['LIMIT_SCALE']\n\nclass ObjectConstraints(bpy_struct):\n    def __getitem__(self, key: int | str) -> Constraint: ...\n\nclass Object(bpy_struct):\n    constraints: ObjectConstraints\n```",
+          "default": "warn",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Level"
+            }
+          ]
+        },
         "blender-assumptions": {
-          "title": "set the severity level of the Blender rules: blender-assumed-context-member, blender-assumed-list-item, blender-assumed-registration, blender-assumed-complete-registration, blender-assumed-preferences, blender-assumed-internal-operator, blender-assumed-editor-member, blender-assumed-preset-context, blender-assumed-added-object",
+          "title": "set the severity level of the Blender rules: blender-assumed-context-member, blender-assumed-list-item, blender-assumed-registration, blender-assumed-complete-registration, blender-assumed-preferences, blender-assumed-internal-operator, blender-assumed-editor-member, blender-assumed-preset-context, blender-assumed-added-object, blender-assumed-subclass-member",
           "description": "Configure the severity level of every rule of this Blender rule category. Individual rule settings override it; it overrides `all`.",
           "oneOf": [
             {

@@ -18,6 +18,9 @@
 //!   `blender-assumed-preset-context` and `blender-assumed-added-object`: a context member that an
 //!   Internal operator, an editor's UI callback, a preset or a call that adds an object takes as
 //!   set, reported by [`super::context_assumptions`].
+//! - `blender-assumed-subclass-member`: a member a refined base lacks but some of its tagged
+//!   subclasses declare, read as the union of their declarations, reported by
+//!   [`super::subclass_members`].
 
 use ruff_db::parsed::ParsedModuleRef;
 use ruff_python_ast::name::Name;

@@ -44,6 +44,7 @@ impl BlenderRuleCategory {
                 "blender-assumed-editor-member",
                 "blender-assumed-preset-context",
                 "blender-assumed-added-object",
+                "blender-assumed-subclass-member",
             ],
             Self::ImpliedNarrowings => &[
                 "blender-narrowed-by-poll",

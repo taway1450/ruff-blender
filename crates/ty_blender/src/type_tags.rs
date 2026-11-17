@@ -13,3 +13,46 @@ pub const ADDON_TYPE_TAG: &str = "CUSTOM";
 pub fn excludes_on_mismatch(attribute: &str) -> bool {
     attribute != "bl_idname"
 }
+
+/// The `bpy.types` classes a member is never looked up in the subclasses of: every struct is a
+/// `bpy_struct` and every data-block an `ID`, so a member one of their subclasses declares says
+/// nothing about which struct the code holds.
+pub const NO_SUBCLASS_MEMBERS: [&str; 2] = ["bpy_struct", "ID"];
+
+/// A collection method that creates a struct from an idname: the argument `parameter` of
+/// `class.method(...)` is the `attribute` Type tag of the struct it returns. Blender types these
+/// parameters as `str` (any registered type, an add-on's included), so no `rna_enum_*` alias pairs
+/// them with the tag.
+#[derive(Debug, Clone, Copy)]
+pub struct IdnameConstructor {
+    pub class: &'static str,
+    pub method: &'static str,
+    pub parameter: &'static str,
+    pub attribute: &'static str,
+}
+
+/// The constructors whose argument is a `bl_idname`: `nodes.new(type=...)` looks the node type up
+/// by idname (`rna_NodeTree_node_new`, `nodeAddNode`), `gizmos.new(type=...)` the gizmo type
+/// (`rna_GizmoGroup_gizmo_new`, `WM_gizmotype_find`), and the new struct is refined to that type's
+/// class, an add-on's own one included.
+const IDNAME_CONSTRUCTORS: [IdnameConstructor; 2] = [
+    IdnameConstructor {
+        class: "Nodes",
+        method: "new",
+        parameter: "type",
+        attribute: "bl_idname",
+    },
+    IdnameConstructor {
+        class: "Gizmos",
+        method: "new",
+        parameter: "type",
+        attribute: "bl_idname",
+    },
+];
+
+/// The constructor `class.method` whose argument is a `bl_idname`, if it is one.
+pub fn idname_constructor(class: &str, method: &str) -> Option<IdnameConstructor> {
+    IDNAME_CONSTRUCTORS
+        .into_iter()
+        .find(|constructor| constructor.class == class && constructor.method == method)
+}

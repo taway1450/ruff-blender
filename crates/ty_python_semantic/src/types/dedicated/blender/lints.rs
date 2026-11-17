@@ -376,6 +376,15 @@ declare_lint! {
     }
 }
 
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-subclass-member.md")]
+    pub(crate) static BLENDER_ASSUMED_SUBCLASS_MEMBER = {
+        summary: "detects a member read on a refined base of `bpy.types` that only some of its tagged subclasses declare, taken as one of them",
+        status: LintStatus::stable("0.0.103"),
+        default_level: Level::Warn,
+    }
+}
+
 pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
@@ -413,6 +422,7 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_ASSUMED_EDITOR_MEMBER);
     registry.register_lint(&BLENDER_ASSUMED_PRESET_CONTEXT);
     registry.register_lint(&BLENDER_ASSUMED_ADDED_OBJECT);
+    registry.register_lint(&BLENDER_ASSUMED_SUBCLASS_MEMBER);
 }
 
 /// The Blender lints of `file`: the add-on lints when `file` is an add-on's root module (the
