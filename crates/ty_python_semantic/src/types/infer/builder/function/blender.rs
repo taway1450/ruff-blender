@@ -41,8 +41,9 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
     }
 
     /// Reports `invalid-explicit-return` on the returns of `function`, an override of a Blender
-    /// callback without a return annotation, that do not fit the parent's return type, and on its
-    /// name when the end of its body is reachable and `None` does not fit.
+    /// callback without a return annotation, that do not fit the parent's return type, and
+    /// `invalid-implicit-return` on its name when the end of its body is reachable and `None` does
+    /// not fit.
     ///
     /// Callbacks whose result Blender converts with `bool()` accept any value. A stub-like body
     /// (`...`, `pass`, a docstring) is left alone, as are async and generator functions, which
