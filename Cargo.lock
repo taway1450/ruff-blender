@@ -4724,7 +4724,7 @@ dependencies = [
 
 [[package]]
 name = "ty_blender"
-version = "0.0.20"
+version = "0.0.22"
 dependencies = [
  "get-size2",
  "ruff_db",
@@ -4733,7 +4733,7 @@ dependencies = [
  "ruff_python_parser",
  "ruff_text_size",
  "salsa",
- "toml 1.1.6+spec-1.1.0",
+ "toml 1.1.8+spec-1.1.0",
 ]
 
 [[package]]

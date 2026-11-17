@@ -12,7 +12,7 @@ accepts:
 
 The code is accepted, and typed as the precise form: a method annotated `-> set[str]` has the
 parent's result type for its callers, and its `return` statements are checked against it, so a
-name that is not a result (`return {"FINSHED"}`) is still an `invalid-return-type` error.
+name that is not a result (`return {"FINSHED"}`) is still an `invalid-explicit-return` error.
 
 The rule belongs to the category `blender-imprecise-annotations`.
 
@@ -35,7 +35,7 @@ class MY_OT_run(Operator):
     bl_label = "Run"
 
     def execute(self, context) -> set[str]:  # error: [blender-imprecise-operator-return]
-        return {"FINSHED"}  # error: [invalid-return-type]
+        return {"FINSHED"}  # error: [invalid-explicit-return]
 
     def invoke(self, context, event):
         result = {"CANCELLED"}

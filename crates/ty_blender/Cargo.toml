@@ -1,6 +1,6 @@
 [package]
 name = "ty_blender"
-version = "0.0.20"
+version = "0.0.22"
 description = "Facts about Blender add-ons for ty that need no types: discovery, manifests and bl_info"
 edition.workspace = true
 rust-version.workspace = true
