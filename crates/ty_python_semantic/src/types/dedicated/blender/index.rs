@@ -22,6 +22,7 @@
 use ruff_db::parsed::parsed_module;
 use ruff_python_ast::name::Name;
 use ruff_python_ast::statement_visitor::{StatementVisitor, walk_stmt};
+use ruff_python_ast::visitor::{Visitor, walk_expr};
 use ruff_python_ast::{self as ast, Expr};
 use ruff_text_size::{Ranged, TextRange};
 use ty_blender::{Addon, REGISTRABLE_ROOTS, addon_source_files};
@@ -30,6 +31,7 @@ use ty_python_core::{Program, ProgramFile, semantic_index};
 use crate::Db;
 use crate::types::{StaticClassLiteral, Type, binding_type};
 
+use super::addon::is_first_party;
 use super::addon_of_file;
 use super::classes::derives_from;
 use super::evaluate::{Evaluator, PropertyValue};
@@ -58,6 +60,9 @@ pub(super) struct FileFacts<'db> {
     pub(super) registered_properties: Box<[RegisteredProperty<'db>]>,
     /// The module-level classes of the file that `register_class` accepts.
     pub(super) classes: Box<[FileClass<'db>]>,
+    /// The classes named in the bases tuple of a three-argument `type(name, (C, ...), namespace)`
+    /// call anywhere in the file: bases of classes made at runtime, which ty doesn't see.
+    pub(super) type_call_bases: Box<[StaticClassLiteral<'db>]>,
 }
 
 /// A class that `bpy.utils.register_class` accepts: one whose method resolution order has a
@@ -139,20 +144,37 @@ pub(super) fn addon_in_program<'db>(
     Some(AddonInProgram::new(db, addon.clone(), file.program(db)))
 }
 
-/// The index of the add-on `file` belongs to, or `None` for a file in no add-on.
-pub(super) fn addon_index_of<'db>(
-    db: &'db dyn Db,
-    file: ProgramFile<'db>,
-) -> Option<&'db AddonIndex<'db>> {
-    Some(addon_index(db, addon_in_program(db, file)?))
-}
-
-/// The Registered properties of the add-on `file` belongs to; none for a file in no add-on.
+/// The Registered properties of the add-on `file` belongs to.
+///
+/// A first-party file in no add-on (a startup module, a template, a doc example, a test) is its own
+/// unit: Blender registers `bpy.types.Scene.x = PointerProperty(...)` the same way whichever script
+/// runs it, so the file's own registrations, at module level or in any function, are its Registered
+/// properties ([`own_registered_properties`]). Another such file's registrations stay unknown to it.
 pub(super) fn registered_properties<'db>(
     db: &'db dyn Db,
     file: ProgramFile<'db>,
 ) -> &'db [RegisteredProperty<'db>] {
-    addon_index_of(db, file).map_or(&[], |index| &index.registered_properties)
+    match addon_in_program(db, file) {
+        Some(addon) => &addon_index(db, addon).registered_properties,
+        None if is_first_party(db, file) => own_registered_properties(db, file),
+        None => &[],
+    }
+}
+
+/// The registrations of `file`, a first-party file in no add-on, in source order.
+///
+/// Reading a registration's value may infer code that looks the file's properties up again; such a
+/// cycle starts from no properties, as [`addon_index`] does.
+#[salsa::tracked(
+    returns(deref),
+    cycle_initial=|_, _, _| Box::default(),
+    heap_size=ruff_memory_usage::heap_size
+)]
+fn own_registered_properties<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+) -> Box<[RegisteredProperty<'db>]> {
+    file_facts(db, file).registered_properties.clone()
 }
 
 /// An add-on of a program, as the key of [`addon_index`] and the walks.
@@ -281,9 +303,47 @@ pub(super) fn file_facts<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> FileFa
             })
         })
         .collect();
+    let mut type_calls = TypeCalls::default();
+    type_calls.visit_body(module.suite());
+    let mut type_call_bases: Vec<StaticClassLiteral<'db>> = Vec::new();
+    for base in type_calls.bases {
+        let Some(scope) = index.try_expression_scope_id(base) else {
+            continue;
+        };
+        let scope = scope.to_scope_id(db, file);
+        if let Some(Resolved::Value(Type::ClassLiteral(class))) =
+            resolve_expression(db, scope, base)
+            && let Some(class) = class.as_static()
+            && !type_call_bases.contains(&class)
+        {
+            type_call_bases.push(class);
+        }
+    }
     FileFacts {
         registered_properties,
         classes,
+        type_call_bases: type_call_bases.into_boxed_slice(),
+    }
+}
+
+/// The bases of the three-argument `type(name, (C, ...), namespace)` calls of a body, by syntax
+/// alone.
+#[derive(Default)]
+struct TypeCalls<'a> {
+    bases: Vec<&'a Expr>,
+}
+
+impl<'a> Visitor<'a> for TypeCalls<'a> {
+    fn visit_expr(&mut self, expression: &'a Expr) {
+        if let Expr::Call(call) = expression
+            && let Expr::Name(function) = &*call.func
+            && function.id.as_str() == "type"
+            && call.arguments.keywords.is_empty()
+            && let [_, Expr::Tuple(bases), _] = &*call.arguments.args
+        {
+            self.bases.extend(bases.elts.iter());
+        }
+        walk_expr(self, expression);
     }
 }
 

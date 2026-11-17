@@ -11,6 +11,7 @@
 //! - [`walk`]: the `register()` walk, what `register()` and `unregister()` do, in order;
 //! - [`index`]: the Add-on index, what an add-on's code does to Blender, gathered without inference;
 //! - [`member`]: the property behind an attribute of a Blender instance, of either origin;
+//! - [`bl_rna`]: `bl_rna.properties["name"]` as the `Property` subclass of the attribute's kind;
 //! - [`context_members`]: the Guaranteed context members, non-None inside a Blender callback;
 //! - [`type_tags`]: narrowing by a Type tag, `md.type == 'SUBSURF'` makes `md` a `SubsurfModifier`;
 //! - [`operators`]: `bpy.ops.<category>.<name>` for an add-on's own operators;
@@ -34,6 +35,7 @@
 
 mod addon;
 mod addon_key;
+mod bl_rna;
 mod callbacks;
 mod class_rules;
 mod classes;
@@ -58,6 +60,7 @@ mod vector;
 mod walk;
 
 pub(crate) use addon::addon_of_file;
+pub(crate) use bl_rna::rna_property_type;
 pub(crate) use callbacks::declaration_callee;
 pub(crate) use class_rules::has_invalid_bases;
 pub(crate) use evaluate::{
