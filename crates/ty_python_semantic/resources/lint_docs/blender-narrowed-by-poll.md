@@ -5,7 +5,10 @@ Panel's `draw`, `draw_header` and `draw_header_preset`, a Menu's `draw`, an Oper
 `execute`, and a GizmoGroup's `setup`, `refresh`, `draw_prepare` and `invoke_prepare`.
 
 The read is typed without `None`, and a Type tag test in the poll (`ob.type == 'MESH'`) narrows it
-as the same test would in the callback. The poll's checks are read from its code: the conjuncts of
+as the same test would in the callback. A mode test (`context.mode == 'EDIT_MESH'`) checks what
+Blender's mode implies: the edit object, of the mode's object type, or a paint mode's tool
+settings. A pointer Blender keeps in step with a checked one (`space_data.edit_tree` with
+`space_data.node_tree`) is narrowed too, without a report. The poll's checks are read from its code: the conjuncts of
 its `return`, attribute reads always evaluated while it computes the result (a poll that raises
 counts as `False`), early `return False` guards, local aliases, `super().poll(context)`, an
 inherited poll and helper functions taking the context. A check is about one path from the context

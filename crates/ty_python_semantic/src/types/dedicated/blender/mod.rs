@@ -15,6 +15,8 @@
 //! - [`context_members`]: the Guaranteed context members, non-None inside a Blender callback, and
 //!   the spaces a menu's idname prefix or a popover implies;
 //! - [`poll_checks`]: what a `poll()` checked, non-None in the callbacks it gates;
+//! - [`pointer_aliases`]: what Blender's bookkeeping, an area's type and `temp_override` say
+//!   about a read, without a poll;
 //! - [`type_tags`]: narrowing by a Type tag, `md.type == 'SUBSURF'` makes `md` a `SubsurfModifier`;
 //! - [`operators`]: `bpy.ops.<category>.<name>` for an add-on's own operators;
 //! - [`operator_properties`]: what an operator idname given as a string gives
@@ -60,6 +62,7 @@ mod operator_properties;
 mod operators;
 mod overrides;
 mod poll_checks;
+mod pointer_aliases;
 mod preferences;
 mod properties;
 mod registration_checks;

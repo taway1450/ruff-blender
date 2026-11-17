@@ -177,7 +177,11 @@ fn is_assumed_in_import(name: &str) -> bool {
 }
 
 /// Whether `ty` is an instance of `bpy.types.Context`.
-fn is_context_instance<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'db>) -> bool {
+pub(super) fn is_context_instance<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    ty: Type<'db>,
+) -> bool {
     let Type::NominalInstance(instance) = ty else {
         return false;
     };

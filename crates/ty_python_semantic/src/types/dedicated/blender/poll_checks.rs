@@ -26,7 +26,11 @@
 //! `Base.poll(context)`, known Blender functions ([`checked_by_call`]) and helper functions taking
 //! the context, followed [`MAX_HELPER_DEPTH`] calls deep. A fact is about a
 //! [`Path`] from the context, never about the class as a whole, so a pointer the poll did not check
-//! keeps its stub type. A Type tag test types the struct as the same test in the callback would
+//! keeps its stub type. `context.mode == 'EDIT_MESH'` gives what the mode implies
+//! ([`ty_blender::mode_facts`]): an edit object of the mode's type, a paint mode's tool settings.
+//! A fact about one side of a Pointer alias is also one about the other side
+//! ([`ty_blender::implied_paths`]: a set `space_data.node_tree` means a set `edit_tree`), applied
+//! without being reported. A Type tag test types the struct as the same test in the callback would
 //! ([`narrow_to_tag_values`]), and one on `context.area` makes `context.space_data` the editor's
 //! subclass, since a space is its area's first.
 //!
@@ -49,7 +53,7 @@ use ruff_python_ast::visitor::source_order::{SourceOrderVisitor, walk_expr};
 use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_text_size::{Ranged, TextRange};
 use rustc_hash::FxHashMap;
-use ty_blender::{checked_by_call, gated_by_poll};
+use ty_blender::{checked_by_call, gated_by_poll, implied_paths, mode_facts, same_pointers};
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::scope::{NodeWithScopeRef, ScopeId};
 use ty_python_core::{ProgramFile, semantic_index};
@@ -171,21 +175,29 @@ pub(super) fn on_load<'db>(
             || (path == ["space_data"]
                 && matches!(fact, Fact::Tag { path, attribute, .. } if **path == ["area"] && attribute == "type"))
     };
-    let from_gate: Vec<&SourcedFact> = gated
-        .map(|gated| &gated.facts[..])
-        .unwrap_or_default()
+    let gate_facts = gated.map(|gated| &gated.facts[..]).unwrap_or_default();
+    let flow_facts = flow.unwrap_or_default();
+    // What the Pointer aliases add is Blender's own bookkeeping, not an assumption about the
+    // poll: like the poll's own control flow, it narrows without being reported.
+    let aliased = alias_facts(
+        gate_facts
+            .iter()
+            .map(|sourced| &sourced.fact)
+            .chain(flow_facts),
+    );
+    let from_gate: Vec<&SourcedFact> = gate_facts
         .iter()
         .filter(|sourced| applies(&sourced.fact))
         .collect();
-    let from_flow: Vec<&Fact> = flow
-        .unwrap_or_default()
+    let silent: Vec<&Fact> = flow_facts
         .iter()
+        .chain(&aliased)
         .filter(|fact| applies(fact))
         .collect();
     let facts: Vec<&Fact> = from_gate
         .iter()
         .map(|sourced| &sourced.fact)
-        .chain(from_flow.iter().copied())
+        .chain(silent.iter().copied())
         .collect();
     if facts.is_empty() {
         return None;
@@ -196,10 +208,11 @@ pub(super) fn on_load<'db>(
         return None;
     }
     let removed_none = without_none(db, original) != original;
-    // The poll's own control flow is plain narrowing: only what it adds to that is reported.
-    let by_flow_alone = narrow(db, env, original, &path, &from_flow) == narrowed;
+    // The poll's own control flow and the Pointer aliases are plain narrowing: only what the gating
+    // poll adds to them is reported.
+    let by_silent_alone = narrow(db, env, original, &path, &silent) == narrowed;
     if (removed_none || is_space(db, env, without_none(db, original)))
-        && !by_flow_alone
+        && !by_silent_alone
         && let Some(gated) = gated
         && let Some(source) = from_gate.first()
         && !paths.skips(attribute.range(), &path)
@@ -886,13 +899,20 @@ impl<'db> PollReader<'db, '_> {
         let Some(values) = string_literals(other) else {
             return facts;
         };
-        if let Some(path) = self.path(value).filter(|path| !path.is_empty()) {
-            facts.add(Fact::Tag {
-                path: path.into_boxed_slice(),
-                attribute: attr.id.clone(),
-                values: values.into_boxed_slice(),
-            });
+        let Some(path) = self.path(value) else {
+            return facts;
+        };
+        if path.is_empty() {
+            if attr.id == "mode" {
+                facts.extend(mode_facts_of(&values));
+            }
+            return facts;
         }
+        facts.add(Fact::Tag {
+            path: path.into_boxed_slice(),
+            attribute: attr.id.clone(),
+            values: values.into_boxed_slice(),
+        });
         facts
     }
 
@@ -1149,9 +1169,73 @@ fn may_return_true(body: &[Stmt]) -> bool {
     })
 }
 
+/// What `context.mode` being one of `modes` says about the context ([`mode_facts`]): the facts
+/// every one of the modes gives. Nothing when one of them gives none (`OBJECT`).
+fn mode_facts_of(modes: &[Name]) -> Facts {
+    let mut each = modes.iter().map(|mode| {
+        let known = mode_facts(mode.as_str())?;
+        let mut facts = Facts::default();
+        for path in known.set {
+            let path: Path = path.iter().map(|name| Name::new_static(name)).collect();
+            if let Some(object_type) = known.object_type
+                && path.len() == 1
+            {
+                facts.add(Fact::Tag {
+                    path: path.clone(),
+                    attribute: Name::new_static("type"),
+                    values: Box::new([Name::new_static(object_type)]),
+                });
+            }
+            facts.add(Fact::NotNone(path));
+        }
+        Some(facts)
+    });
+    let Some(Some(first)) = each.next() else {
+        return Facts::default();
+    };
+    each.try_fold(first, |facts, other| Some(facts.intersect(&other?)))
+        .unwrap_or_default()
+}
+
+/// The facts the Pointer aliases add to `facts` ([`implied_paths`], [`same_pointers`]): a set
+/// `space_data.node_tree` makes `space_data.edit_tree` set, a set or tagged `context.active_node`
+/// makes `space_data.edit_tree.nodes.active` so, and the reverse. Only those not in `facts`.
+fn alias_facts<'f>(facts: impl IntoIterator<Item = &'f Fact>) -> Vec<Fact> {
+    let mut known: Vec<Fact> = facts.into_iter().cloned().collect();
+    let given = known.len();
+    let mut next = 0;
+    while next < known.len() {
+        let fact = known[next].clone();
+        next += 1;
+        let path = fact.path();
+        let mut added: Vec<Fact> = implied_paths(path)
+            .into_iter()
+            .map(|implied| {
+                Fact::NotNone(implied.iter().map(|name| Name::new_static(name)).collect())
+            })
+            .collect();
+        if let Fact::Tag {
+            attribute, values, ..
+        } = &fact
+        {
+            added.extend(same_pointers(path).into_iter().map(|same| Fact::Tag {
+                path: same.iter().map(|name| Name::new_static(name)).collect(),
+                attribute: attribute.clone(),
+                values: values.clone(),
+            }));
+        }
+        for fact in added {
+            if !known.contains(&fact) {
+                known.push(fact);
+            }
+        }
+    }
+    known.split_off(given)
+}
+
 /// The operand, operator and other side of a comparison with one operator, with the `None` literal
 /// put on the right: `None is X` is read as `X is None`.
-fn single_comparison(compare: &ast::ExprCompare) -> Option<(&Expr, ast::CmpOp, &Expr)> {
+pub(super) fn single_comparison(compare: &ast::ExprCompare) -> Option<(&Expr, ast::CmpOp, &Expr)> {
     let (left, op, right) = compare.as_single()?;
     if left.is_none_literal_expr()
         && matches!(
@@ -1213,7 +1297,7 @@ fn getattr_member(call: &ast::ExprCall) -> Option<(&Expr, Name)> {
 }
 
 /// The values of a string literal, or of a tuple, list or set display of them.
-fn string_literals(expression: &Expr) -> Option<Vec<Name>> {
+pub(super) fn string_literals(expression: &Expr) -> Option<Vec<Name>> {
     match expression {
         Expr::StringLiteral(literal) => Some(vec![Name::new(literal.value.to_str())]),
         Expr::Tuple(ast::ExprTuple { elts, .. })
@@ -1525,7 +1609,7 @@ pub(super) struct FunctionPaths {
 
 impl FunctionPaths {
     /// The path of the attribute read `attribute` in the callback.
-    fn attribute_path(&self, attribute: &ast::ExprAttribute) -> Option<Vec<Name>> {
+    pub(super) fn attribute_path(&self, attribute: &ast::ExprAttribute) -> Option<Vec<Name>> {
         let context = self.context.as_ref()?;
         let mut path = self.path(&attribute.value, context)?;
         path.push(attribute.attr.id.clone());
@@ -1582,7 +1666,7 @@ pub(super) fn is_tested_read<'db>(
 /// parameter annotated `Context` or else its second one (a callback's), or a module, where only
 /// `bpy.context` is the context.
 #[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
-fn function_paths<'db>(db: &'db dyn Db, scope: ScopeId<'db>) -> FunctionPaths {
+pub(super) fn function_paths<'db>(db: &'db dyn Db, scope: ScopeId<'db>) -> FunctionPaths {
     let file: ProgramFile<'db> = scope.program_file(db);
     let module = parsed_module(db, file.python_file(db)).load(db);
     let node = scope.node(db);
@@ -1866,7 +1950,7 @@ impl Tests<'_> {
 }
 
 /// Whether `statement` leaves its block: `return`, `raise`, `continue` or `break`.
-fn exits(statement: &Stmt) -> bool {
+pub(super) fn exits(statement: &Stmt) -> bool {
     matches!(
         statement,
         Stmt::Return(_) | Stmt::Raise(_) | Stmt::Continue(_) | Stmt::Break(_)
