@@ -5,8 +5,8 @@
 //! - `blender-assumed-context-member`: `scene`, `view_layer`, `tool_settings` and `collection`
 //!   outside a Blender callback, reported by [`super::context_members`];
 //! - `blender-assumed-list-item`: `UIList.draw_item`'s `item` is not `None`
-//!   ([`ty_blender::Callback::assumed_item_position`], typed by [`super::overrides`]), reported at
-//!   each read here;
+//!   ([`ty_blender::Callback::assumed_item_position`], typed by [`super::overrides`], by its
+//!   source where the add-on shows the list ([`super::list_sources`])), reported at each read here;
 //! - `blender-assumed-registration`: a class or Registered property that `register()` registers
 //!   only on a branch counts as registered, reported at its uses (`bpy.ops.x.y`, a Registered
 //!   property read, `.preferences`);
@@ -40,7 +40,7 @@ use super::lints::{
     BLENDER_ASSUMED_PREFERENCES, BLENDER_ASSUMED_REGISTRATION,
 };
 use super::member::without_none;
-use super::overrides::override_types;
+use super::overrides::{assumed_item_type, override_types};
 use super::poll_checks::name_tests;
 use super::preferences::addon_preferences;
 use super::walk::{Event, Site, register_walk, unregister_walk};
@@ -116,6 +116,7 @@ fn check_list_item(context: &InferContext, file: ProgramFile, function: &ast::St
     if narrowed == parent {
         return;
     }
+    let narrowed = assumed_item_type(db, definition, narrowed);
     let parameters = &function.parameters;
     let Some(parameter) = parameters
         .posonlyargs

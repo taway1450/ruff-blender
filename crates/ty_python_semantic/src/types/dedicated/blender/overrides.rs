@@ -56,6 +56,7 @@ use super::imprecise::{
 };
 use super::index::file_facts;
 use super::lints::BLENDER_INVALID_OVERRIDE;
+use super::list_sources::list_item_type;
 use super::operator_properties::class_properties_type;
 use super::symbols::{bpy_types_bases, bpy_types_class_name, is_bpy_types_class};
 use super::vector::module_class;
@@ -622,11 +623,12 @@ pub(crate) fn override_parameter_type<'db>(
             return Some(properties);
         }
         // `UIList.draw_item`'s `item`: an Assumption, reported at its reads
-        // ([`super::assumptions`]). Callers and the override check keep the parent's type.
+        // ([`super::assumptions`]), typed by the list's source where the add-on shows it
+        // ([`super::list_sources`]). Callers and the override check keep the parent's type.
         if types.assumed_item_position == Some(position) {
             return types
                 .positional(position)
-                .map(|ty| super::member::without_none(db, ty));
+                .map(|ty| assumed_item_type(db, definition, super::member::without_none(db, ty)));
         }
         return types.positional(position);
     }
@@ -638,6 +640,19 @@ pub(crate) fn override_parameter_type<'db>(
         return default.map(|default| default.promote(db, env));
     }
     None
+}
+
+/// The type of `UIList.draw_item`'s `item` in the method `definition`, whose parent gives it
+/// `parent` (`None` excluded): the element type of the list's source, else `parent`.
+pub(super) fn assumed_item_type<'db>(
+    db: &'db dyn Db,
+    definition: Definition<'db>,
+    parent: Type<'db>,
+) -> Type<'db> {
+    match defining_class(db, definition) {
+        Some(class) => list_item_type(db, class, parent),
+        None => parent,
+    }
 }
 
 /// What the return values of the method `definition` must fit when it overrides a Blender callback

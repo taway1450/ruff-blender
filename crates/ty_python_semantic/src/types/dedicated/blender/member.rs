@@ -251,6 +251,23 @@ pub(super) fn is_ignored_host<'db>(db: &'db dyn Db, class: StaticClassLiteral<'d
     bases.peek().is_some() && !bases.any(|base| PROPERTY_HOSTS.contains(&base))
 }
 
+/// The value type of the attribute `name` read from `receiver` in `file`: ty's own where it finds
+/// the attribute, otherwise the one a property ty does not see gives it ([`instance_value_type`]).
+pub(super) fn attribute_value_type<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    file: ProgramFile<'db>,
+    receiver: Type<'db>,
+    name: &str,
+) -> Option<Type<'db>> {
+    match receiver.member(db, env, name).place {
+        Place::Defined(defined) if defined.definedness == Definedness::AlwaysDefined => {
+            Some(defined.ty)
+        }
+        _ => instance_value_type(db, env, file, receiver, name),
+    }
+}
+
 /// The value type of the attribute `name` read from `receiver` in `file`, when a property that ty
 /// does not see gives it one.
 ///
@@ -265,12 +282,7 @@ fn instance_value_type<'db>(
     name: &str,
 ) -> Option<Type<'db>> {
     // An arm that ty resolves itself keeps ty's type; the others need a property.
-    let arm_type = |arm: Type<'db>| match arm.member(db, env, name).place {
-        Place::Defined(defined) if defined.definedness == Definedness::AlwaysDefined => {
-            Some(defined.ty)
-        }
-        _ => instance_value_type(db, env, file, arm, name),
-    };
+    let arm_type = |arm: Type<'db>| attribute_value_type(db, env, file, arm, name);
     let all_arms = |arms: &[Type<'db>]| {
         let types = arms
             .iter()
