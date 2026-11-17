@@ -274,6 +274,34 @@ pub fn problem(root: &str, name: &str, shape: CallbackShape) -> Option<String> {
     callback_of(root, name)?.problem(shape)
 }
 
+/// Whether Blender calls the callback `name` of the root `root` only right after the class's
+/// `poll` returned true, with the same context, so that what `poll` checked holds in it.
+///
+/// - Panel `draw`, `draw_header` and `draw_header_preset`: drawn after the panel type's poll, in a
+///   region, a popover or `layout.popover` (`area.cc`, `interface_region_popover.cc`).
+/// - Menu `draw`: `WM_menutype_poll` runs before every menu draw (`layout.menu`, `wm.call_menu`,
+///   pies, menu search).
+/// - Operator `invoke` and `execute`: `WM_operator_poll` runs before them, also after a props
+///   dialog and on redo, and `bpy.ops` refuses to call an operator whose poll fails.
+/// - GizmoGroup `setup`, `refresh`, `draw_prepare` and `invoke_prepare`: the gizmo map polls the
+///   group first.
+///
+/// Not gated: Operator `modal` and `cancel` (later events, the context may have changed since
+/// `invoke`), `check`, `description` and `draw` (a props dialog draws after `invoke` without a new
+/// poll), and every UIList callback.
+pub fn gated_by_poll(root: &str, name: &str) -> bool {
+    match root {
+        "Panel" => matches!(name, "draw" | "draw_header" | "draw_header_preset"),
+        "Menu" => name == "draw",
+        "Operator" => matches!(name, "invoke" | "execute"),
+        "GizmoGroup" => matches!(
+            name,
+            "setup" | "refresh" | "draw_prepare" | "invoke_prepare"
+        ),
+        _ => false,
+    }
+}
+
 /// The names that Blender's Python bases define (`scripts/modules/_bpy_types.py`), keyed by the
 /// `bpy.types` class that has them in its method resolution order. `Panel`, `UIList`, `Header` and
 /// `Menu` share `_GenericUI`'s.
@@ -358,7 +386,9 @@ pub fn python_base_names(class: &str) -> &'static [&'static str] {
 
 #[cfg(test)]
 mod tests {
-    use super::{CALLBACKS, CallbackShape, MethodKind, callback_of, is_callback_root, problem};
+    use super::{
+        CALLBACKS, CallbackShape, MethodKind, callback_of, gated_by_poll, is_callback_root, problem,
+    };
 
     fn shape(kind: MethodKind, positional: usize) -> CallbackShape {
         CallbackShape { kind, positional }
@@ -381,6 +411,18 @@ mod tests {
         assert!(is_callback_root("Operator"));
         assert!(!is_callback_root("PropertyGroup"));
         assert!(callback_of("AddonPreferences", "draw").is_none());
+    }
+
+    #[test]
+    fn gated() {
+        assert!(gated_by_poll("Panel", "draw_header"));
+        assert!(gated_by_poll("Menu", "draw"));
+        assert!(gated_by_poll("Operator", "execute"));
+        assert!(gated_by_poll("GizmoGroup", "invoke_prepare"));
+        assert!(!gated_by_poll("Operator", "modal"));
+        assert!(!gated_by_poll("Operator", "draw"));
+        assert!(!gated_by_poll("UIList", "draw_item"));
+        assert!(!gated_by_poll("Panel", "poll"));
     }
 
     #[test]

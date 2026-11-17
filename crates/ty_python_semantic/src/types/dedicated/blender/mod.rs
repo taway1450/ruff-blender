@@ -12,7 +12,9 @@
 //! - [`index`]: the Add-on index, what an add-on's code does to Blender, gathered without inference;
 //! - [`member`]: the property behind an attribute of a Blender instance, of either origin;
 //! - [`bl_rna`]: `bl_rna.properties["name"]` as the `Property` subclass of the attribute's kind;
-//! - [`context_members`]: the Guaranteed context members, non-None inside a Blender callback;
+//! - [`context_members`]: the Guaranteed context members, non-None inside a Blender callback, and
+//!   the spaces a menu's idname prefix or a popover implies;
+//! - [`poll_checks`]: what a `poll()` checked, non-None in the callbacks it gates;
 //! - [`type_tags`]: narrowing by a Type tag, `md.type == 'SUBSURF'` makes `md` a `SubsurfModifier`;
 //! - [`operators`]: `bpy.ops.<category>.<name>` for an add-on's own operators;
 //! - [`operator_properties`]: what an operator idname given as a string gives
@@ -54,6 +56,7 @@ mod module_dunders;
 mod operator_properties;
 mod operators;
 mod overrides;
+mod poll_checks;
 mod preferences;
 mod properties;
 mod registration_checks;

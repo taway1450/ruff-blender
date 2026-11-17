@@ -49,9 +49,52 @@ pub fn runs_in_editor(root: &str, name: &str) -> bool {
     }
 }
 
+/// The `bl_space_type` of the editor a menu with the idname `idname` is drawn in, by the prefix
+/// Blender's naming convention gives it: `<PREFIX>_MT_<name>`, `<PREFIX>` being one of the editors'
+/// header prefixes (`CLIP_MT_view` is drawn in the clip editor, as its header is `CLIP_HT_header`).
+/// Menu search relies on the same convention (each editor's root menu is
+/// `<PREFIX>_MT_editor_menus`). `TIME` and `ASSETBROWSER` are modes of the dope sheet and the file
+/// browser. `None` for any other idname: a data prefix (`OBJECT_MT_`, `MASK_MT_`) or an add-on's own.
+///
+/// A menu has no `bl_space_type` and can be drawn from any editor (`wm.call_menu` in a user key
+/// map), so this is a convention, not a guarantee.
+pub fn menu_space_type(idname: &str) -> Option<&'static str> {
+    let (prefix, _) = idname.split_once("_MT_")?;
+    MENU_PREFIXES
+        .iter()
+        .find(|(menu_prefix, _)| *menu_prefix == prefix)
+        .map(|(_, space_type)| *space_type)
+}
+
+/// The menu idname prefixes and the `bl_space_type` they name: the 19 header prefixes of
+/// Blender's editors (`<PREFIX>_HT_header`), and `TIME` and `ASSETBROWSER`.
+const MENU_PREFIXES: [(&str, &str); 21] = [
+    ("VIEW3D", "VIEW_3D"),
+    ("IMAGE", "IMAGE_EDITOR"),
+    ("NODE", "NODE_EDITOR"),
+    ("SEQUENCER", "SEQUENCE_EDITOR"),
+    ("CLIP", "CLIP_EDITOR"),
+    ("DOPESHEET", "DOPESHEET_EDITOR"),
+    ("GRAPH", "GRAPH_EDITOR"),
+    ("NLA", "NLA_EDITOR"),
+    ("TEXT", "TEXT_EDITOR"),
+    ("CONSOLE", "CONSOLE"),
+    ("INFO", "INFO"),
+    ("OUTLINER", "OUTLINER"),
+    ("PROPERTIES", "PROPERTIES"),
+    ("FILEBROWSER", "FILE_BROWSER"),
+    ("SPREADSHEET", "SPREADSHEET"),
+    ("USERPREF", "PREFERENCES"),
+    ("PROJECT", "PROJECT"),
+    ("TOPBAR", "TOPBAR"),
+    ("STATUSBAR", "STATUSBAR"),
+    ("TIME", "DOPESHEET_EDITOR"),
+    ("ASSETBROWSER", "FILE_BROWSER"),
+];
+
 #[cfg(test)]
 mod tests {
-    use super::{ContextGuarantee, context_guarantee, runs_in_editor};
+    use super::{ContextGuarantee, context_guarantee, menu_space_type, runs_in_editor};
 
     #[test]
     fn guarantees() {
@@ -77,5 +120,15 @@ mod tests {
         assert!(!runs_in_editor("Menu", "draw"));
         assert!(!runs_in_editor("Operator", "execute"));
         assert!(!runs_in_editor("Gizmo", "draw"));
+    }
+
+    #[test]
+    fn menu_prefixes() {
+        assert_eq!(menu_space_type("CLIP_MT_view"), Some("CLIP_EDITOR"));
+        assert_eq!(menu_space_type("TIME_MT_view"), Some("DOPESHEET_EDITOR"));
+        assert_eq!(menu_space_type("TOPBAR_MT_file"), Some("TOPBAR"));
+        assert_eq!(menu_space_type("OBJECT_MT_modifier_add"), None);
+        assert_eq!(menu_space_type("MYADDON_MT_menu"), None);
+        assert_eq!(menu_space_type("VIEW3D_PT_tools"), None);
     }
 }
