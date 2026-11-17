@@ -1,11 +1,13 @@
 //! Guaranteed context members: the members of `bpy.types.Context` that Blender always fills when
 //! it calls a Blender callback, so they are never `None` there although the stubs say `X | None`.
 //!
-//! - `preferences`, `window_manager`, `blend_data`, `scene`, `view_layer` and `tool_settings` are
-//!   filled in every callback, `Operator.execute` in background mode included: `preferences` is a
-//!   static global (`rna_Context_preferences_get`), the window manager and `Main` live for the whole
-//!   session, `scene` is the window's or the loaded file's scene, and the view layer and tool
-//!   settings belong to the scene (`CTX_data_view_layer`, `scene_init_data`).
+//! - `preferences`, `window_manager`, `blend_data`, `scene`, `view_layer`, `tool_settings` and
+//!   `collection` are filled in every callback, `Operator.execute` in background mode included:
+//!   `preferences` is a static global (`rna_Context_preferences_get`), the window manager and `Main`
+//!   live for the whole session, `scene` is the window's or the loaded file's scene, and the view
+//!   layer and tool settings belong to the scene (`CTX_data_view_layer`, `scene_init_data`). The
+//!   collection is the active layer collection's, else the scene's master collection
+//!   (`CTX_data_collection`), so it is `None` exactly when `scene` is.
 //! - `area`, `space_data` and `region` are filled when Blender calls the callback in an editor of the
 //!   class's `bl_space_type`: a Panel or a Header is registered into that editor's region type and
 //!   drawn only there, and a gizmo group is kept in that editor's gizmo map. A Menu, a UIList, an
@@ -29,14 +31,15 @@ pub enum ContextGuarantee {
 pub fn context_guarantee(name: &str) -> Option<ContextGuarantee> {
     match name {
         "preferences" | "window_manager" | "blend_data" | "scene" | "view_layer"
-        | "tool_settings" => Some(ContextGuarantee::Always),
+        | "tool_settings" | "collection" => Some(ContextGuarantee::Always),
         "area" | "space_data" | "region" => Some(ContextGuarantee::InEditor),
         _ => None,
     }
 }
 
 /// Whether the member `name` of `bpy.types.Context` is an assumed one outside Blender callbacks:
-/// `scene`, `view_layer` and `tool_settings` hold the window's or the loaded file's scene wherever
+/// `scene`, `view_layer`, `tool_settings` and `collection` hold the window's or the loaded file's
+/// scene (or its master collection) wherever
 /// Python code runs in ordinary use (a timer runs with the first window set, an app handler, a
 /// `--python` script, a test or a preset with the loaded file's scene), and are `None` only under
 /// `context.temp_override(scene=None)` or in a FileHandler's import operator run by the collection
@@ -46,7 +49,59 @@ pub fn context_guarantee(name: &str) -> Option<ContextGuarantee> {
 /// The other Guaranteed members are left out: `preferences` and `window_manager` are never `None`
 /// in the stubs, and `blend_data` is not read outside callbacks in practice.
 pub fn is_assumed_context_member(name: &str) -> bool {
-    matches!(name, "scene" | "view_layer" | "tool_settings")
+    matches!(name, "scene" | "view_layer" | "tool_settings" | "collection")
+}
+
+/// Whether the member `name` of `bpy.types.Context` is one of the editor's: `area`, `region` and
+/// `space_data`, set when Blender calls the code while it draws an editor.
+pub fn is_editor_member(name: &str) -> bool {
+    matches!(name, "area" | "region" | "space_data")
+}
+
+/// Whether Blender calls the callback `name` of the root `root` while it draws an editor, though the
+/// class names no editor of its own: a Panel's, Menu's or asset shelf's `poll`, which Blender runs
+/// while drawing a region (`ED_region_panels`, `UI_menutype_draw`), and `RenderEngine.view_update`
+/// and `view_draw`, called for the 3D viewport that shows the render. A script, `wm.call_menu` or
+/// `wm.call_panel` can poll a menu or panel with no editor, so the editor members there are an
+/// Assumption.
+pub fn assumes_editor(root: &str, name: &str) -> bool {
+    match root {
+        "Panel" | "Menu" | "AssetShelf" => name == "poll",
+        "RenderEngine" => matches!(name, "view_update" | "view_draw"),
+        _ => false,
+    }
+}
+
+/// Whether a function named `name` draws a tool's settings: `WorkSpaceTool.draw_settings`, or a
+/// function the tool system takes as one (`draw_settings`, `draw_settings_interactive_add` in
+/// `bl_ui`'s tool definitions). Blender calls it while drawing the tool header or the tool settings
+/// of an editor.
+pub fn is_tool_draw_settings(name: &str) -> bool {
+    name == "draw_settings" || name.starts_with("draw_settings_")
+}
+
+/// Whether the member `name` of `bpy.types.Context` is the active object an operator that adds an
+/// object makes the new one ([`adds_object`]).
+pub fn is_added_object_member(name: &str) -> bool {
+    matches!(name, "object" | "active_object")
+}
+
+/// Whether the operator `bpy.ops.<category>.<name>` is taken to add an object and make it the
+/// active one: `object.add` and every `*_add` operator (`mesh.primitive_cube_add`,
+/// `object.light_add`). `ED_object_add_type` selects the new object and makes it active; whether the
+/// call succeeded is not visible in the code, so this is an Assumption.
+pub fn adds_object(name: &str) -> bool {
+    name == "add" || name.ends_with("_add")
+}
+
+/// Whether the file at `path` is a preset: a Python file in a folder named `presets`
+/// (`scripts/presets/camera/1_inch.py`, an add-on's `presets/<subdir>/`). Blender runs a preset with
+/// the context of the panel or menu that applies it (`script.execute_preset`).
+pub fn is_preset_path(path: &str) -> bool {
+    path.split(['/', '\\'])
+        .rev()
+        .skip(1)
+        .any(|folder| folder == "presets")
 }
 
 /// Whether Blender calls the callback `name` of the root `root` in an editor of the class's
@@ -130,8 +185,9 @@ const CHECKED_BY_CALL: [(&str, &str, &[&str]); 1] = [(
 #[cfg(test)]
 mod tests {
     use super::{
-        ContextGuarantee, context_guarantee, is_assumed_context_member, menu_space_type,
-        runs_in_editor,
+        ContextGuarantee, adds_object, assumes_editor, context_guarantee, is_added_object_member,
+        is_assumed_context_member, is_editor_member, is_preset_path, is_tool_draw_settings,
+        menu_space_type, runs_in_editor,
     };
 
     #[test]
@@ -145,6 +201,10 @@ mod tests {
             context_guarantee("space_data"),
             Some(ContextGuarantee::InEditor)
         );
+        assert_eq!(
+            context_guarantee("collection"),
+            Some(ContextGuarantee::Always)
+        );
         assert_eq!(context_guarantee("window"), None);
         assert_eq!(context_guarantee("object"), None);
     }
@@ -154,6 +214,7 @@ mod tests {
         assert!(is_assumed_context_member("scene"));
         assert!(is_assumed_context_member("view_layer"));
         assert!(is_assumed_context_member("tool_settings"));
+        assert!(is_assumed_context_member("collection"));
         assert!(!is_assumed_context_member("blend_data"));
         assert!(!is_assumed_context_member("object"));
     }
@@ -167,6 +228,40 @@ mod tests {
         assert!(!runs_in_editor("Menu", "draw"));
         assert!(!runs_in_editor("Operator", "execute"));
         assert!(!runs_in_editor("Gizmo", "draw"));
+    }
+
+    #[test]
+    fn editor_members() {
+        assert!(is_editor_member("region"));
+        assert!(is_editor_member("space_data"));
+        assert!(!is_editor_member("window"));
+        assert!(assumes_editor("Panel", "poll"));
+        assert!(assumes_editor("Menu", "poll"));
+        assert!(assumes_editor("RenderEngine", "view_draw"));
+        assert!(!assumes_editor("Menu", "draw"));
+        assert!(!assumes_editor("RenderEngine", "render"));
+        assert!(!assumes_editor("Operator", "poll"));
+        assert!(is_tool_draw_settings("draw_settings"));
+        assert!(is_tool_draw_settings("draw_settings_interactive_add"));
+        assert!(!is_tool_draw_settings("draw"));
+    }
+
+    #[test]
+    fn added_objects() {
+        assert!(adds_object("primitive_cube_add"));
+        assert!(adds_object("add"));
+        assert!(!adds_object("select_all"));
+        assert!(!adds_object("add_named"));
+        assert!(is_added_object_member("active_object"));
+        assert!(!is_added_object_member("scene"));
+    }
+
+    #[test]
+    fn presets() {
+        assert!(is_preset_path("scripts/presets/camera/1_inch.py"));
+        assert!(is_preset_path("C:\\addon\\presets\\x\\a.py"));
+        assert!(!is_preset_path("scripts/presets.py"));
+        assert!(!is_preset_path("addon/operators/presets_menu.py"));
     }
 
     #[test]

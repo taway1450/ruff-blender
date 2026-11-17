@@ -26,8 +26,9 @@ pub use callbacks::{
     callbacks_of, gated_by_poll, is_callback_name, is_callback_root, problem, python_base_names,
 };
 pub use context::{
-    ContextGuarantee, checked_by_call, context_guarantee, is_assumed_context_member,
-    menu_space_type, runs_in_editor,
+    ContextGuarantee, adds_object, assumes_editor, checked_by_call, context_guarantee,
+    is_added_object_member, is_assumed_context_member, is_editor_member, is_preset_path,
+    is_tool_draw_settings, menu_space_type, runs_in_editor,
 };
 pub use discovery::{Addon, AddonKind, addon_for_path};
 pub use files::{addon_source_files, folder_source_files};

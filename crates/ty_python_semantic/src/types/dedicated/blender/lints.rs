@@ -331,6 +331,42 @@ declare_lint! {
     }
 }
 
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-internal-operator.md")]
+    pub(crate) static BLENDER_ASSUMED_INTERNAL_OPERATOR = {
+        summary: "detects a context member read in a callback of an operator whose `bl_options` has `'INTERNAL'`, taken as set",
+        status: LintStatus::stable("0.0.103"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-editor-member.md")]
+    pub(crate) static BLENDER_ASSUMED_EDITOR_MEMBER = {
+        summary: "detects `context.area`, `region` or `space_data` read in a panel's or menu's `poll`, a tool's `draw_settings` or a viewport render callback, taken as set",
+        status: LintStatus::stable("0.0.103"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-preset-context.md")]
+    pub(crate) static BLENDER_ASSUMED_PRESET_CONTEXT = {
+        summary: "detects a module-level read of a `bpy.context` member in a preset, taken as set by the panel that runs it",
+        status: LintStatus::stable("0.0.103"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-added-object.md")]
+    pub(crate) static BLENDER_ASSUMED_ADDED_OBJECT = {
+        summary: "detects `context.object` or `active_object` read after a `bpy.ops.*_add()` call, taken as the added object",
+        status: LintStatus::stable("0.0.103"),
+        default_level: Level::Warn,
+    }
+}
+
 pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
@@ -363,6 +399,10 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_ASSUMED_REGISTRATION);
     registry.register_lint(&BLENDER_ASSUMED_COMPLETE_REGISTRATION);
     registry.register_lint(&BLENDER_ASSUMED_PREFERENCES);
+    registry.register_lint(&BLENDER_ASSUMED_INTERNAL_OPERATOR);
+    registry.register_lint(&BLENDER_ASSUMED_EDITOR_MEMBER);
+    registry.register_lint(&BLENDER_ASSUMED_PRESET_CONTEXT);
+    registry.register_lint(&BLENDER_ASSUMED_ADDED_OBJECT);
 }
 
 /// The Blender lints of `file`: the add-on lints when `file` is an add-on's root module (the

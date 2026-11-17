@@ -2,8 +2,8 @@
 //! typed as if the fact held, and reported under a rule of the category `blender-assumptions`
 //! ([`super::categories`]):
 //!
-//! - `blender-assumed-context-member`: `scene`, `view_layer` and `tool_settings` outside a Blender
-//!   callback, reported by [`super::context_members`];
+//! - `blender-assumed-context-member`: `scene`, `view_layer`, `tool_settings` and `collection`
+//!   outside a Blender callback, reported by [`super::context_members`];
 //! - `blender-assumed-list-item`: `UIList.draw_item`'s `item` is not `None`
 //!   ([`ty_blender::Callback::assumed_item_position`], typed by [`super::overrides`]), reported at
 //!   each read here;
@@ -14,6 +14,10 @@
 //!   property of the add-on counts as registered; reported once, at the value it could not follow;
 //! - `blender-assumed-preferences`: `addons[...].preferences` keeps the add-on's class while
 //!   `register()` runs before the class is registered, or `unregister()` after it is unregistered.
+//! - `blender-assumed-internal-operator`, `blender-assumed-editor-member`,
+//!   `blender-assumed-preset-context` and `blender-assumed-added-object`: a context member that an
+//!   Internal operator, an editor's UI callback, a preset or a call that adds an object takes as
+//!   set, reported by [`super::context_assumptions`].
 
 use ruff_db::parsed::ParsedModuleRef;
 use ruff_python_ast::name::Name;
