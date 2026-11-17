@@ -218,7 +218,7 @@ pub(super) struct NarrowedParameter<'db> {
 /// The parameters of the method `definition`, an override of a Blender callback, annotated with a
 /// subtype of the parent's parameter type without `None`, where the parent's type does not fit the
 /// annotation. ty's override check compares them as they are annotated; an annotation that is no
-/// such subtype is left to its `invalid-method-override`.
+/// such subtype is left to its `incompatible-method-override`.
 #[salsa::tracked(
     returns(deref),
     cycle_initial=|_, _, _| Box::default(),

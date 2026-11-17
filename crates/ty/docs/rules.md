@@ -891,7 +891,7 @@ Checks the parameters of a Blender callback override (`UIList.draw_item`, `Opera
 such as the add-on's own `PropertyGroup` for `draw_item`'s `item` or `Armature` for its `data`.
 
 The override is accepted, and its body sees the annotated type. An annotation that is no subtype of
-the parent's type is still ty's [`invalid-method-override`](#invalid-method-override).
+the parent's type is still ty's [`incompatible-method-override`](#incompatible-method-override).
 
 The rule belongs to the category `blender-imprecise-annotations`.
 
@@ -1181,8 +1181,8 @@ Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a
 Checks for a class with two Blender bases where neither derives from the other, such as an
 `Operator` that is also a `Panel`.
 
-ty's own checks of the conflicts between the two bases ([`invalid-attribute-override`](#invalid-attribute-override),
-[`invalid-method-override`](#invalid-method-override)) are left out on such a class, since they all come from this one mistake.
+ty's own checks of the conflicts between the two bases ([`incompatible-attribute-override`](#incompatible-attribute-override),
+[`incompatible-method-override`](#incompatible-method-override)) are left out on such a class, since they all come from this one mistake.
 
 **Why is this bad?**
 
@@ -1430,7 +1430,7 @@ Every class deriving from a Blender class is checked, registered or not, since a
 subclass inherits the method.
 
 Blender passes a callback's arguments by position, as many as it has parameters, so a renamed
-parameter (`def execute(self, ctx)`) or a short `draw_item` is fine. ty's [`invalid-method-override`](#invalid-method-override)
+parameter (`def execute(self, ctx)`) or a short `draw_item` is fine. ty's [`incompatible-method-override`](#incompatible-method-override)
 accepts them too, and leaves a method that this rule reports to it.
 
 **Why is this bad?**
@@ -1886,7 +1886,7 @@ class CLIP_MT_my_tools(Menu):
 
 class MY_MT_tools(Menu):
     def draw(self, context):
-        clip = context.space_data.clip  # error: [unresolved-attribute]
+        clip = context.space_data.clip  # error: [missing-attribute]
 ```
 
 Check `context.space_data.type` (or `context.area.type`) in the menu's `poll`.
@@ -1981,7 +1981,7 @@ class MY_PT_material(Panel):
 
     def draw(self, context):
         self.layout.label(text=context.object.name)  # error: [blender-narrowed-by-poll]
-        self.layout.label(text=context.material.name)  # error: [unresolved-attribute]
+        self.layout.label(text=context.material.name)  # error: [missing-union-attribute]
 ```
 
 Check the pointer in the callback too, or read it once into a checked local.

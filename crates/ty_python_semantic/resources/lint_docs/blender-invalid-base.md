@@ -3,8 +3,8 @@
 Checks for a class with two Blender bases where neither derives from the other, such as an
 `Operator` that is also a `Panel`.
 
-ty's own checks of the conflicts between the two bases (`invalid-attribute-override`,
-`invalid-method-override`) are left out on such a class, since they all come from this one mistake.
+ty's own checks of the conflicts between the two bases (`incompatible-attribute-override`,
+`incompatible-method-override`) are left out on such a class, since they all come from this one mistake.
 
 ## Why is this bad?
 

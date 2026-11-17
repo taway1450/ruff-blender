@@ -18,7 +18,7 @@
 //! - [`check_overrides`] reports `blender-invalid-override` on each `def` of a callback that Blender
 //!   refuses, in a module-level class deriving from a registrable `bpy.types` class, registered or
 //!   not: a registered subclass inherits the `def`.
-//! - [`override_contract`] is what ty's `invalid-method-override` compares such an override with:
+//! - [`override_contract`] is what ty's `incompatible-method-override` compares such an override with:
 //!   nothing where `blender-invalid-override` reports, otherwise the parent's signature with
 //!   positional-only parameters, so a renamed parameter or a short `UIList.draw_item` is accepted
 //!   while a parameter or return type that does not fit still is not.
@@ -148,7 +148,7 @@ pub(super) fn defining_class<'db>(
 /// `None` when it accepts it or the method is no Blender callback.
 ///
 /// Both [`check_overrides`] and [`override_contract`] read it, so `blender-invalid-override` and
-/// ty's `invalid-method-override` never report the same `def`.
+/// ty's `incompatible-method-override` never report the same `def`.
 #[salsa::tracked(
     returns(ref),
     cycle_initial=|_, _, _| None,
