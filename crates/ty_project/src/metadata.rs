@@ -23,6 +23,7 @@ use crate::metadata::value::RelativePathBuf;
 use crate::uv::{self, UvWorkspace};
 pub use options::Options;
 use options::TyTomlError;
+pub mod blender;
 mod configuration_file;
 pub mod options;
 pub mod pyproject;

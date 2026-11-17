@@ -8190,6 +8190,13 @@ impl<'a, 'db> ArgumentTypeChecker<'a, 'db> {
             && argument_type
                 .when_assignable_to_owned(db, self.env, expected_ty, self.inferable_typevars)
                 .query(|_, when| when.is_never_satisfied(db, self.env, self.inferable_typevars))
+            && !crate::types::blender::accepts_enum_argument(
+                db,
+                self.env,
+                self.signature_type,
+                argument_type,
+                expected_ty,
+            )
             && !self.should_defer_typevartuple_callable_check(
                 parameter.annotated_type(),
                 expected_ty,

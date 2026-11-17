@@ -25,8 +25,11 @@
 //! - [`classes`]: the classes of an add-on, their attributes as Blender reads them and which of them
 //!   may be registered;
 //! - [`vector`]: the value and write types of vector properties;
-//! - [`lints`]: the Blender lints and the per-file query that reports them;
+//! - [`lints`]: the Blender lints and the per-file query that reports them, and [`categories`],
+//!   the categories of the rules that accept code and only report it;
 //! - [`rules`]: the property rules, what Blender rejects or ignores in property declarations;
+//! - [`imprecise`]: the Imprecise annotations, code less precise than the stubs that Blender
+//!   accepts, typed as the precise form and reported;
 //! - [`overrides`]: overrides of Blender callbacks, what Blender refuses, what ty's override
 //!   checks compare them with and the types they take from their parent;
 //! - [`registration_checks`]: the registration checks, what Blender refuses, ignores or leaves
@@ -37,11 +40,13 @@ mod addon;
 mod addon_key;
 mod bl_rna;
 mod callbacks;
+mod categories;
 mod class_rules;
 mod classes;
 mod context_members;
 mod evaluate;
 mod follow;
+mod imprecise;
 mod index;
 mod lints;
 mod member;
@@ -62,10 +67,14 @@ mod walk;
 pub(crate) use addon::addon_of_file;
 pub(crate) use bl_rna::rna_property_type;
 pub(crate) use callbacks::declaration_callee;
+pub use categories::{BLENDER_RULE_CATEGORIES, BlenderRuleCategory, blender_rule_category};
 pub(crate) use class_rules::has_invalid_bases;
 pub(crate) use evaluate::{
     annotation_value_type, is_opaque_call, is_property_container, reference_value_type,
     subscript_value_type,
+};
+pub(crate) use imprecise::{
+    accepts_enum_argument, check_enum_write, check_imprecise_result, return_annotation,
 };
 pub(crate) use lints::{file_diagnostics, register_lints};
 pub(in crate::types) use member::on_store;

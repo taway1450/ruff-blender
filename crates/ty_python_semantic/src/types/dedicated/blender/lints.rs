@@ -15,6 +15,10 @@
 //!   [`super::preferences`].
 //! - `blender-invalid-override`, a Blender callback that Blender refuses, is reported on every
 //!   first-party file, by [`super::overrides`].
+//! - The Imprecise annotation rules (`blender-imprecise-*`, the category
+//!   `blender-imprecise-annotations`, [`super::categories`]) are reported by [`super::imprecise`]:
+//!   an operator's result annotation and a callback's parameter annotations here, a returned
+//!   `set[str]` and an enum value where they are inferred.
 //! - The class-shape rules, `blender-mixin-order` and `blender-invalid-base`, are reported on every
 //!   first-party file, by [`super::class_rules`], from the visitor of the property rules.
 
@@ -219,6 +223,33 @@ declare_lint! {
     }
 }
 
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-imprecise-operator-return.md")]
+    pub(crate) static BLENDER_IMPRECISE_OPERATOR_RETURN = {
+        summary: "detects an operator result typed `set[str]` where Blender takes a set of result names",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-imprecise-enum-value.md")]
+    pub(crate) static BLENDER_IMPRECISE_ENUM_VALUE = {
+        summary: "detects a `str` value where a Blender enum takes one of its item names",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-imprecise-callback-parameter.md")]
+    pub(crate) static BLENDER_IMPRECISE_CALLBACK_PARAMETER = {
+        summary: "detects a Blender callback parameter annotated narrower than the parent's, with the subclass Blender passes",
+        status: LintStatus::stable("0.0.97"),
+        default_level: Level::Warn,
+    }
+}
+
 pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_REGISTER);
     registry.register_lint(&BLENDER_INVALID_ADDON_METADATA);
@@ -240,6 +271,9 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_INVALID_BASE);
     registry.register_lint(&BLENDER_REGISTERED_BASE);
     registry.register_lint(&BLENDER_MISSING_CALLBACK);
+    registry.register_lint(&BLENDER_IMPRECISE_OPERATOR_RETURN);
+    registry.register_lint(&BLENDER_IMPRECISE_ENUM_VALUE);
+    registry.register_lint(&BLENDER_IMPRECISE_CALLBACK_PARAMETER);
 }
 
 /// The Blender lints of `file`: the add-on lints when `file` is an add-on's root module (the

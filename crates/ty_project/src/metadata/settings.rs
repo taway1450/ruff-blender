@@ -6,6 +6,7 @@ use ty_combine::Combine;
 use ty_python_semantic::AnalysisSettings;
 use ty_python_semantic::lint::RuleSelection;
 
+use crate::metadata::blender::BlenderOptions;
 use crate::metadata::options::{
     AnalysisOptionsContext, InnerOverrideOptions, Options, OutputFormat,
 };
@@ -225,7 +226,10 @@ fn merge_overrides(db: &dyn Db, overrides: Vec<Arc<InnerOverrideOptions>>, _: ()
     let rules = merged.rules.unwrap_or_default();
     let analysis = merged.analysis.unwrap_or_default();
 
-    let rules = rules.to_rule_selection(db);
+    let strictness = metadata
+        .options_in_precedence_order(metadata.options(), metadata.uv_workspace_options.as_deref())
+        .find_map(|options| BlenderOptions::strictness(options.blender.as_ref()));
+    let rules = rules.to_rule_selection(db, strictness);
     // The analysis options were already validated when building the individual overrides.
     let analysis = analysis.to_settings(db, AnalysisOptionsContext::Override, &mut Vec::new());
 
@@ -271,16 +275,18 @@ impl OverrideSettings {
     fn from_script_options(db: &dyn Db, options: &Options) -> Self {
         let mut rules = None;
         let mut analysis = None;
+        let mut strictness = None;
         for layer in db
             .project()
             .metadata(db)
             .options_in_precedence_order(options, None)
         {
+            strictness = strictness.or_else(|| BlenderOptions::strictness(layer.blender.as_ref()));
             rules.combine_with(layer.rules.clone());
             analysis.combine_with(layer.analysis.clone());
         }
 
-        let rules = rules.unwrap_or_default().to_rule_selection(db);
+        let rules = rules.unwrap_or_default().to_rule_selection(db, strictness);
         let mut diagnostics = Vec::new();
         let analysis = analysis.unwrap_or_default().to_settings(
             db,

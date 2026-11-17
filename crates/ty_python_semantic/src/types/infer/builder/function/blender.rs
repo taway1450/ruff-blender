@@ -10,6 +10,9 @@
 //!     def execute(self, context):
 //!         return {"DONE"}  # error: [invalid-return-type]
 //! ```
+//!
+//! A returned `set[str]` that is no set display (a set held in a variable) is accepted where the
+//! result is an enum set, and reported as `blender-imprecise-operator-return`.
 
 use ruff_python_ast as ast;
 use ruff_text_size::Ranged;
@@ -22,6 +25,21 @@ use crate::types::infer::builder::TypeInferenceBuilder;
 use crate::types::{Type, blender};
 
 impl<'db> TypeInferenceBuilder<'db, '_> {
+    /// The return annotation of `function` that its returns are checked against: none for an
+    /// override of a Blender callback annotated with the parent's enum-set result widened to `str`
+    /// (`-> set[str]` on `execute`), which is checked as if unannotated, against the parent's result
+    /// (`types::blender::return_annotation`).
+    pub(super) fn blender_return_annotation<'a>(
+        &self,
+        function: &'a ast::StmtFunctionDef,
+    ) -> Option<&'a ast::Expr> {
+        blender::return_annotation(
+            self.db(),
+            self.index.expect_single_definition(function),
+            function,
+        )
+    }
+
     /// Reports `invalid-return-type` on the returns of `function`, an override of a Blender
     /// callback without a return annotation, that do not fit the parent's return type, and on its
     /// name when the end of its body is reachable and `None` does not fit.
@@ -53,7 +71,15 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
         }
         let name = function.name.range();
         for statement in &self.return_types_and_ranges {
-            if !statement.ty.is_assignable_to(db, env, expected) {
+            if !statement.ty.is_assignable_to(db, env, expected)
+                && !blender::check_imprecise_result(
+                    &self.context,
+                    function,
+                    statement.range,
+                    statement.ty,
+                    expected,
+                )
+            {
                 report_invalid_return_type(
                     &self.context,
                     statement.range,

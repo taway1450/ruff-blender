@@ -34,6 +34,39 @@ pub(super) fn blender_module_name<'db>(
         .then(|| Box::from(name))
 }
 
+/// The top-level modules of Blender's own Python API, whose stubs declare its enums as `Literal`s.
+const BLENDER_API_MODULES: [&str; 12] = [
+    "bpy",
+    "bpy_extras",
+    "bmesh",
+    "mathutils",
+    "gpu",
+    "gpu_extras",
+    "bl_math",
+    "blf",
+    "aud",
+    "freestyle",
+    "idprop",
+    "imbuf",
+];
+
+/// Whether `file` is a module of Blender's API stubs (`bpy`, `mathutils`, `bmesh`, ...) that ty found
+/// on a search path other than a first-party root.
+pub(super) fn is_blender_stub_file<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> bool {
+    let Some(module) = file_to_module(db, file.resolver_file(db)) else {
+        return false;
+    };
+    if module
+        .search_path(db)
+        .is_none_or(|search_path| search_path.is_first_party())
+    {
+        return false;
+    }
+    let name = module.name(db).as_str();
+    let top_level = name.split('.').next().unwrap_or(name);
+    BLENDER_API_MODULES.contains(&top_level)
+}
+
 /// The types that `bpy.types` holds in its `__dict__` from the start. Every other class of the
 /// module is looked up in RNA by a module-level `__getattr__` when it is first used, and the module
 /// has no `__all__`, so `from bpy.types import *` binds only these.

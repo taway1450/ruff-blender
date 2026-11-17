@@ -149,7 +149,9 @@ mod context_manager;
 mod cyclic;
 mod dedicated;
 pub(crate) use self::dedicated::blender;
-pub use self::dedicated::blender::blender_idname_hover;
+pub use self::dedicated::blender::{
+    BLENDER_RULE_CATEGORIES, BlenderRuleCategory, blender_idname_hover, blender_rule_category,
+};
 mod diagnostic;
 mod dict;
 mod display;

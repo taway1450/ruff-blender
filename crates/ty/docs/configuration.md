@@ -37,6 +37,10 @@ Configures the enabled rules and their severity.
 The keys are either rule names or `all` to set a default severity for all rules.
 See [the rules documentation](https://ty.dev/rules) for a list of all available rules.
 
+The Blender rule categories `blender-assumptions`, `blender-implied-narrowings` and
+`blender-imprecise-annotations` set the severity of all the rules of a category: a rule's
+own name takes precedence over its category, and a category over `all`.
+
 Valid severities are:
 
 * `ignore`: Disable the rule.
@@ -50,7 +54,7 @@ If the same table specifies both a rule's current name and an alias, the current
 
 **Default value**: `{...}`
 
-**Type**: `dict[RuleName | "all", "ignore" | "warn" | "error"]`
+**Type**: `dict[RuleName | "all" | BlenderRuleCategory, "ignore" | "warn" | "error"]`
 
 **Example usage**:
 
@@ -380,6 +384,42 @@ Defaults to `false`.
     [analysis]
     # Use the top materialization when narrowing to an unspecialized generic class
     strict-generic-narrowing = true
+    ```
+
+---
+
+## `blender`
+
+### `strictness`
+
+How much the Blender rules may assume: the level of each category of the Blender rules that
+accept code the typechecker cannot prove right and only report it.
+
+- `"lenient"`: Assumptions warn; Implied narrowings and Imprecise annotations are ignored.
+- `"default"`: all three categories warn.
+- `"strict"`: all three categories are errors.
+
+The code is accepted under every preset. A level set in `[rules]` for a category
+(`blender-imprecise-annotations = "ignore"`), a rule or `all` overrides the preset.
+
+**Default value**: `"default"`
+
+**Type**: `"lenient" | "default" | "strict"`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.ty.blender]
+    strictness = "strict"
+    ```
+
+=== "ty.toml"
+
+    ```toml
+    [blender]
+    strictness = "strict"
     ```
 
 ---

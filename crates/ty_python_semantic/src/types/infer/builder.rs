@@ -11759,9 +11759,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 error.fallback_member(db)
             });
         let member = crate::types::blender::on_load(
-            db,
-            env,
-            self.program_file(),
+            &self.context,
             attribute,
             value_type,
             member_lookup.member(db),
