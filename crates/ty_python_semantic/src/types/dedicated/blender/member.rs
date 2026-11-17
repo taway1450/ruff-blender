@@ -42,8 +42,8 @@ use super::mixin_self::mixin_users;
 use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
 use super::{
-    assumptions, context_members, operator_properties, operators, pointer_aliases, poll_checks,
-    preferences,
+    assumptions, context_assumptions, context_members, operator_properties, operators,
+    pointer_aliases, poll_checks, preferences,
 };
 
 /// The property that gives instances of `class` the attribute `name` in `file`.
@@ -483,6 +483,9 @@ pub(crate) fn on_load<'db>(
         return member;
     }
     if let Some(member) = guaranteed {
+        return member;
+    }
+    if let Some(member) = context_assumptions::on_load(context, attribute, receiver, place) {
         return member;
     }
     if place.place.is_definitely_bound() {

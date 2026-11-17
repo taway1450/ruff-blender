@@ -16,6 +16,9 @@
 //! - [`context_members`]: the Guaranteed context members, non-None inside a Blender callback, and
 //!   the spaces a menu's idname prefix or a popover implies;
 //! - [`poll_checks`]: what a `poll()` checked, non-None in the callbacks it gates;
+//! - [`context_assumptions`]: the Assumptions about a context member that the code around the
+//!   read takes for granted (an Internal operator, an editor's UI callback, a preset, an object
+//!   just added);
 //! - [`pointer_aliases`]: what Blender's bookkeeping, an area's type and `temp_override` say
 //!   about a read, without a poll;
 //! - [`type_tags`]: narrowing by a Type tag, `md.type == 'SUBSURF'` makes `md` a `SubsurfModifier`;
@@ -51,6 +54,7 @@ mod callbacks;
 mod categories;
 mod class_rules;
 mod classes;
+mod context_assumptions;
 mod context_members;
 mod evaluate;
 mod follow;

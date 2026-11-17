@@ -170,10 +170,10 @@ fn assumed_member<'db>(
 }
 
 /// Whether `name` is a member that the collection importer leaves `None` in a FileHandler's import
-/// operator: `scene` and the scene's `tool_settings`. `view_layer` crashes there rather than give
-/// `None`.
+/// operator: `scene`, the scene's `tool_settings` and `collection`, which falls back to the scene's
+/// master collection. `view_layer` crashes there rather than give `None`.
 fn is_assumed_in_import(name: &str) -> bool {
-    matches!(name, "scene" | "tool_settings")
+    matches!(name, "scene" | "tool_settings" | "collection")
 }
 
 /// Whether `ty` is an instance of `bpy.types.Context`.

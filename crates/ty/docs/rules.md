@@ -348,6 +348,89 @@ Use instead:
 value = unknown  # ty: ignore[unresolved-reference]
 ```
 
+## `blender-assumed-added-object`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.103">0.0.103</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-added-object%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L361" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of `context.object` and `context.active_object` on a `bpy.types.Context` after a
+call of an operator that adds an object (`bpy.ops.object.add()` or any `bpy.ops.<category>.*_add()`,
+such as `bpy.ops.mesh.primitive_cube_add()`) earlier in the same function, or earlier in a
+module-level script.
+
+The read is typed without `None`. A read that the code only tests for truth or `None` is not
+reported.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+An operator that adds an object selects the new object and makes it the active one, so code reads
+it back from the context right after the call. Whether the call succeeded is not visible: an
+operator whose poll fails raises, or returns `{'CANCELLED'}` when it cannot add the object, and
+then the active object is whatever it was before, possibly `None`.
+
+**Examples**
+
+
+```py
+import bpy
+
+
+def add_cube(context: bpy.types.Context) -> str:
+    bpy.ops.mesh.primitive_cube_add()
+    return context.object.name  # error: [blender-assumed-added-object]
+```
+
+Check the result of the call, or the object, before using it.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import ops as ops
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/ops/__init__.pyi`:
+
+```pyi
+from . import mesh as mesh
+```
+
+`/.venv/<path-to-site-packages>/bpy/ops/mesh.pyi`:
+
+```pyi
+def primitive_cube_add() -> set[str]: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Object(bpy_struct):
+    name: str
+
+class Context(bpy_struct):
+    object: Object | None
+```
+
 ## `blender-assumed-complete-registration`
 
 <small>
@@ -509,6 +592,169 @@ class Scene(bpy_struct):
 
 class Context(bpy_struct):
     scene: Scene | None
+```
+
+## `blender-assumed-editor-member`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.103">0.0.103</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-editor-member%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L343" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of `area`, `region` and `space_data` on a `bpy.types.Context` in code Blender
+calls while it draws an editor, where the class names no editor of its own: the `poll` of a
+`Panel`, `Menu` or `AssetShelf`, a tool's `draw_settings`, and `RenderEngine.view_update` /
+`view_draw`. A `Panel` with a `bl_space_type` and a menu whose idname prefix names an editor are
+narrowed by the context member and [`blender-narrowed-by-menu-prefix`](#blender-narrowed-by-menu-prefix) rules instead.
+
+The read is typed without `None`. A read that the code only tests for truth or `None`
+(`if context.region is None:`) is not reported.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+Blender polls a panel or a menu while drawing a region of an editor, draws a tool's settings in
+the tool header or the tool settings of an editor, and calls `view_update` and `view_draw` for the
+3D viewport that shows the render, so these members are set there in ordinary use. A script,
+`wm.call_menu` or `wm.call_panel` can poll a menu or a panel with no editor, where they are `None`.
+
+**Examples**
+
+
+```py
+from bpy.types import Menu
+
+
+class MY_MT_menu(Menu):
+    bl_label = "Menu"
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'  # error: [blender-assumed-editor-member]
+```
+
+Check the member before reading through it.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Space(bpy_struct):
+    type: str
+
+class Context(bpy_struct):
+    space_data: Space | None
+
+class Menu(bpy_struct):
+    bl_label: str
+    @classmethod
+    def poll(cls, context: Context) -> bool: ...
+    def draw(self, context: Context) -> None: ...
+```
+
+## `blender-assumed-internal-operator`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.103">0.0.103</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-internal-operator%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L334" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of a member of `bpy.types.Context` (`context.object`, `context.screen`, ...) in a
+callback of an operator whose `bl_options` has `'INTERNAL'`, its own or a base class's. The
+operator's `poll` is left out, and so is a member its `poll` checked, which
+[`blender-narrowed-by-poll`](#blender-narrowed-by-poll) reports.
+
+The read is typed without `None`. A read that the code only tests for truth or `None`
+(`if context.object is None:`) is not reported.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+`'INTERNAL'` hides an operator from the operator search. In ordinary use only the button, menu
+entry or key of its own add-on calls it, from the editor and with the data it needs, so the code
+reads them without a check. Nothing stops a script or a user key map from calling it anywhere
+else, where the member can be `None`.
+
+**Examples**
+
+
+```py
+from bpy.types import Operator
+
+
+class MY_OT_show(Operator):
+    bl_idname = "my.show"
+    bl_label = "Show"
+    bl_options = {'INTERNAL'}
+
+    def execute(self, context):
+        print(context.object.name)  # error: [blender-assumed-internal-operator]
+        return {'FINISHED'}
+```
+
+Check the member, or give the operator a `poll` that checks it.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Object(bpy_struct):
+    name: str
+
+class Context(bpy_struct):
+    object: Object | None
+
+class Operator(bpy_struct):
+    bl_idname: str
+    bl_label: str
+    bl_options: set[str]
+    @classmethod
+    def poll(cls, context: Context) -> bool: ...
+    def execute(self, context: Context) -> set[str]: ...
 ```
 
 ## `blender-assumed-list-item`
@@ -683,6 +929,76 @@ class Context(bpy_struct):
 ```pyi
 def register_class(cls: type) -> None: ...
 def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-assumed-preset-context`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.103">0.0.103</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-preset-context%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L352" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the module-level reads of a member of `bpy.context` in a preset, a Python file in a folder
+named `presets` (`bpy.context.camera` in `presets/camera/1_inch.py`). `scene`, `view_layer`,
+`tool_settings` and `collection` are reported by [`blender-assumed-context-member`](#blender-assumed-context-member) instead, and a
+read in a function of the file is not checked.
+
+The read is typed without `None`. A read that the code only tests for truth or `None` is not
+reported.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+Blender runs a preset with the context of the panel or menu that applies it
+(`script.execute_preset`): a camera preset applied from the camera tab finds that camera in
+`bpy.context.camera`. Nothing in the file says which panel runs it, and a preset run from a script
+or another panel can find the member `None`.
+
+**Examples**
+
+
+`presets/camera/small_sensor.py`:
+
+```py
+import bpy
+
+bpy.context.camera.sensor_width = 13.2  # error: [blender-assumed-preset-context]
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+from .types import Context
+
+context: Context
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Camera(bpy_struct):
+    sensor_width: float
+
+class Context(bpy_struct):
+    camera: Camera | None
 ```
 
 ## `blender-assumed-registration`

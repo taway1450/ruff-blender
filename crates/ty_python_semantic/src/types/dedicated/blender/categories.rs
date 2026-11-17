@@ -40,6 +40,10 @@ impl BlenderRuleCategory {
                 "blender-assumed-registration",
                 "blender-assumed-complete-registration",
                 "blender-assumed-preferences",
+                "blender-assumed-internal-operator",
+                "blender-assumed-editor-member",
+                "blender-assumed-preset-context",
+                "blender-assumed-added-object",
             ],
             Self::ImpliedNarrowings => &[
                 "blender-narrowed-by-poll",
