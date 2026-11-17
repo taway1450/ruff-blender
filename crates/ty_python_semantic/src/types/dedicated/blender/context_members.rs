@@ -279,7 +279,7 @@ fn callback_context<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<Call
 /// (`bl_idname`, or without one its class name) is the string literal panel name of a
 /// `popover(...)` call or a `call_panel(name=...)` in one of the add-on's files (or in `file`, when
 /// it belongs to no add-on).
-fn is_popover<'db>(
+pub(super) fn is_popover<'db>(
     db: &'db dyn Db,
     file: ProgramFile<'db>,
     class: StaticClassLiteral<'db>,

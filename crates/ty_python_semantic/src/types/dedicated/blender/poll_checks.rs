@@ -21,8 +21,10 @@
 //! `return` (`X`, `X is not None`, `isinstance(X, T)`, `bool(X)`, `X.type == 'LIT'` / `in {...}`),
 //! the attribute reads always evaluated while it computes the result (a poll that raises is a poll
 //! that failed, so `ob.data.is_editmode` means `ob` and `ob.data` were set), early `return False`
-//! guards, single-assignment aliases, `super().poll(context)` / `Base.poll(context)` and helper
-//! functions taking the context, followed [`MAX_HELPER_DEPTH`] calls deep. A fact is about a
+//! guards, single-assignment aliases (also `getattr(context, "x", None)` and `(ob := context.x)`),
+//! `bool(a and b)`, a `try` whose handlers never return true, `super().poll(context)` /
+//! `Base.poll(context)`, known Blender functions ([`checked_by_call`]) and helper functions taking
+//! the context, followed [`MAX_HELPER_DEPTH`] calls deep. A fact is about a
 //! [`Path`] from the context, never about the class as a whole, so a pointer the poll did not check
 //! keeps its stub type. A Type tag test types the struct as the same test in the callback would
 //! ([`narrow_to_tag_values`]), and one on `context.area` makes `context.space_data` the editor's
@@ -30,13 +32,24 @@
 //!
 //! The read is reported at the narrowed expression, unless the callback only tests it for truth or
 //! `None` ([`FunctionPaths`]).
+//!
+//! Two more reaches use the same facts:
+//!
+//! - A sub-panel's own `poll` and the callbacks it gates also know what the polls up its
+//!   `bl_parent_id` chain checked ([`parent_poll_facts`]), since Blender polls a sub-panel only
+//!   while drawing its parent. The message names the parent.
+//! - A read inside a `poll` knows what the poll's earlier guards checked ([`poll_flow`]). That is
+//!   the poll's own control flow, so it is not reported.
+
+use std::cell::RefCell;
 
 use ruff_db::parsed::parsed_module;
 use ruff_python_ast::name::Name;
+use ruff_python_ast::visitor::source_order::{SourceOrderVisitor, walk_expr};
 use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_text_size::{Ranged, TextRange};
 use rustc_hash::FxHashMap;
-use ty_blender::gated_by_poll;
+use ty_blender::{checked_by_call, gated_by_poll};
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::scope::{NodeWithScopeRef, ScopeId};
 use ty_python_core::{ProgramFile, semantic_index};
@@ -47,9 +60,10 @@ use crate::types::infer::nearest_enclosing_class;
 use crate::types::{StaticClassLiteral, Type, UnionType};
 use crate::{Db, ProgramEnvironment};
 
-use super::classes::{mro_classes, own_binding};
-use super::context_members::{enclosing_function, space_subclass};
+use super::classes::{class_string, mro_classes, own_binding};
+use super::context_members::{enclosing_function, is_popover, space_subclass};
 use super::follow::{Resolved, is_classmethod, resolve_expression};
+use super::index::{addon_in_program, file_facts};
 use super::lints::BLENDER_NARROWED_BY_POLL;
 use super::member::without_none;
 use super::overrides::callback_root;
@@ -131,8 +145,9 @@ impl Facts {
 }
 
 /// The type of the attribute read `attribute`, where ty found `place`, when the read is in a
-/// callback that its class's `poll()` gates and the poll checked its path. Reports the read when
-/// the narrowing removed a `None` or replaced `Space`, unless the callback only tests it.
+/// callback that a `poll()` gates and that poll checked its path, or in a `poll()` after its own
+/// guards checked it. Reports the read when the gating poll's facts removed a `None` or replaced
+/// `Space`, unless the callback only tests it or the poll's own guards already narrow it.
 pub(super) fn on_load<'db>(
     context: &InferContext<'db, '_>,
     attribute: &ast::ExprAttribute,
@@ -142,16 +157,35 @@ pub(super) fn on_load<'db>(
     let env = context.program_environment();
     let file = context.program_file();
     let function = enclosing_function(db, file, attribute)?;
-    let gated = gated_facts(db, function).as_ref()?;
+    let gated = gated_facts(db, function).as_ref();
+    let flow = poll_flow(db, function)
+        .as_deref()
+        .and_then(|flow| known_before(flow, attribute.range()));
+    if gated.is_none() && flow.is_none() {
+        return None;
+    }
     let paths = function_paths(db, function);
     let path = paths.attribute_path(attribute)?;
-    let facts: Vec<&Fact> = gated
-        .facts
+    let applies = |fact: &Fact| {
+        fact.path() == path.as_slice()
+            || (path == ["space_data"]
+                && matches!(fact, Fact::Tag { path, attribute, .. } if **path == ["area"] && attribute == "type"))
+    };
+    let from_gate: Vec<&SourcedFact> = gated
+        .map(|gated| &gated.facts[..])
+        .unwrap_or_default()
         .iter()
-        .filter(|fact| {
-            fact.path() == path.as_slice()
-                || (path == ["space_data"] && matches!(fact, Fact::Tag { path, attribute, .. } if **path == ["area"] && attribute == "type"))
-        })
+        .filter(|sourced| applies(&sourced.fact))
+        .collect();
+    let from_flow: Vec<&Fact> = flow
+        .unwrap_or_default()
+        .iter()
+        .filter(|fact| applies(fact))
+        .collect();
+    let facts: Vec<&Fact> = from_gate
+        .iter()
+        .map(|sourced| &sourced.fact)
+        .chain(from_flow.iter().copied())
         .collect();
     if facts.is_empty() {
         return None;
@@ -162,17 +196,27 @@ pub(super) fn on_load<'db>(
         return None;
     }
     let removed_none = without_none(db, original) != original;
+    // The poll's own control flow is plain narrowing: only what it adds to that is reported.
+    let by_flow_alone = narrow(db, env, original, &path, &from_flow) == narrowed;
     if (removed_none || is_space(db, env, without_none(db, original)))
+        && !by_flow_alone
+        && let Some(gated) = gated
+        && let Some(source) = from_gate.first()
         && !paths.skips(attribute.range(), &path)
         && let Some(builder) = context.report_lint(&BLENDER_NARROWED_BY_POLL, attribute)
     {
         builder.into_diagnostic(format_args!(
-            "`{}` is taken as `{}` because `{}.poll()` checked it; Blender calls `{}` only after its \
-             poll returned true, with the same context",
+            "`{}` is taken as `{}` because `{}.poll()` checked it; Blender calls `{}` only after \
+             {} returned true, with the same context",
             display_path(&path),
             narrowed.display(db, env),
-            gated.poll_class,
+            source.poll_class,
             gated.callback,
+            if source.parent {
+                "its parent panel's poll"
+            } else {
+                "its poll"
+            },
         ));
     }
     Some(place.map_type(|_| narrowed))
@@ -234,19 +278,33 @@ fn display_path(path: &[Name]) -> String {
     text
 }
 
-/// What a gated callback knows from its class's poll.
+/// What a gated callback knows from the polls that ran before Blender called it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize)]
 struct GatedFacts {
-    facts: Box<[Fact]>,
-    /// The class whose `poll` is called, for the message.
-    poll_class: Name,
+    facts: Box<[SourcedFact]>,
     /// The callback's name, for the message.
     callback: Name,
 }
 
-/// The facts of the poll that gates the function scope `function`, when it is a callback the poll
-/// gates ([`gated_by_poll`]) in the body of a class with a poll that checks something. The
-/// callback is found by its name, as Blender looks it up.
+/// A fact with the poll that checked it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize)]
+struct SourcedFact {
+    fact: Fact,
+    /// The class whose `poll` checked it, for the message.
+    poll_class: Name,
+    /// Whether that poll is a parent panel's, up the `bl_parent_id` chain.
+    parent: bool,
+}
+
+/// The facts of the polls that gate the function scope `function`, when it is a method in the body
+/// of a Blender class: the class's own poll for a callback it gates ([`gated_by_poll`]), and for a
+/// Panel's gated callbacks and its own `poll` also the polls of the panels up its `bl_parent_id`
+/// chain ([`parent_poll_facts`]). The callback is found by its name, as Blender looks it up.
+///
+/// Blender polls a sub-panel only while it draws the parent panel, and it draws the parent only
+/// after the parent's poll returned true (`ed_panel_draw` in `area.cc`). A sub-panel that its
+/// add-on also opens as a popover ([`is_popover`]) is drawn without its parent, so it gets no
+/// parent facts.
 #[salsa::tracked(
     returns(ref),
     cycle_initial=|_, _, _| None,
@@ -263,18 +321,79 @@ fn gated_facts<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<GatedFact
     let name = node.node(&module).name.id.clone();
     let class = nearest_enclosing_class(db, index, function)?;
     let root = callback_root(db, class)?;
-    if !gated_by_poll(root, &name) {
+    let gated = gated_by_poll(root, &name);
+    let is_panel = root == "Panel";
+    if !gated && !(is_panel && name == "poll") {
         return None;
     }
-    let (facts, poll_class) = poll_facts(db, class).as_ref()?;
+    let mut facts: Vec<SourcedFact> = Vec::new();
+    if gated && let Some((own, poll_class)) = poll_facts(db, class).as_ref() {
+        facts.extend(own.iter().map(|fact| SourcedFact {
+            fact: fact.clone(),
+            poll_class: poll_class.clone(),
+            parent: false,
+        }));
+    }
+    if is_panel && !is_popover(db, file, class) {
+        for sourced in parent_poll_facts(db, class).as_deref().unwrap_or_default() {
+            if !facts.iter().any(|known| known.fact == sourced.fact) {
+                facts.push(sourced.clone());
+            }
+        }
+    }
     if facts.is_empty() {
         return None;
     }
     Some(GatedFacts {
-        facts: facts.clone(),
-        poll_class: poll_class.clone(),
+        facts: facts.into_boxed_slice(),
         callback: name,
     })
+}
+
+/// What the polls of the panels up the `bl_parent_id` chain of the panel `class` check, each fact
+/// with the panel whose poll checked it. The parent is the panel whose idname (its `bl_idname`, or
+/// else its class name) is the `bl_parent_id`, looked up among the classes of the same file, then
+/// of the same add-on. A parent that is one of Blender's own panels is not found, and gives
+/// nothing.
+#[salsa::tracked(
+    returns(ref),
+    cycle_initial=|_, _, _| None,
+    heap_size=ruff_memory_usage::heap_size
+)]
+fn parent_poll_facts<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+) -> Option<Box<[SourcedFact]>> {
+    let parent_id = class_string(db, class, "bl_parent_id")?;
+    let file = class.body_scope(db).program_file(db);
+    let find = |file: ProgramFile<'db>| {
+        file_facts(db, file)
+            .classes
+            .iter()
+            .map(|candidate| candidate.class)
+            .find(|candidate| {
+                *candidate != class
+                    && class_string(db, *candidate, "bl_idname")
+                        .unwrap_or_else(|| candidate.name(db).to_string())
+                        == parent_id
+            })
+    };
+    let parent = find(file)
+        .or_else(|| addon_in_program(db, file).and_then(|addon| addon.files(db).find_map(find)))?;
+    let mut facts: Vec<SourcedFact> = Vec::new();
+    if let Some((own, poll_class)) = poll_facts(db, parent).as_ref() {
+        facts.extend(own.iter().map(|fact| SourcedFact {
+            fact: fact.clone(),
+            poll_class: poll_class.clone(),
+            parent: true,
+        }));
+    }
+    for sourced in parent_poll_facts(db, parent).as_deref().unwrap_or_default() {
+        if !facts.iter().any(|known| known.fact == sourced.fact) {
+            facts.push(sourced.clone());
+        }
+    }
+    Some(facts.into_boxed_slice())
 }
 
 /// What the `poll` Blender calls for `class` checks, with the name of the class that defines it:
@@ -340,6 +459,77 @@ enum Owner<'db> {
     Function,
 }
 
+/// What a `poll()` knows before each of its statements and test operands, from its own earlier
+/// guards: `if not helper(context): return False` makes what `helper` checks known after it, and
+/// `helper(context) and context.object.mode` reads `context.object` knowing it. Each entry is the
+/// range of a statement or an expression, with the facts known when it is evaluated.
+type PollFlow = Box<[(TextRange, Box<[Fact]>)]>;
+
+/// The facts known in the function scope `function` when it is the `poll` of a Blender class,
+/// by its own control flow ([`PollFlow`]). A read uses the entry of the smallest range around it
+/// ([`known_before`]).
+#[salsa::tracked(
+    returns(ref),
+    cycle_initial=|_, _, _| None,
+    heap_size=ruff_memory_usage::heap_size
+)]
+fn poll_flow<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<PollFlow> {
+    let file = function.program_file(db);
+    let index = semantic_index(db, file);
+    let in_class_body = index
+        .parent_scope_id(function.file_scope_id(db))
+        .is_some_and(|parent| index.scope(parent).node().as_class().is_some());
+    let node = function.node(db).as_function().filter(|_| in_class_body)?;
+    let module = parsed_module(db, file.python_file(db)).load(db);
+    let node = node.node(&module);
+    if node.name.id != "poll" {
+        return None;
+    }
+    let class = nearest_enclosing_class(db, index, function)?;
+    callback_root(db, class)?;
+    let parameters = &node.parameters;
+    let positional: Vec<&Name> = parameters
+        .posonlyargs
+        .iter()
+        .chain(&parameters.args)
+        .map(|parameter| &parameter.parameter.name.id)
+        .collect();
+    let context = *positional.get(1)?;
+    let aliases = aliases(Some(parameters), &node.body, context);
+    let reader = PollReader {
+        db,
+        scope: function,
+        context,
+        first: positional.first().copied(),
+        aliases: &aliases,
+        owner: Owner::Class {
+            class,
+            defining: class,
+        },
+        depth: 0,
+        recording: Some(RefCell::new(Vec::new())),
+    };
+    reader.block(&node.body, Facts::default());
+    let flow: PollFlow = reader
+        .recording
+        .map(RefCell::into_inner)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(_, facts)| !facts.0.is_empty())
+        .map(|(range, facts)| (range, facts.0.into_boxed_slice()))
+        .collect();
+    (!flow.is_empty()).then_some(flow)
+}
+
+/// The facts known when the expression at `range` in a poll is evaluated: those of the smallest
+/// recorded statement or operand around it.
+fn known_before(flow: &[(TextRange, Box<[Fact]>)], range: TextRange) -> Option<&[Fact]> {
+    flow.iter()
+        .filter(|(recorded, _)| recorded.contains_range(range))
+        .min_by_key(|(recorded, _)| recorded.len())
+        .map(|(_, facts)| &facts[..])
+}
+
 /// The facts that hold whenever the function `definition` returns a true value, its context being
 /// the parameter at `position` (or the one named `keyword`). `None` when it never returns one.
 fn function_facts<'db>(
@@ -382,6 +572,7 @@ fn function_facts<'db>(
         aliases: &aliases,
         owner,
         depth,
+        recording: None,
     };
     let flow = reader.block(&function.body, Facts::default());
     let mut returns = flow.returns.into_iter();
@@ -407,9 +598,49 @@ struct PollReader<'db, 'a> {
     aliases: &'a FxHashMap<Name, Alias>,
     owner: Owner<'db>,
     depth: usize,
+    /// When set, the facts known before each statement and test operand of the body, for the
+    /// reads of a poll itself ([`poll_flow`]).
+    recording: Option<RefCell<Vec<(TextRange, Facts)>>>,
 }
 
 impl<'db> PollReader<'db, '_> {
+    /// Records the facts known before `expression` and, through `and`, `or` and `not`, before
+    /// each of its operands.
+    fn record(&self, expression: &Expr, facts: &Facts) {
+        let Some(recording) = &self.recording else {
+            return;
+        };
+        recording
+            .borrow_mut()
+            .push((expression.range(), facts.clone()));
+        match expression {
+            Expr::BoolOp(ast::ExprBoolOp { op, values, .. }) => {
+                let mut known = facts.clone();
+                for value in values {
+                    self.record(value, &known);
+                    match op {
+                        ast::BoolOp::And => known.extend(self.truthy(value)),
+                        ast::BoolOp::Or => known.extend(self.falsy(value)),
+                    }
+                }
+            }
+            Expr::UnaryOp(ast::ExprUnaryOp {
+                op: ast::UnaryOp::Not,
+                operand,
+                ..
+            }) => self.record(operand, facts),
+            _ => {}
+        }
+    }
+
+    fn record_statement(&self, statement: &Stmt, facts: &Facts) {
+        if let Some(recording) = &self.recording {
+            recording
+                .borrow_mut()
+                .push((statement.range(), facts.clone()));
+        }
+    }
+
     fn path(&self, expression: &Expr) -> Option<Vec<Name>> {
         path_of(expression, self.context, self.aliases)
     }
@@ -418,8 +649,12 @@ impl<'db> PollReader<'db, '_> {
         let mut facts = facts;
         let mut returns = Vec::new();
         for statement in body {
+            self.record_statement(statement, &facts);
             match statement {
                 Stmt::Return(ast::StmtReturn { value, .. }) => {
+                    if let Some(value) = value.as_deref() {
+                        self.record(value, &facts);
+                    }
                     if let Some(value) = value.as_deref()
                         && !is_false(value)
                     {
@@ -437,6 +672,7 @@ impl<'db> PollReader<'db, '_> {
                     };
                 }
                 Stmt::If(if_statement) => {
+                    self.record(&if_statement.test, &facts);
                     let mut ends: Vec<Facts> = Vec::new();
                     let mut negated = facts.clone();
                     let body = self.block(
@@ -450,6 +686,7 @@ impl<'db> PollReader<'db, '_> {
                     for clause in &if_statement.elif_else_clauses {
                         let arm = match &clause.test {
                             Some(test) => {
+                                self.record(test, &negated);
                                 let arm = self.block(&clause.body, negated.with(self.truthy(test)));
                                 negated.extend(self.falsy(test));
                                 arm
@@ -474,14 +711,38 @@ impl<'db> PollReader<'db, '_> {
                     };
                     facts = ends.fold(first, |facts, other| facts.intersect(&other));
                 }
-                Stmt::Expr(ast::StmtExpr { value, .. }) => facts.extend(self.reads(value)),
-                Stmt::Assign(ast::StmtAssign { value, .. })
-                | Stmt::AugAssign(ast::StmtAugAssign { value, .. }) => {
+                Stmt::Expr(ast::StmtExpr { value, .. })
+                | Stmt::Assign(ast::StmtAssign { value, .. })
+                | Stmt::AugAssign(ast::StmtAugAssign { value, .. })
+                | Stmt::AnnAssign(ast::StmtAnnAssign {
+                    value: Some(value), ..
+                }) => {
+                    self.record(value, &facts);
                     facts.extend(self.reads(value));
                 }
-                Stmt::AnnAssign(ast::StmtAnnAssign {
-                    value: Some(value), ..
-                }) => facts.extend(self.reads(value)),
+                // `try: return context.object.data.is_editmode` with `except AttributeError:
+                // return False`: a true value can only come from the body, after its reads.
+                Stmt::Try(try_statement) if follows_try(try_statement) => {
+                    let body = self.block(&try_statement.body, facts.clone());
+                    returns.extend(body.returns);
+                    // After an exception, only what was known before the `try` holds.
+                    let mut ends: Vec<Facts> = Vec::new();
+                    if body.fallthrough.is_some() {
+                        ends.push(facts.clone());
+                    }
+                    for handler in &try_statement.handlers {
+                        let ast::ExceptHandler::ExceptHandler(handler) = handler;
+                        ends.extend(self.block(&handler.body, facts.clone()).fallthrough);
+                    }
+                    let mut ends = ends.into_iter();
+                    let Some(first) = ends.next() else {
+                        return Flow {
+                            fallthrough: None,
+                            returns,
+                        };
+                    };
+                    facts = ends.fold(first, |facts, other| facts.intersect(&other));
+                }
                 Stmt::FunctionDef(_)
                 | Stmt::ClassDef(_)
                 | Stmt::Pass(_)
@@ -550,15 +811,23 @@ impl<'db> PollReader<'db, '_> {
                     }
                 }
             }
+            Expr::Call(call) if let Some(value) = bool_argument(call) => {
+                facts.extend(self.truthy(value));
+            }
             Expr::Call(call) => {
                 facts.extend(self.reads(test));
-                if let Some(checked) = checked_argument(call) {
+                if self.path(test).is_some() {
+                    // `getattr(context, "object", None)`
+                    facts.not_none(self.path(test));
+                } else if let Some(checked) = checked_argument(call) {
                     facts.not_none(self.path(checked));
+                } else if let Some(checked) = self.known_call(call) {
+                    facts.not_none(Some(checked));
                 } else if let Some(helper) = self.call_facts(call) {
                     facts.extend(helper);
                 }
             }
-            Expr::Name(_) | Expr::Attribute(_) => {
+            Expr::Name(_) | Expr::Attribute(_) | Expr::Named(_) => {
                 facts.extend(self.reads(test));
                 facts.not_none(self.path(test));
             }
@@ -585,6 +854,9 @@ impl<'db> PollReader<'db, '_> {
                 operand,
                 ..
             }) => facts.extend(self.truthy(operand)),
+            Expr::Call(call) if let Some(value) = bool_argument(call) => {
+                facts.extend(self.falsy(value));
+            }
             Expr::Compare(compare) => {
                 facts.extend(self.reads(test));
                 if let Some((operand, op, other)) = single_comparison(compare) {
@@ -675,9 +947,34 @@ impl<'db> PollReader<'db, '_> {
                     self.collect_reads(element, facts);
                 }
             }
-            Expr::Starred(ast::ExprStarred { value, .. }) => self.collect_reads(value, facts),
+            Expr::Starred(ast::ExprStarred { value, .. })
+            | Expr::Named(ast::ExprNamed { value, .. }) => self.collect_reads(value, facts),
             _ => {}
         }
+    }
+
+    /// The path a call of a known Blender function on the context checks when it returns true
+    /// ([`checked_by_call`]): `XrSessionState.is_running(context)`.
+    fn known_call(&self, call: &ast::ExprCall) -> Option<Vec<Name>> {
+        let Expr::Attribute(ast::ExprAttribute { value, attr, .. }) = &*call.func else {
+            return None;
+        };
+        let [argument] = &*call.arguments.args else {
+            return None;
+        };
+        if !call.arguments.keywords.is_empty()
+            || !self.path(argument).is_some_and(|path| path.is_empty())
+        {
+            return None;
+        }
+        let Some(Resolved::Value(Type::ClassLiteral(class))) =
+            resolve_expression(self.db, self.scope, value)
+        else {
+            return None;
+        };
+        let class = bpy_types_class_name(self.db, class.as_static()?)?;
+        let path = checked_by_call(class, attr.id.as_str())?;
+        Some(path.iter().map(|name| Name::new(name)).collect())
     }
 
     /// The facts of a helper `call` that is passed the context: a function (`helper(context)`,
@@ -789,6 +1086,18 @@ fn has_decorator(db: &dyn Db, definition: Definition<'_>, name: &str) -> bool {
         })
 }
 
+/// Whether the poll reader follows the `try` statement: one with handlers that never return a true
+/// value, and no `else` or `finally`.
+fn follows_try(statement: &ast::StmtTry) -> bool {
+    statement.orelse.is_empty()
+        && statement.finalbody.is_empty()
+        && !statement.handlers.is_empty()
+        && statement.handlers.iter().all(|handler| {
+            let ast::ExceptHandler::ExceptHandler(handler) = handler;
+            !may_return_true(&handler.body)
+        })
+}
+
 /// Whether `expression` is a literal false value: `False`, `None` or `0`.
 fn is_false(expression: &Expr) -> bool {
     match expression {
@@ -870,6 +1179,39 @@ fn checked_argument(call: &ast::ExprCall) -> Option<&Expr> {
     }
 }
 
+/// The argument of `bool(X)`, which is true exactly when `X` is: `bool(a and b)` checks `a` and
+/// `b`.
+fn bool_argument(call: &ast::ExprCall) -> Option<&Expr> {
+    match (&*call.func, &*call.arguments.args) {
+        (Expr::Name(function), [value])
+            if function.id == "bool" && call.arguments.keywords.is_empty() =>
+        {
+            Some(value)
+        }
+        _ => None,
+    }
+}
+
+/// The owner and the member name of `getattr(owner, "name")` or `getattr(owner, "name", None)`,
+/// which reads the same as `owner.name` but gives `None` where that would raise.
+fn getattr_member(call: &ast::ExprCall) -> Option<(&Expr, Name)> {
+    if !call
+        .func
+        .as_name_expr()
+        .is_some_and(|function| function.id == "getattr")
+        || !call.arguments.keywords.is_empty()
+    {
+        return None;
+    }
+    match &*call.arguments.args {
+        [owner, Expr::StringLiteral(name)] => Some((owner, Name::new(name.value.to_str()))),
+        [owner, Expr::StringLiteral(name), default] if default.is_none_literal_expr() => {
+            Some((owner, Name::new(name.value.to_str())))
+        }
+        _ => None,
+    }
+}
+
 /// The values of a string literal, or of a tuple, list or set display of them.
 fn string_literals(expression: &Expr) -> Option<Vec<Name>> {
     match expression {
@@ -911,6 +1253,14 @@ fn path_of(
             }
             let mut path = path_of(value, context, aliases)?;
             path.push(attr.id.clone());
+            Some(path)
+        }
+        // `(ob := context.object)` is `context.object`.
+        Expr::Named(ast::ExprNamed { value, .. }) => path_of(value, context, aliases),
+        Expr::Call(call) => {
+            let (owner, name) = getattr_member(call)?;
+            let mut path = path_of(owner, context, aliases)?;
+            path.push(name);
             Some(path)
         }
         _ => None,
@@ -971,7 +1321,36 @@ fn alias_path(
             path.push(attr.id.clone());
             Some(path)
         }
+        Expr::Named(ast::ExprNamed { value, .. }) => alias_path(value, context, values, depth),
+        Expr::Call(call) => {
+            let (owner, name) = getattr_member(call)?;
+            let mut path = alias_path(owner, context, values, depth)?;
+            path.push(name);
+            Some(path)
+        }
         _ => None,
+    }
+}
+
+/// The walrus targets in an expression, with their values.
+struct NamedTargets<'a>(Vec<(&'a Name, &'a Expr)>);
+
+impl<'a> SourceOrderVisitor<'a> for NamedTargets<'a> {
+    fn visit_expr(&mut self, expression: &'a Expr) {
+        match expression {
+            Expr::Named(ast::ExprNamed { target, value, .. }) => {
+                if let Expr::Name(name) = &**target {
+                    self.0.push((&name.id, value));
+                }
+                self.visit_expr(value);
+            }
+            Expr::Lambda(_)
+            | Expr::ListComp(_)
+            | Expr::SetComp(_)
+            | Expr::DictComp(_)
+            | Expr::Generator(_) => {}
+            _ => walk_expr(self, expression),
+        }
     }
 }
 
@@ -1000,8 +1379,44 @@ impl<'a> Bindings<'a> {
         }
     }
 
+    /// Binds the targets of the walrus expressions in `expression`, outside lambdas and
+    /// comprehensions: `(ob := context.object)` assigns `ob`.
+    fn named(&mut self, expression: &'a Expr) {
+        let mut visitor = NamedTargets(Vec::new());
+        visitor.visit_expr(expression);
+        for (name, value) in visitor.0 {
+            self.assigned.entry(name.clone()).or_default().push(value);
+        }
+    }
+
     fn block(&mut self, body: &'a [Stmt]) {
         for statement in body {
+            match statement {
+                Stmt::Return(ast::StmtReturn {
+                    value: Some(value), ..
+                })
+                | Stmt::Expr(ast::StmtExpr { value, .. })
+                | Stmt::Assign(ast::StmtAssign { value, .. })
+                | Stmt::AugAssign(ast::StmtAugAssign { value, .. })
+                | Stmt::AnnAssign(ast::StmtAnnAssign {
+                    value: Some(value), ..
+                }) => self.named(value),
+                Stmt::If(ast::StmtIf {
+                    test,
+                    elif_else_clauses,
+                    ..
+                }) => {
+                    self.named(test);
+                    for clause in elif_else_clauses {
+                        if let Some(test) = &clause.test {
+                            self.named(test);
+                        }
+                    }
+                }
+                Stmt::While(ast::StmtWhile { test, .. })
+                | Stmt::Assert(ast::StmtAssert { test, .. }) => self.named(test),
+                _ => {}
+            }
             match statement {
                 Stmt::Assign(ast::StmtAssign { targets, value, .. }) => {
                     for target in targets {
