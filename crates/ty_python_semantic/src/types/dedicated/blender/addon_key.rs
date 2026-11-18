@@ -5,7 +5,8 @@
 //! `bl_ext.<repository>.<id>` for an extension. An extension's `__package__` is only `str` to ty
 //! (the repository is the user's), so a key is decided by where its value comes from rather than by
 //! its type: `__package__` of the root module and `__name__.rpartition(".")[0]` of a direct
-//! submodule both name the root package, whatever the repository.
+//! submodule both name the root package, whatever the repository. The first component of a module
+//! name (`__name__.split(".")[0]`) is a legacy add-on's name, but `bl_ext` for an extension.
 //!
 //! Names are followed through their definitions, never by inferring add-on code, so the evaluator
 //! is safe to call from attribute inference and from the Add-on index. The key of each definition is
@@ -67,25 +68,48 @@ pub(super) fn expression_key<'db>(
             }
             _ => AddonKey::Unknown,
         },
-        // `e.rpartition(".")[0]`: the package of the module `e` names.
-        Expr::Subscript(subscript) => {
-            let Some(partitioned) = rpartition_base(subscript) else {
-                return AddonKey::Unknown;
-            };
-            match expression_key(db, scope, partitioned) {
+        Expr::Subscript(subscript) => match dot_split_base(subscript) {
+            // `e.rpartition(".")[0]`: the package of the module `e` names.
+            Some((DotSplit::Last, base)) => match expression_key(db, scope, base) {
                 AddonKey::Module { addon, mut path } if !path.is_empty() => {
                     path.pop();
                     AddonKey::Module { addon, path }
                 }
                 _ => AddonKey::Unknown,
-            }
-        }
+            },
+            // `e.split(".")[0]`, `e.partition(".")[0]`: the first component of the name `e` gives.
+            Some((DotSplit::First, base)) => match expression_key(db, scope, base) {
+                AddonKey::Module { addon, .. } if addon.kind == AddonKind::Extension => {
+                    AddonKey::Literal(EXTENSION_PACKAGE.to_string())
+                }
+                AddonKey::Module { addon, .. } => AddonKey::Module {
+                    addon,
+                    path: Vec::new(),
+                },
+                AddonKey::Literal(literal) => AddonKey::Literal(
+                    literal.split('.').next().unwrap_or_default().to_string(),
+                ),
+                AddonKey::Unknown => AddonKey::Unknown,
+            },
+            None => AddonKey::Unknown,
+        },
         _ => AddonKey::Unknown,
     }
 }
 
-/// `e` of `e.rpartition(".")[0]`.
-fn rpartition_base(subscript: &ast::ExprSubscript) -> Option<&Expr> {
+/// The package Blender imports every extension under (`bl_ext.<repository>.<id>`).
+const EXTENSION_PACKAGE: &str = "bl_ext";
+
+/// Which component of a dotted name a `[0]` of a split on `"."` takes.
+enum DotSplit {
+    /// `rpartition(".")[0]`: everything before the last component.
+    Last,
+    /// `split(".")[0]`, `partition(".")[0]`: the first component.
+    First,
+}
+
+/// `e` of `e.rpartition(".")[0]`, `e.split(".")[0]` or `e.partition(".")[0]`, and which of them.
+fn dot_split_base(subscript: &ast::ExprSubscript) -> Option<(DotSplit, &Expr)> {
     let Expr::NumberLiteral(ast::ExprNumberLiteral {
         value: ast::Number::Int(index),
         ..
@@ -105,10 +129,15 @@ fn rpartition_base(subscript: &ast::ExprSubscript) -> Option<&Expr> {
     let [Expr::StringLiteral(separator)] = &*call.arguments.args else {
         return None;
     };
-    (method.attr.as_str() == "rpartition"
-        && call.arguments.keywords.is_empty()
-        && separator.value.to_str() == ".")
-        .then_some(&*method.value)
+    if !call.arguments.keywords.is_empty() || separator.value.to_str() != "." {
+        return None;
+    }
+    let split = match method.attr.as_str() {
+        "rpartition" => DotSplit::Last,
+        "split" | "partition" => DotSplit::First,
+        _ => return None,
+    };
+    Some((split, &*method.value))
 }
 
 /// The key the name `name` gives in `scope`: its bindings in the nearest enclosing scope that has
