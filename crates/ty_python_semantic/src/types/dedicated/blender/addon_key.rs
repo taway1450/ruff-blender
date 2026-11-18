@@ -69,14 +69,35 @@ pub(super) fn expression_key<'db>(
             _ => AddonKey::Unknown,
         },
         Expr::Subscript(subscript) => match dot_split_base(subscript) {
-            // `e.rpartition(".")[0]`: the package of the module `e` names.
-            Some((DotSplit::Last, base)) => match expression_key(db, scope, base) {
-                AddonKey::Module { addon, mut path } if !path.is_empty() => {
-                    path.pop();
+            // `e.rpartition(".")[0]`, `e.rsplit(".", 1)[0]`: the package of the module `e` names.
+            Some((split @ (DotSplit::Last | DotSplit::LastOrWhole), base)) => {
+                match expression_key(db, scope, base) {
+                    AddonKey::Module { addon, mut path } if !path.is_empty() => {
+                        path.pop();
+                        AddonKey::Module { addon, path }
+                    }
+                    // A legacy add-on's root module name has no dot, so `rsplit` keeps it whole:
+                    // `__name__.rsplit(".", 1)[0]` in the root module is the add-on's name. An
+                    // extension's root (`bl_ext.<repository>.<id>`) gives its repository package.
                     AddonKey::Module { addon, path }
+                        if matches!(split, DotSplit::LastOrWhole)
+                            && addon.kind != AddonKind::Extension =>
+                    {
+                        AddonKey::Module { addon, path }
+                    }
+                    // `"a.b".rpartition(".")[0]` is `"a"`. A name without a dot gives `""`, or
+                    // the whole name for `rsplit`.
+                    AddonKey::Literal(literal) => AddonKey::Literal(
+                        match (literal.rsplit_once('.'), split) {
+                            (Some((head, _)), _) => head,
+                            (None, DotSplit::LastOrWhole) => &literal,
+                            (None, _) => "",
+                        }
+                        .to_string(),
+                    ),
+                    _ => AddonKey::Unknown,
                 }
-                _ => AddonKey::Unknown,
-            },
+            }
             // `e.split(".")[0]`, `e.partition(".")[0]`: the first component of the name `e` gives.
             Some((DotSplit::First, base)) => match expression_key(db, scope, base) {
                 AddonKey::Module { addon, .. } if addon.kind == AddonKind::Extension => {
@@ -102,13 +123,17 @@ const EXTENSION_PACKAGE: &str = "bl_ext";
 
 /// Which component of a dotted name a `[0]` of a split on `"."` takes.
 enum DotSplit {
-    /// `rpartition(".")[0]`: everything before the last component.
+    /// `rpartition(".")[0]`: everything before the last component, `""` without a dot.
     Last,
-    /// `split(".")[0]`, `partition(".")[0]`: the first component.
+    /// `rsplit(".", 1)[0]`: everything before the last component, the whole name without a dot.
+    LastOrWhole,
+    /// `split(".")[0]`, `partition(".")[0]`, `rsplit(".")[0]`: the first component.
     First,
 }
 
-/// `e` of `e.rpartition(".")[0]`, `e.split(".")[0]` or `e.partition(".")[0]`, and which of them.
+/// `e` of a `[0]` of `e` split on `"."`, and which part it takes: `e.rpartition(".")[0]`,
+/// `e.partition(".")[0]`, or `e.split(".")[0]` or `e.rsplit(".")[0]` with any `maxsplit` that
+/// gives a single part (`e.split(sep=".", maxsplit=1)[0]`). A `maxsplit` of 0 keeps the whole name.
 fn dot_split_base(subscript: &ast::ExprSubscript) -> Option<(DotSplit, &Expr)> {
     let Expr::NumberLiteral(ast::ExprNumberLiteral {
         value: ast::Number::Int(index),
@@ -126,18 +151,67 @@ fn dot_split_base(subscript: &ast::ExprSubscript) -> Option<(DotSplit, &Expr)> {
     let Expr::Attribute(method) = &*call.func else {
         return None;
     };
-    let [Expr::StringLiteral(separator)] = &*call.arguments.args else {
-        return None;
-    };
-    if !call.arguments.keywords.is_empty() || separator.value.to_str() != "." {
+    let method_name = method.attr.as_str();
+    let is_split = matches!(method_name, "split" | "rsplit");
+    if !is_split && !matches!(method_name, "partition" | "rpartition") {
         return None;
     }
-    let split = match method.attr.as_str() {
-        "rpartition" => DotSplit::Last,
-        "split" | "partition" => DotSplit::First,
+    // `partition` takes its separator positionally, `split` also as `sep` and `maxsplit`.
+    let arguments = &call.arguments;
+    let positional = |index: usize| arguments.args.get(index);
+    let keyword = |name: &str| {
+        arguments
+            .keywords
+            .iter()
+            .find(|keyword| keyword.arg.as_ref().is_some_and(|arg| arg.as_str() == name))
+            .map(|keyword| &keyword.value)
+    };
+    let max_arguments = if is_split { 2 } else { 1 };
+    if arguments.args.len() > max_arguments
+        || arguments.args.iter().any(Expr::is_starred_expr)
+        || (!is_split && !arguments.keywords.is_empty())
+        || arguments.keywords.iter().any(|keyword| {
+            !keyword
+                .arg
+                .as_ref()
+                .is_some_and(|arg| matches!(arg.as_str(), "sep" | "maxsplit"))
+        })
+    {
+        return None;
+    }
+    let Some(Expr::StringLiteral(separator)) = positional(0).or_else(|| keyword("sep")) else {
+        return None;
+    };
+    if separator.value.to_str() != "." {
+        return None;
+    }
+    let max_split = match positional(1).or_else(|| keyword("maxsplit")) {
+        None => -1,
+        Some(expression) => int_literal(expression)?,
+    };
+    let split = match (method_name, max_split) {
+        ("rpartition", _) => DotSplit::Last,
+        ("rsplit", 1) => DotSplit::LastOrWhole,
+        ("partition", _) | ("split", ..=-1 | 1..) | ("rsplit", ..=-1) => DotSplit::First,
         _ => return None,
     };
     Some((split, &*method.value))
+}
+
+/// The value of an integer literal, negated or not (`1`, `-1`).
+fn int_literal(expression: &Expr) -> Option<i64> {
+    match expression {
+        Expr::NumberLiteral(ast::ExprNumberLiteral {
+            value: ast::Number::Int(value),
+            ..
+        }) => value.as_i64(),
+        Expr::UnaryOp(ast::ExprUnaryOp {
+            op: ast::UnaryOp::USub,
+            operand,
+            ..
+        }) => int_literal(operand).map(|value| -value),
+        _ => None,
+    }
 }
 
 /// The key the name `name` gives in `scope`: its bindings in the nearest enclosing scope that has
