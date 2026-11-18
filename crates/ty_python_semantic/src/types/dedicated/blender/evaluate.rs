@@ -51,7 +51,7 @@ use super::addon::is_first_party;
 use super::addon_of_file;
 use super::follow::{Resolved, resolve_expression};
 use super::properties::{
-    CallSite, DeclarationTemplate, Open, OptionReader, ParameterRef, PropertyDeclaration,
+    CallSite, DeclarationTemplate, Known, Open, OptionReader, ParameterRef, PropertyDeclaration,
     may_be_property_call,
 };
 use super::symbols::{bpy_types_bases, is_property_deferred};
@@ -67,6 +67,25 @@ pub(super) enum PropertyValue<'db> {
 }
 
 impl<'db> PropertyValue<'db> {
+    /// The property with each pointer's or collection's `type=` passed through `target`.
+    pub(super) fn map_targets(&self, target: impl Fn(Type<'db>) -> Type<'db>) -> Self {
+        match self {
+            PropertyValue::Declarations(declarations) => PropertyValue::Declarations(
+                declarations
+                    .iter()
+                    .map(|declaration| {
+                        let mut declaration = declaration.clone();
+                        if let Known::Value(ty) = declaration.target {
+                            declaration.target = Known::Value(target(ty));
+                        }
+                        declaration
+                    })
+                    .collect(),
+            ),
+            PropertyValue::Opaque => PropertyValue::Opaque,
+        }
+    }
+
     /// The type of the attribute Blender creates: the union of the declarations' value types, or
     /// `Any`.
     pub(super) fn value_type(&self, db: &'db dyn Db, env: &ProgramEnvironment<'db>) -> Type<'db> {

@@ -1,14 +1,15 @@
 //! Facts about Blender add-ons that need no types.
 //!
 //! Which add-on a file belongs to and which files an add-on has, read from `blender_manifest.toml`, a
-//! top-level `bl_info` and `[tool.blender]` in `pyproject.toml`; which classes Blender registers and which
-//! idnames it refuses, and which callbacks it calls on them; what an operator call takes and returns, and which Blender
-//! functions take an operator idname; which pointers Blender keeps in step and what a mode
-//! or a panel's `bl_context` implies; which code runs only when Blender reloads an add-on, and which
-//! never runs in one; which Type tags a test may not narrow by, and which constructors take a
-//! `bl_idname`. The
-//! type-aware glue lives in `ty_python_semantic`'s `types/dedicated/blender/`.
+//! top-level `bl_info` and `[tool.blender]` in `pyproject.toml`; which classes Blender registers and
+//! which idnames it refuses, and which callbacks it calls on them; what an operator call takes and
+//! returns, and which Blender functions take an operator idname; which pointers Blender keeps in step
+//! and what a mode or a panel's `bl_context` implies; which code runs only when Blender reloads an
+//! add-on, and which never runs in one; which test-case assertions narrow like `assert`; which Type
+//! tags a test may not narrow by, and which constructors take a `bl_idname`. The type-aware glue lives
+//! in `ty_python_semantic`'s `types/dedicated/blender/`.
 
+mod assertions;
 mod bl_context;
 mod callbacks;
 mod context;
@@ -23,6 +24,7 @@ mod script_guard;
 mod source;
 mod type_tags;
 
+pub use assertions::{UnittestAssertion, unittest_assertion};
 pub use bl_context::bl_context_facts;
 pub use callbacks::{
     CALLBACKS, Callback, CallbackKind, CallbackShape, MethodKind, PYTHON_BASE_NAMES, callback_of,
@@ -31,7 +33,7 @@ pub use callbacks::{
 pub use context::{
     ContextGuarantee, adds_object, assumes_editor, checked_by_call, context_guarantee,
     is_added_object_member, is_assumed_context_member, is_editor_member, is_preset_path,
-    is_tool_draw_settings, menu_space_type, runs_in_editor,
+    is_tool_draw_settings, menu_space_type, preset_member_struct, runs_in_editor,
 };
 pub use discovery::{Addon, AddonKind, addon_for_path};
 pub use files::{addon_source_files, folder_source_files};

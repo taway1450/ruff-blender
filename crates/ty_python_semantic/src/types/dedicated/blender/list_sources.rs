@@ -28,6 +28,9 @@
 //!
 //! It narrows the Assumption `blender-assumed-list-item` ([`super::assumptions`]): `item` is still
 //! `None` for an empty slot of an array of ID pointers, so its reads are still reported.
+//!
+//! Blender passes the call's `dataptr` as `data` to `draw_item` and `filter_items`, so `data` is
+//! typed by the same calls: the union of their typed `dataptr`s.
 
 use ruff_db::files::File;
 use ruff_db::parsed::parsed_module;
@@ -48,24 +51,66 @@ use super::member::{attribute_value_type, without_none};
 use super::type_tags::string_literals;
 
 /// The type of `item` in the `draw_item` of the list `class`, whose parent gives it `parent` (`None`
-/// excluded): the source type of the list ([`list_source_type`]) when it fits `parent`, otherwise
+/// excluded): the source type of the list ([`list_sources`]) when it fits `parent`, otherwise
 /// `parent`.
 pub(super) fn list_item_type<'db>(
     db: &'db dyn Db,
     class: StaticClassLiteral<'db>,
     parent: Type<'db>,
 ) -> Type<'db> {
+    fitting(db, class, list_sources(db, class).item, parent)
+}
+
+/// The type of `data` in the `draw_item` or `filter_items` of the list `class`, whose parent gives
+/// it `parent`: the union of the `dataptr`s the add-on shows the list with, when it fits `parent`,
+/// otherwise `parent`.
+pub(super) fn list_data_type<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+    parent: Type<'db>,
+) -> Type<'db> {
+    fitting(db, class, list_sources(db, class).data, parent)
+}
+
+/// `source` when it is known and fits `parent`, otherwise `parent`.
+fn fitting<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+    source: Option<Type<'db>>,
+    parent: Type<'db>,
+) -> Type<'db> {
     let env = ProgramEnvironment::from_file(class.program_file(db));
-    list_source_type(db, class)
+    source
         .filter(|source| source.is_assignable_to(db, &env, parent))
         .unwrap_or(parent)
 }
 
-/// The union of the element types of the collections the `template_list` calls of the add-on of
-/// the list `class` show it with. `None` when no call with a typed `dataptr` names the list or one
-/// of them gives no element type.
-#[salsa::tracked(cycle_initial=|_, _, _| None, heap_size=ruff_memory_usage::heap_size)]
-fn list_source_type<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> Option<Type<'db>> {
+/// What the `template_list` calls of the add-on of a list say about its draw callbacks' arguments.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
+struct ListSources<'db> {
+    /// The union of the element types of the collections the calls show the list with. `None`
+    /// when no call with a typed `dataptr` names the list or one of them gives no element type.
+    item: Option<Type<'db>>,
+    /// The union of the calls' typed `dataptr`s (`None` excluded). `None` when no call with a typed
+    /// `dataptr` names the list, or one of them cannot be read.
+    data: Option<Type<'db>>,
+}
+
+impl ListSources<'_> {
+    /// Nothing known: no call names the list, or a cycle is still being resolved.
+    const UNKNOWN: Self = ListSources {
+        item: None,
+        data: None,
+    };
+}
+
+/// The sources the `template_list` calls of the add-on of the list `class` show it with.
+#[salsa::tracked(
+    cycle_initial=|_, _, _| ListSources::UNKNOWN,
+    heap_size=ruff_memory_usage::heap_size
+)]
+fn list_sources<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> ListSources<'db> {
+    let unknown = ListSources::UNKNOWN;
     let file = class.program_file(db);
     let idname = class_string(db, class, "bl_idname").unwrap_or_else(|| class.name(db).to_string());
     let folder = file
@@ -83,6 +128,8 @@ fn list_source_type<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> Opt
     };
     let env = ProgramEnvironment::from_file(file);
     let mut elements = Vec::new();
+    let mut data_types = Vec::new();
+    let mut elements_known = true;
     for source in files {
         if !listed_names(db, source).contains(&Name::new(&idname)) {
             continue;
@@ -94,34 +141,49 @@ fn list_source_type<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> Opt
         };
         calls.visit_body(module.suite());
         for call in calls.calls {
-            match source_element_type(db, &env, source, call)? {
-                SourceType::Element(element) => elements.push(element),
-                SourceType::Unknown => {}
+            match call_source(db, &env, source, call) {
+                None => return unknown,
+                Some(CallSource::Unknown) => {}
+                Some(CallSource::Typed { data, element }) => {
+                    data_types.push(data);
+                    match element {
+                        Some(element) => elements.push(element),
+                        None => elements_known = false,
+                    }
+                }
             }
         }
     }
-    (!elements.is_empty()).then(|| UnionType::from_elements(db, &env, elements))
+    ListSources {
+        item: (elements_known && !elements.is_empty())
+            .then(|| UnionType::from_elements(db, &env, elements)),
+        data: (!data_types.is_empty()).then(|| UnionType::from_elements(db, &env, data_types)),
+    }
 }
 
-/// What a `template_list` call says about the items of the list it names.
-enum SourceType<'db> {
-    /// The element type of the collection it shows.
-    Element(Type<'db>),
+/// What a `template_list` call says about the list it names.
+enum CallSource<'db> {
+    /// Its `dataptr` (`None` excluded) and the element type of the collection it shows, `None`
+    /// when the collection gives none: a misspelt `propname`, a `propname` that is no string
+    /// literal, a `dataptr` whose type is too wide (`ID`).
+    Typed {
+        data: Type<'db>,
+        element: Option<Type<'db>>,
+    },
     /// Nothing: its `dataptr` has no type (an unannotated parameter, such as `context` in a mixin's
     /// `draw`), so it says nothing against the other calls.
     Unknown,
 }
 
-/// The element type of the collection the `template_list` call `call` in `file` shows: the type of
+/// What the `template_list` call `call` in `file` says: its `dataptr`, and the type of
 /// `dataptr.propname` iterated, `propname` being a string literal (or a union of them). `None` when
-/// `dataptr` has a type but the collection gives no element type: a misspelt `propname`, a
-/// `propname` that is no string literal, a `dataptr` whose type is too wide (`ID`).
-fn source_element_type<'db>(
+/// the call's arguments cannot be read.
+fn call_source<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
     file: ProgramFile<'db>,
     call: &ast::ExprCall,
-) -> Option<SourceType<'db>> {
+) -> Option<CallSource<'db>> {
     // After `*args` the positions say nothing.
     if call.arguments.args.iter().any(Expr::is_starred_expr) {
         return None;
@@ -134,23 +196,26 @@ fn source_element_type<'db>(
     let inference = infer_complete_scope_types(db, scope);
     let data = without_none(db, inference.try_expression_type(dataptr)?);
     if data.is_dynamic() {
-        return Some(SourceType::Unknown);
+        return Some(CallSource::Unknown);
     }
-    let names = string_literals(db, inference.try_expression_type(propname)?)?;
-    let elements = names
-        .iter()
-        .map(|name| {
-            let collection = attribute_value_type(db, env, file, data, name)?;
-            let element = collection
-                .try_iterate(db, env)
-                .ok()?
-                .homogeneous_element_type(db, env);
-            (!element.is_dynamic() && !element.is_never()).then_some(element)
+    let element = inference
+        .try_expression_type(propname)
+        .and_then(|names| string_literals(db, names))
+        .and_then(|names| {
+            names
+                .iter()
+                .map(|name| {
+                    let collection = attribute_value_type(db, env, file, data, name)?;
+                    let element = collection
+                        .try_iterate(db, env)
+                        .ok()?
+                        .homogeneous_element_type(db, env);
+                    (!element.is_dynamic() && !element.is_never()).then_some(element)
+                })
+                .collect::<Option<Vec<_>>>()
         })
-        .collect::<Option<Vec<_>>>()?;
-    Some(SourceType::Element(UnionType::from_elements(
-        db, env, elements,
-    )))
+        .map(|elements| UnionType::from_elements(db, env, elements));
+    Some(CallSource::Typed { data, element })
 }
 
 /// The list names `file` passes as the string literal `listtype_name` of a `template_list` call, by

@@ -17,6 +17,7 @@ ruff_memory_usage = { workspace = true }
 ruff_python_ast = { workspace = true, features = ["salsa"] }
 ruff_python_parser = { workspace = true }
 ruff_text_size = { workspace = true }
+ty_blender = { workspace = true }
 ty_module_resolver = { workspace = true }
 ty_site_packages = { workspace = true }
 ty_combine = { workspace = true }

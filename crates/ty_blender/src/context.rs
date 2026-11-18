@@ -107,6 +107,23 @@ pub fn is_preset_path(path: &str) -> bool {
         .any(|folder| folder == "presets")
 }
 
+/// The struct a preset at `path` reads the context member `member` as, when the panel that applies
+/// it shows only for that struct: the sequencer's text-style presets
+/// (`presets/sequencer/text_style/`) apply from the Style panel of a text strip, so their
+/// `context.active_strip` is a `TextStrip`.
+pub fn preset_member_struct(path: &str, member: &str) -> Option<&'static str> {
+    let folders: Vec<&str> = path.split(['/', '\\']).collect();
+    let folders = folders.split_last().map_or(&[][..], |(_, folders)| folders);
+    PRESET_MEMBER_STRUCTS
+        .iter()
+        .find(|(subdir, preset_member, _)| *preset_member == member && folders.ends_with(subdir))
+        .map(|(_, _, struct_name)| *struct_name)
+}
+
+/// Preset folders, the context member their presets read and the struct it is.
+const PRESET_MEMBER_STRUCTS: &[(&[&str], &str, &str)] =
+    &[(&["presets", "sequencer", "text_style"], "active_strip", "TextStrip")];
+
 /// Whether Blender calls the callback `name` of the root `root` in an editor of the class's
 /// `bl_space_type`: every callback of a Panel and a Header, and of a GizmoGroup but
 /// `setup_keymap`, which runs when the key map is set up, outside any editor.
@@ -190,7 +207,7 @@ mod tests {
     use super::{
         ContextGuarantee, adds_object, assumes_editor, context_guarantee, is_added_object_member,
         is_assumed_context_member, is_editor_member, is_preset_path, is_tool_draw_settings,
-        menu_space_type, runs_in_editor,
+        menu_space_type, preset_member_struct, runs_in_editor,
     };
 
     #[test]
@@ -257,6 +274,22 @@ mod tests {
         assert!(!adds_object("add_named"));
         assert!(is_added_object_member("active_object"));
         assert!(!is_added_object_member("scene"));
+    }
+
+    #[test]
+    fn preset_member_structs() {
+        let path = "scripts/presets/sequencer/text_style/Main_Title.py";
+        assert_eq!(preset_member_struct(path, "active_strip"), Some("TextStrip"));
+        assert_eq!(preset_member_struct(path, "scene"), None);
+        assert_eq!(
+            preset_member_struct("C:\\addon\\presets\\sequencer\\text_style\\a.py", "active_strip"),
+            Some("TextStrip")
+        );
+        assert_eq!(preset_member_struct("scripts/presets/camera/1_inch.py", "active_strip"), None);
+        assert_eq!(
+            preset_member_struct("scripts/presets/sequencer/text_style/old/a.py", "active_strip"),
+            None
+        );
     }
 
     #[test]

@@ -10,7 +10,8 @@
 //! - `blender-assumed-internal-operator`: any member in a callback (but `poll`) of an Internal
 //!   operator, `'INTERNAL'` in its `bl_options`;
 //! - `blender-assumed-preset-context`: any member read at module level in a preset, a file in a
-//!   `presets` folder ([`ty_blender::is_preset_path`]).
+//!   `presets` folder ([`ty_blender::is_preset_path`]). A preset whose panel shows only for one
+//!   struct reads the member as that struct ([`ty_blender::preset_member_struct`]).
 //!
 //! ```python
 //! class MY_OT_show(Operator):
@@ -33,7 +34,7 @@ use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_text_size::{Ranged, TextRange};
 use ty_blender::{
     adds_object, assumes_editor, callback_of, is_added_object_member, is_editor_member,
-    is_preset_path, is_tool_draw_settings,
+    is_preset_path, is_tool_draw_settings, preset_member_struct,
 };
 use ty_python_core::scope::ScopeId;
 use ty_python_core::{global_scope, semantic_index};
@@ -55,6 +56,7 @@ use super::member::without_none;
 use super::overrides::callback_root;
 use super::poll_checks::{is_tested_read, single_comparison};
 use super::symbols::is_bpy_types_class;
+use super::vector::module_class;
 
 /// The member `attribute` read from `receiver`, where ty found `place`, typed without `None` and
 /// reported when one of the Assumptions above takes it as set. `None` leaves the read as it is.
@@ -81,6 +83,16 @@ pub(super) fn on_load<'db>(
     let function = enclosing_function(db, file, attribute);
     let scope = function.unwrap_or_else(|| global_scope(db, file));
     let (rule, reason) = assumption(db, scope, function.is_some(), attribute)?;
+    // A preset whose panel shows only for one struct reads the member as that struct.
+    let narrowed = if std::ptr::eq(rule, &BLENDER_ASSUMED_PRESET_CONTEXT)
+        && let Some(struct_name) =
+            preset_member_struct(file.file(db).path(db).as_str(), attribute.attr.id.as_str())
+        && let Some(class) = module_class(db, env, "bpy.types", struct_name)
+    {
+        Type::instance(db, env, class.default_specialization(db))
+    } else {
+        narrowed
+    };
     if !is_tested_read(db, scope, attribute)
         && !is_guarded_by_operand(db, scope, attribute)
         && let Some(builder) = context.report_lint(rule, attribute)

@@ -79,6 +79,17 @@ impl Callback {
         (self.root == "UIList" && self.name == "draw_item").then_some(4)
     }
 
+    /// The position of the parameter (`self` / `cls` being 0) Blender passes a `UIList`'s `dataptr`
+    /// to, the struct whose collection the list shows: `data` of `draw_item` and of
+    /// `filter_items`. `None` for every other callback.
+    pub fn list_data_position(&self) -> Option<usize> {
+        match (self.root, self.name) {
+            ("UIList", "draw_item") => Some(3),
+            ("UIList", "filter_items") => Some(2),
+            _ => None,
+        }
+    }
+
     /// Why Blender refuses `shape` for this callback, or `None` when it accepts it.
     pub fn problem(&self, shape: CallbackShape) -> Option<String> {
         let mistake = self.mistake(shape)?;
