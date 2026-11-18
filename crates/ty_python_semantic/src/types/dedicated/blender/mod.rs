@@ -48,7 +48,8 @@
 //! - [`assumptions`]: the Assumptions, facts Blender keeps in ordinary use but does not guarantee,
 //!   taken as given and reported, and [`list_sources`], a list's `item` typed by the collection its
 //!   `template_list` calls show;
-//! - [`reload_guard`]: the names an add-on's reload guard (`if "bpy" in locals():`) uses.
+//! - [`reload_guard`]: the names a reload guard (`if "bpy" in locals():`) reads and the submodules a
+//!   package imports by name.
 
 mod addon;
 mod addon_key;

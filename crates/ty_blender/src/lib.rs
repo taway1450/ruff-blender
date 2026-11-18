@@ -41,7 +41,7 @@ pub use operators::{
 };
 pub use pointer_aliases::{ModeFacts, implied_paths, is_set_once_read, mode_facts, same_pointers};
 pub use registration::{IdnameFamily, REGISTRABLE_ROOTS, registration_classmethod};
-pub use reload_guard::in_reload_guard;
+pub use reload_guard::{imports_submodule_by_name, in_reload_guard};
 pub use script_guard::is_script_test;
 pub use source::{BlInfo, BlInfoDict, BlInfoEntry, bl_info};
 pub use type_tags::{

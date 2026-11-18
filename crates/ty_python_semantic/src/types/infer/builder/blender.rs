@@ -37,8 +37,8 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
         .unwrap_or(ty)
     }
 
-    /// The type of `name`, unbound where it is read, in the guarded branch of an add-on's reload
-    /// guard (`blender::reload_guard_type`).
+    /// The type of `name`, unbound where it is read, when a module bound it on its previous run (the
+    /// reload guard) or a package imports it by name (`blender::reload_guard_type`).
     pub(super) fn blender_reload_guard_type(&self, name: &ast::ExprName) -> Option<Type<'db>> {
         blender::reload_guard_type(self.db(), self.scope(), self.module(), name)
     }
