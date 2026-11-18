@@ -63,6 +63,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::{SmallVec, smallvec, smallvec_inline};
 
 mod containment;
+#[path = "dedicated/blender/assertion_narrowing.rs"]
+mod blender_assertions;
 
 use self::containment::{elements_of, narrow_string_membership};
 
@@ -4600,6 +4602,10 @@ impl<'db> NarrowingConstraintsBuilder<'db, '_> {
         if inference.is_provisional() {
             self.is_provisional = true;
             return None;
+        }
+
+        if let Some(constraints) = self.evaluate_unittest_assertion(expr_call, expression, is_positive) {
+            return constraints;
         }
 
         if let Some(type_guard_call_constraints) =

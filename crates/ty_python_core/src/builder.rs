@@ -78,6 +78,7 @@ use crate::{Db, Statement, StatementNodeKey};
 
 use super::place::PlaceExprRef;
 
+mod blender;
 mod except_handlers;
 mod loop_bindings_visitor;
 
@@ -5597,6 +5598,7 @@ impl<'db, 'ast> SemanticIndexBuilder<'db, 'ast> {
                         let callable =
                             self.add_standalone_expression_impl(func, ExpressionKind::Callee, None);
                         let call_expr = self.add_standalone_expression(value);
+                        self.record_unittest_assertion(value, call, call_expr, is_await);
 
                         let predicate = Predicate {
                             node: PredicateNode::IsNonTerminalCall(CallableAndCallExpr::new(

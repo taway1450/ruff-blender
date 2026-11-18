@@ -4927,6 +4927,7 @@ dependencies = [
  "test-case",
  "thin-vec",
  "tracing",
+ "ty_blender",
  "ty_combine",
  "ty_module_resolver",
  "ty_site_packages",

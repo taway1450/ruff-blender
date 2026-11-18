@@ -56,7 +56,7 @@ use super::imprecise::{
 };
 use super::index::file_facts;
 use super::lints::BLENDER_INVALID_OVERRIDE;
-use super::list_sources::list_item_type;
+use super::list_sources::{list_data_type, list_item_type};
 use super::operator_properties::class_properties_type;
 use super::symbols::{bpy_types_bases, bpy_types_class_name, is_bpy_types_class};
 use super::vector::module_class;
@@ -419,6 +419,8 @@ pub(crate) struct OverrideTypes<'db> {
     /// The position of the parameter taken as not `None` in the body
     /// ([`ty_blender::Callback::assumed_item_position`]).
     pub(super) assumed_item_position: Option<usize>,
+    /// The position of a list's `data` ([`ty_blender::Callback::list_data_position`]).
+    list_data_position: Option<usize>,
 }
 
 impl<'db> OverrideTypes<'db> {
@@ -523,6 +525,7 @@ pub(super) fn parent_callback_types<'db>(
             bool_result: callback.bool_result,
             own_properties_position: callback.own_properties_position(),
             assumed_item_position: callback.assumed_item_position(),
+            list_data_position: callback.list_data_position(),
         });
     }
     None
@@ -629,6 +632,14 @@ pub(crate) fn override_parameter_type<'db>(
             return types
                 .positional(position)
                 .map(|ty| assumed_item_type(db, definition, super::member::without_none(db, ty)));
+        }
+        // `UIList.draw_item`'s and `filter_items`' `data`: the `dataptr` the add-on shows the list
+        // with ([`super::list_sources`]).
+        if types.list_data_position == Some(position) {
+            return types.positional(position).map(|ty| match defining_class(db, definition) {
+                Some(class) => list_data_type(db, class, ty),
+                None => ty,
+            });
         }
         return types.positional(position);
     }

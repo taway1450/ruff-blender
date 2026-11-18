@@ -45,6 +45,7 @@ use crate::types::definition_resolution::{ResolvedDefinition, find_symbol_in_sco
 use crate::types::{StaticClassLiteral, Type};
 
 use super::addon::is_first_party;
+use super::classes::mro_classes;
 use super::evaluate::{Evaluator, PropertyValue};
 use super::follow::{
     Resolved, imported_definitions, is_classmethod, module_by_name, registration_argument_type,
@@ -1769,6 +1770,9 @@ struct Walker<'db> {
     pure: u32,
     globals: FxHashMap<(ProgramFile<'db>, Name), Value<'db>>,
     evaluating: FxHashSet<(ProgramFile<'db>, Name)>,
+    /// The classes whose `register()` or `unregister()` classmethod runs, innermost last: what
+    /// `cls` is in its body.
+    registering: Vec<StaticClassLiteral<'db>>,
 }
 
 impl<'db> Walker<'db> {
@@ -1786,6 +1790,7 @@ impl<'db> Walker<'db> {
             pure: 0,
             globals: FxHashMap::default(),
             evaluating: FxHashSet::default(),
+            registering: Vec::new(),
         }
     }
 
@@ -1887,7 +1892,7 @@ impl<'db> Walker<'db> {
                                 owner_range: *owner_range,
                                 accepted: accepts_registered_properties(db, owner),
                                 name,
-                                value: value.clone(),
+                                value: self.registered_class_targets(value),
                             },
                             site: frame.site(db, *site),
                             path: BranchPath::new(frame.path.iter().copied()),
@@ -2237,15 +2242,20 @@ impl<'db> Walker<'db> {
             }
             Value::Class(class, _) => {
                 if is_first_party(db, class.program_file(db)) {
-                    let definitions = find_symbol_in_scope(db, class.body_scope(db), name);
-                    match definitions.iter().last() {
-                        Some(definition)
-                            if matches!(definition.kind(db), DefinitionKind::Function(_)) =>
-                        {
-                            Value::Function(*definition)
-                        }
-                        _ => Value::Foreign(None),
-                    }
+                    // The class's own attribute or one it inherits from an add-on base, as Python
+                    // looks it up: a method (an inherited `register()` classmethod), or a class
+                    // that a class attribute names (`owner = bpy.types.World`, read as `cls.owner`).
+                    mro_classes(db, class)
+                        .take_while(|owner| is_first_party(db, owner.program_file(db)))
+                        .find_map(|owner| {
+                            find_symbol_in_scope(db, owner.body_scope(db), name)
+                                .iter()
+                                .last()
+                                .copied()
+                        })
+                        .map_or(Value::Foreign(None), |definition| {
+                            class_attribute_value(db, definition, site)
+                        })
                 } else {
                     let class_path = bpy_types_path(db, class);
                     Value::Foreign(class_path.map(|path| Rc::from(format!("{path}.{name}"))))
@@ -2504,6 +2514,7 @@ impl<'db> Walker<'db> {
                     exact,
                     ..frame.clone()
                 };
+                walker.registering.push(class);
                 walker.call_function(
                     method,
                     vec![Value::Class(class, named_at)],
@@ -2511,6 +2522,7 @@ impl<'db> Walker<'db> {
                     range,
                     &mut caller,
                 );
+                walker.registering.pop();
             }
         };
         // Blender calls the class's `register()` after registering it and its `unregister()` before
@@ -2522,6 +2534,33 @@ impl<'db> Walker<'db> {
             run_method(self);
             self.record(Event::UnregisterClass(event));
         }
+    }
+
+    /// `value` with a `type=` that names an add-on base of the class whose `register()` runs taken
+    /// as that class: in an inherited `register(cls)`, `PointerProperty(type=cls)` is typed by the
+    /// base the method is written in, but `cls` is the registered subclass (Hydra Storm's
+    /// `SceneProperties`).
+    fn registered_class_targets(&self, value: &PropertyValue<'db>) -> PropertyValue<'db> {
+        let db = self.db;
+        let Some(&class) = self.registering.last() else {
+            return value.clone();
+        };
+        value.map_targets(|target| {
+            // `type=cls` names the class whose body defines the classmethod.
+            let Type::ClassLiteral(base) = target else {
+                return target;
+            };
+            match base.as_static() {
+                Some(base)
+                    if base != class
+                        && is_first_party(db, base.program_file(db))
+                        && mro_classes(db, class).any(|ancestor| ancestor == base) =>
+                {
+                    Type::from(class)
+                }
+                _ => target,
+            }
+        })
     }
 
     /// The `register()` or `unregister()` classmethod that `register_class` or `unregister_class`
@@ -2797,5 +2836,30 @@ fn hook_target<'db>(db: &'db dyn Db, base: &Value<'db>) -> Option<HookTarget<'db
             Some(HookTarget::Class(*class))
         }
         _ => None,
+    }
+}
+
+/// The value of the class attribute `definition` for the `register()` walk: a method, or the class
+/// an assignment names (`owner = bpy.types.World`). Anything else is foreign.
+fn class_attribute_value<'db>(
+    db: &'db dyn Db,
+    definition: Definition<'db>,
+    site: Site,
+) -> Value<'db> {
+    let module = parsed_module(db, definition.python_file(db)).load(db);
+    let value = match definition.kind(db) {
+        DefinitionKind::Function(_) => return Value::Function(definition),
+        DefinitionKind::Assignment(assignment) => assignment.value(&module),
+        DefinitionKind::AnnotatedAssignment(assignment) => match assignment.value(&module) {
+            Some(value) => value,
+            None => return Value::Foreign(None),
+        },
+        _ => return Value::Foreign(None),
+    };
+    match resolve_expression(db, definition.scope(db), value) {
+        Some(Resolved::Value(Type::ClassLiteral(class))) => class
+            .as_static()
+            .map_or(Value::Foreign(None), |class| Value::Class(class, site)),
+        _ => Value::Foreign(None),
     }
 }
