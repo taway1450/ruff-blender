@@ -16,9 +16,10 @@
 use ruff_db::parsed::parsed_module;
 use ruff_python_ast as ast;
 use ruff_python_ast::name::Name;
+use ruff_python_ast::visitor::{Visitor, walk_expr, walk_stmt};
 use ty_python_core::ProgramFile;
 use ty_python_core::definition::{Definition, DefinitionState};
-use ty_python_core::scope::ScopeId;
+use ty_python_core::scope::{FileScopeId, NodeWithScopeRef, ScopeId};
 use ty_python_core::{place_table, semantic_index, use_def_map};
 
 use crate::place::{Definedness, Place, PlaceAndQualifiers};
@@ -39,13 +40,14 @@ use crate::{Db, ProgramEnvironment};
 use super::evaluate::{PropertyValue, property_value};
 use super::external::{ExternalAddon, ExternalSource, external_registration};
 use super::follow::{Resolved, resolve_expression};
-use super::index::{RegisteredProperty, registered_properties};
+use super::index::{RegisteredProperty, addon_in_program, file_facts, registered_properties};
 use super::mixin_self::mixin_users;
 use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
 use super::{
     assumptions, context_assumptions, context_members, id_data, operator_properties, operators,
-    pointer_aliases, poll_checks, preferences, subclass_members, tag_writes, temp_override,
+    pointer_aliases, poll_checks, preferences, subclass_members, tag_locals, tag_writes,
+    temp_override,
 };
 
 /// The property that gives instances of `class` the attribute `name` in `file`.
@@ -363,10 +365,21 @@ fn instance_value_type<'db>(
         }
         Type::Union(union) => all_arms(union.elements(db)),
         Type::Intersection(intersection) => {
-            let types = intersection
-                .positive(db)
+            let positive = intersection.positive(db);
+            // `hasattr(x, "name")` intersects `x` with a protocol that has the member.
+            let checked = positive.iter().any(|element| {
+                element.is_protocol_instance()
+                    && !element.member(db, env, name).place.is_undefined()
+            });
+            let types = positive
                 .iter()
-                .filter_map(|element| arm_type(*element))
+                .filter_map(|element| {
+                    arm_type(*element).or_else(|| {
+                        checked
+                            .then(|| checked_registration_type(db, env, file, *element, name))
+                            .flatten()
+                    })
+                })
                 .collect::<Vec<_>>();
             (!types.is_empty()).then(|| IntersectionType::from_elements(db, env, types))
         }
@@ -379,6 +392,78 @@ fn instance_value_type<'db>(
         Type::TypeAlias(alias) => instance_value_type(db, env, file, alias.value_type(db), name),
         _ => None,
     }
+}
+
+/// The value type of the attribute `name` of the instance `receiver` in `file` after
+/// `hasattr(receiver, "name")`, from a registration of `name` that the add-on (or the file, outside
+/// an add-on) makes anywhere, also outside the code `register()` runs:
+///
+/// ```python
+/// def on_filter_changed(self, context):          # an update callback
+///     bpy.types.Scene.my_filter = bpy.props.CollectionProperty(type=MyItem)
+///
+/// if hasattr(scene, "my_filter"):
+///     for item in scene.my_filter: ...            # `bpy_prop_collection_idprop[MyItem]`
+/// ```
+///
+/// The test shows the registration ran. The last registration of `name` on the first class of the
+/// method resolution order that has one decides, as for an indexed one; a class whose body binds
+/// `name` decides first ([`own_instance_property`]), and is not looked past here.
+fn checked_registration_type<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    file: ProgramFile<'db>,
+    receiver: Type<'db>,
+    name: &str,
+) -> Option<Type<'db>> {
+    let Type::NominalInstance(instance) = receiver else {
+        return None;
+    };
+    let class = instance.class(db, env).class_literal(db).as_static()?;
+    if own_instance_property(db, file, class, name).is_some() {
+        return None;
+    }
+    let registrations = |file| {
+        file_facts(db, file)
+            .registered_properties
+            .iter()
+            .filter(|property| property.name == name && property.accepted)
+            .collect::<Vec<_>>()
+    };
+    let registrations: Vec<&RegisteredProperty<'db>> = match addon_in_program(db, file) {
+        Some(addon) => addon.files(db).flat_map(registrations).collect(),
+        None => registrations(file),
+    };
+    let property = class.iter_mro(db, None).find_map(|base| {
+        let ClassBase::Class(base) = base else {
+            return None;
+        };
+        let base = base.class_literal(db).as_static()?;
+        registrations
+            .iter()
+            .rev()
+            .find(|property| property.owner == base)
+    })?;
+    Some(property.value.value_type(db, env))
+}
+
+/// Whether the instance `element` has the Blender property `name` in `file`: a property of its
+/// class or a registration, also one made outside `register()` ([`checked_registration_type`]).
+fn has_blender_property<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    file: ProgramFile<'db>,
+    element: Type<'db>,
+    name: &str,
+) -> bool {
+    let Type::NominalInstance(instance) = element else {
+        return false;
+    };
+    let Some(class) = instance.class(db, env).class_literal(db).as_static() else {
+        return false;
+    };
+    instance_property(db, file, class, name).is_some()
+        || checked_registration_type(db, env, file, element, name).is_some()
 }
 
 /// What a write to the attribute `name` of the instance `receiver` in `file` accepts, when a
@@ -559,6 +644,10 @@ pub(crate) fn on_load<'db>(
     if let Some(member) = tag_writes::on_load(context, attribute, receiver) {
         return member;
     }
+    // `strip.speed_control` under `if strip_type == 'SPEED':`, after `strip_type = strip.type`.
+    if let Some(member) = tag_locals::on_load(context, attribute, receiver) {
+        return member;
+    }
     // A Grease Pencil brush's settings, a member passed to `temp_override`.
     if let Some(member) = pointer_aliases::on_load(context, attribute, place) {
         return member;
@@ -582,6 +671,20 @@ pub(crate) fn on_load<'db>(
         context_assumptions::on_preset_pointer_load(context, attribute, receiver, place)
     {
         return member;
+    }
+    // `scene.x` after `hasattr(scene, "x")`: ty reads the protocol's `object`, while a property `x`
+    // of the scene's class gives its type, also one only registered outside `register()`
+    // ([`checked_registration_type`]).
+    if attribute.ctx.is_load()
+        && place.place.is_definitely_bound()
+        && let Type::Intersection(intersection) = receiver
+        && intersection
+            .positive(db)
+            .iter()
+            .any(|element| has_blender_property(db, env, file, *element, name))
+        && let Some(ty) = instance_value_type(db, env, file, receiver, name)
+    {
+        return Place::bound(ty).into();
     }
     if place.place.is_definitely_bound() {
         return place;
@@ -717,10 +820,156 @@ fn is_draw_callback<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> bool {
                     .any(|(root, callbacks)| *root == base && callbacks.contains(&name))
         })
     };
-    is_drawn(class) || {
-        // A mixin's method is drawn when it is for every user of the mixin.
-        let users = mixin_users(db, class);
-        !users.is_empty() && users.iter().all(|user| is_drawn(*user))
+    is_drawn(class)
+        || {
+            // A mixin's method is drawn when it is for every user of the mixin.
+            let users = mixin_users(db, class);
+            !users.is_empty() && users.iter().all(|user| is_drawn(*user))
+        }
+        || (is_instance_method && is_draw_helper(db, file, parent, node))
+}
+
+/// Whether `method`, an instance method in the body of the class scope `class_scope`, is a helper
+/// that its class calls only while drawing:
+///
+/// ```python
+/// class MY_OT_install(Operator):
+///     def draw(self, context):
+///         self._draw_options()       # the only use of `_draw_options`
+///
+///     def _draw_options(self):
+///         self.layout.prop(self, "target")   # `UILayout`, as in `draw`
+/// ```
+///
+/// Every use of `self.<name>` in the methods of the class body is a call, there is at least one,
+/// and each is directly in a method that is a draw callback itself (`draw`, or another such
+/// helper). A use as a value (`self.handler = self._draw_options`), one in a nested function or
+/// lambda (which may run after `draw` returns) or a use of the bare name in the class body makes
+/// the method an ordinary one, whose `self.layout` may be `None`. Calls from outside the class body
+/// are not seen.
+fn is_draw_helper<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    class_scope: FileScopeId,
+    method: &ast::StmtFunctionDef,
+) -> bool {
+    let index = semantic_index(db, file);
+    let Some(class) = index.scope(class_scope).node().as_class() else {
+        return false;
+    };
+    let module = parsed_module(db, file.python_file(db)).load(db);
+    let class = class.node(&module);
+    let name = &method.name.id;
+    let mut called = false;
+    for statement in &class.body {
+        let ast::Stmt::FunctionDef(caller) = statement else {
+            // `handler = _draw_options` in the class body.
+            let mut uses = BareNameUses { name, found: false };
+            uses.visit_stmt(statement);
+            if uses.found {
+                return false;
+            }
+            continue;
+        };
+        let parameters = &caller.parameters;
+        let Some(receiver) = parameters.posonlyargs.iter().chain(&parameters.args).next() else {
+            continue;
+        };
+        let mut uses = SelfUses {
+            receiver: &receiver.parameter.name.id,
+            name,
+            nested: 0,
+            calls: 0,
+            other: false,
+        };
+        uses.visit_body(&caller.body);
+        if uses.other {
+            return false;
+        }
+        // A recursive call adds nothing: the method is drawn only if its other callers are.
+        if uses.calls == 0 || caller.name.id == *name {
+            continue;
+        }
+        let caller = index
+            .node_scope(NodeWithScopeRef::Function(caller))
+            .to_scope_id(db, file);
+        if !*is_draw_callback(db, caller) {
+            return false;
+        }
+        called = true;
+    }
+    called
+}
+
+/// The uses of `<receiver>.<name>` in a method body: calls made directly in the body, and any other
+/// use (as a value, or in a nested function, class or lambda).
+struct SelfUses<'a> {
+    receiver: &'a Name,
+    name: &'a Name,
+    /// How many nested functions, classes and lambdas the visitor is in.
+    nested: usize,
+    calls: usize,
+    other: bool,
+}
+
+impl SelfUses<'_> {
+    fn is_use(&self, expression: &ast::Expr) -> bool {
+        matches!(
+            expression,
+            ast::Expr::Attribute(attribute)
+                if attribute.attr.id == *self.name
+                    && matches!(&*attribute.value, ast::Expr::Name(value) if value.id == *self.receiver)
+        )
+    }
+}
+
+impl<'a> Visitor<'a> for SelfUses<'_> {
+    fn visit_stmt(&mut self, statement: &'a ast::Stmt) {
+        if matches!(
+            statement,
+            ast::Stmt::FunctionDef(_) | ast::Stmt::ClassDef(_)
+        ) {
+            self.nested += 1;
+            walk_stmt(self, statement);
+            self.nested -= 1;
+        } else {
+            walk_stmt(self, statement);
+        }
+    }
+
+    fn visit_expr(&mut self, expression: &'a ast::Expr) {
+        match expression {
+            ast::Expr::Call(call) if self.nested == 0 && self.is_use(&call.func) => {
+                self.calls += 1;
+                for argument in call.arguments.iter_source_order() {
+                    self.visit_expr(argument.value());
+                }
+            }
+            ast::Expr::Lambda(_) => {
+                self.nested += 1;
+                walk_expr(self, expression);
+                self.nested -= 1;
+            }
+            _ if self.is_use(expression) => self.other = true,
+            _ => walk_expr(self, expression),
+        }
+    }
+}
+
+/// Whether a statement of a class body names `name` (`handler = _draw_options`).
+struct BareNameUses<'a> {
+    name: &'a Name,
+    found: bool,
+}
+
+impl<'a> Visitor<'a> for BareNameUses<'_> {
+    fn visit_expr(&mut self, expression: &'a ast::Expr) {
+        if let ast::Expr::Name(name) = expression
+            && name.id == *self.name
+        {
+            self.found = true;
+        }
+        walk_expr(self, expression);
     }
 }
 

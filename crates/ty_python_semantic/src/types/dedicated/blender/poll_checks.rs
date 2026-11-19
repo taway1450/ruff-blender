@@ -75,10 +75,12 @@ use crate::types::{StaticClassLiteral, Type, UnionType};
 use crate::{Db, ProgramEnvironment};
 
 use super::classes::{class_string, mro_classes, own_binding};
-use super::context_members::{enclosing_function, is_popover, space_subclass};
+use super::context_members::{enclosing_function, is_popover, popover_sites_of, space_subclass};
 use super::follow::{Resolved, is_classmethod, resolve_expression};
 use super::index::{addon_in_program, file_facts};
-use super::lints::{BLENDER_NARROWED_BY_BL_CONTEXT, BLENDER_NARROWED_BY_POLL};
+use super::lints::{
+    BLENDER_NARROWED_BY_BL_CONTEXT, BLENDER_NARROWED_BY_POLL, BLENDER_NARROWED_BY_POPOVER,
+};
 use super::member::without_none;
 use super::overrides::callback_root;
 use super::symbols::{bpy_types_class_name, is_bpy_types_class};
@@ -232,6 +234,7 @@ pub(super) fn on_load<'db>(
     {
         let lint = match source.gate {
             Gate::BlContext(_) => &BLENDER_NARROWED_BY_BL_CONTEXT,
+            Gate::Popover => &BLENDER_NARROWED_BY_POPOVER,
             Gate::Poll | Gate::ParentPoll => &BLENDER_NARROWED_BY_POLL,
         };
         if let Some(builder) = context.report_lint(lint, attribute) {
@@ -241,6 +244,10 @@ pub(super) fn on_load<'db>(
                 Gate::BlContext(bl_context) => builder.into_diagnostic(format_args!(
                     "`{path}` is taken as `{narrowed}` because `{}` has `bl_context = \"{bl_context}\"`; \
                      Blender polls and draws the panel only where that context is current",
+                    source.poll_class,
+                )),
+                Gate::Popover => builder.into_diagnostic(format_args!(
+                    "`{path}` is taken as `{narrowed}` because `{}()` checked it before opening the \n                     panel as a popover; Blender draws the popover with the context of the editor \n                     that opened it",
                     source.poll_class,
                 )),
                 gate => builder.into_diagnostic(format_args!(
@@ -342,6 +349,9 @@ enum Gate {
     ParentPoll,
     /// The `bl_context` of the panel, or of the top panel of its `bl_parent_id` chain.
     BlContext(Name),
+    /// What the function that opens the panel as a popover checked before the call, at every
+    /// such call.
+    Popover,
 }
 
 /// The facts of the polls that gate the function scope `function`, when it is a method in the body
@@ -382,6 +392,13 @@ fn gated_facts<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<GatedFact
             poll_class: poll_class.clone(),
             gate: Gate::Poll,
         }));
+    }
+    if is_panel && gated {
+        for sourced in popover_facts(db, class).as_deref().unwrap_or_default() {
+            if !facts.iter().any(|known| known.fact == sourced.fact) {
+                facts.push(sourced.clone());
+            }
+        }
     }
     if is_panel && !is_popover(db, file, class) {
         for sourced in parent_poll_facts(db, class).as_deref().unwrap_or_default() {
@@ -605,6 +622,29 @@ type PollFlow = Box<[(TextRange, Box<[Fact]>)]>;
     heap_size=ruff_memory_usage::heap_size
 )]
 fn poll_flow<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<PollFlow> {
+    recorded_flow(db, function, true)
+}
+
+/// What a method of a Blender class that opens a popover (a Panel's or Header's `draw`) knows before
+/// each of its statements and test operands, by its own control flow, as [`poll_flow`] reads a
+/// poll. A read of the context that raised would have stopped the method before a later call, so a
+/// pointer read on the way is set there too.
+#[salsa::tracked(
+    returns(ref),
+    cycle_initial=|_, _, _| None,
+    heap_size=ruff_memory_usage::heap_size
+)]
+fn opener_flow<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<PollFlow> {
+    recorded_flow(db, function, false)
+}
+
+/// The facts known before each statement and test operand of the method `function` of a Blender
+/// class, its context being its second parameter; only for a `poll` with `poll_only`.
+fn recorded_flow<'db>(
+    db: &'db dyn Db,
+    function: ScopeId<'db>,
+    poll_only: bool,
+) -> Option<PollFlow> {
     let file = function.program_file(db);
     let index = semantic_index(db, file);
     let in_class_body = index
@@ -613,7 +653,7 @@ fn poll_flow<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<PollFlow> {
     let node = function.node(db).as_function().filter(|_| in_class_body)?;
     let module = parsed_module(db, file.python_file(db)).load(db);
     let node = node.node(&module);
-    if node.name.id != "poll" {
+    if poll_only && node.name.id != "poll" {
         return None;
     }
     let class = nearest_enclosing_class(db, index, function)?;
@@ -650,6 +690,70 @@ fn poll_flow<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<PollFlow> {
         .map(|(range, facts)| (range, facts.0.into_boxed_slice()))
         .collect();
     (!flow.is_empty()).then_some(flow)
+}
+
+/// What every call that opens the panel `class` as a popover knows from its own function's control
+/// flow ([`opener_flow`]), with the function's name: Blender draws a popover with the context of the
+/// editor that opened it, so what the opener checked before the call still holds unless the user
+/// changed it while the popover is open.
+///
+/// ```python
+/// class MY_HT_header(Header):
+///     def draw(self, context):
+///         if context.space_data.node_tree:
+///             self.layout.popover("MY_PT_tree")    # `MY_PT_tree.draw` knows the tree is set
+/// ```
+///
+/// Only for a panel of the `'HEADER'` region type, which Blender draws only as a popover; a call
+/// at module level, in a lambda or in a function that is not a method of a Blender class gives
+/// nothing, and so nothing holds.
+#[salsa::tracked(
+    returns(ref),
+    cycle_initial=|_, _, _| None,
+    heap_size=ruff_memory_usage::heap_size
+)]
+fn popover_facts<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+) -> Option<Box<[SourcedFact]>> {
+    if class_string(db, class, "bl_region_type").as_deref() != Some("HEADER") {
+        return None;
+    }
+    let file = class.body_scope(db).program_file(db);
+    let mut common: Option<(Facts, Name)> = None;
+    for site in popover_sites_of(db, file, class) {
+        let function = site.function?;
+        let known = opener_flow(db, function)
+            .as_deref()
+            .and_then(|flow| known_before(flow, site.call))?;
+        let facts = Facts(known.to_vec());
+        common = Some(match common {
+            Some((common, opener)) => (common.intersect(&facts), opener),
+            None => (facts, opener_name(db, function)?),
+        });
+    }
+    let (facts, opener) = common?;
+    Some(
+        facts
+            .0
+            .into_iter()
+            .map(|fact| SourcedFact {
+                fact,
+                poll_class: opener.clone(),
+                gate: Gate::Popover,
+            })
+            .collect(),
+    )
+}
+
+/// `Class.method` for the method scope `function`.
+fn opener_name<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<Name> {
+    let file = function.program_file(db);
+    let index = semantic_index(db, file);
+    let class = nearest_enclosing_class(db, index, function)?;
+    let module = parsed_module(db, file.python_file(db)).load(db);
+    let node = function.node(db).as_function()?.node(&module);
+    Some(Name::new(format!("{}.{}", class.name(db), node.name.id)))
 }
 
 /// The facts known when the expression at `range` in a poll is evaluated: those of the smallest

@@ -37,13 +37,14 @@
 
 use ruff_db::parsed::parsed_module;
 use ruff_python_ast::name::Name;
-use ruff_python_ast::visitor::{Visitor, walk_expr};
+use ruff_python_ast::visitor::{Visitor, walk_expr, walk_stmt};
 use ruff_python_ast::{self as ast, Expr};
+use ruff_text_size::{Ranged, TextRange};
 use ty_blender::{
     ContextGuarantee, OperatorIdname, callback_of, context_guarantee, draws_in_window,
     is_assumed_context_member, menu_space_type, runs_in_editor,
 };
-use ty_python_core::scope::ScopeId;
+use ty_python_core::scope::{NodeWithScopeRef, ScopeId};
 use ty_python_core::{ProgramFile, global_scope, place_table, semantic_index};
 
 use crate::place::{PlaceAndQualifiers, imported_symbol};
@@ -296,15 +297,27 @@ pub(super) fn is_popover<'db>(
     file: ProgramFile<'db>,
     class: StaticClassLiteral<'db>,
 ) -> bool {
+    !popover_sites_of(db, file, class).is_empty()
+}
+
+/// The sites that open the panel `class`, defined in `file`, as a popover: the `popover(...)` and
+/// `call_panel(name=...)` calls naming its idname (`bl_idname`, or without one its class name) in
+/// the add-on's files (or in `file`, when it belongs to no add-on).
+pub(super) fn popover_sites_of<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    class: StaticClassLiteral<'db>,
+) -> Vec<&'db PopoverSite<'db>> {
     let idname = class_string(db, class, "bl_idname").unwrap_or_else(|| class.name(db).to_string());
-    let opens = |file| {
-        popover_panels(db, file)
+    let sites = |file| {
+        popover_sites(db, file)
             .iter()
-            .any(|panel| *panel == idname)
+            .filter(|site| site.panel == idname)
+            .collect::<Vec<_>>()
     };
     match addon_in_program(db, file) {
-        Some(addon) => addon.files(db).any(opens),
-        None => opens(file),
+        Some(addon) => addon.files(db).flat_map(sites).collect(),
+        None => sites(file),
     }
 }
 
@@ -360,24 +373,66 @@ fn import_operators<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Box<[Name]>
     operators.into_boxed_slice()
 }
 
-/// The panel idnames `file` opens as a popover, by syntax alone: the string literal panel of
-/// `layout.popover("MY_PT_panel")` or `popover(panel="MY_PT_panel")`, and the `name` of
+/// A call that opens a panel as a popover.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize, salsa::SalsaValue)]
+pub(super) struct PopoverSite<'db> {
+    /// The panel's idname.
+    pub(super) panel: Name,
+    /// The function scope the call is directly in; `None` at module level or in a lambda.
+    pub(super) function: Option<ScopeId<'db>>,
+    pub(super) call: TextRange,
+}
+
+/// The calls of `file` that open a panel as a popover, by syntax alone: `layout.popover("MY_PT_panel")`
+/// or `popover(panel="MY_PT_panel")` with a string literal panel, and
 /// `bpy.ops.wm.call_panel(name="MY_PT_panel")`.
 #[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
-fn popover_panels<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Box<[Name]> {
+fn popover_sites<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Box<[PopoverSite<'db>]> {
     let module = parsed_module(db, file.python_file(db)).load(db);
-    let mut finder = PopoverPanels::default();
+    let index = semantic_index(db, file);
+    let mut finder = PopoverSites::default();
     finder.visit_body(module.suite());
-    finder.panels.into_boxed_slice()
+    finder
+        .sites
+        .into_iter()
+        .map(|(panel, function, call)| PopoverSite {
+            panel,
+            function: function.map(|function| {
+                index
+                    .node_scope(NodeWithScopeRef::Function(function))
+                    .to_scope_id(db, file)
+            }),
+            call,
+        })
+        .collect()
 }
 
 #[derive(Default)]
-struct PopoverPanels {
-    panels: Vec<Name>,
+struct PopoverSites<'a> {
+    sites: Vec<(Name, Option<&'a ast::StmtFunctionDef>, TextRange)>,
+    /// The function being visited; `None` at module level, in a class body or in a lambda.
+    function: Option<&'a ast::StmtFunctionDef>,
 }
 
-impl Visitor<'_> for PopoverPanels {
-    fn visit_expr(&mut self, expression: &Expr) {
+impl<'a> Visitor<'a> for PopoverSites<'a> {
+    fn visit_stmt(&mut self, statement: &'a ast::Stmt) {
+        let outer = self.function;
+        match statement {
+            ast::Stmt::FunctionDef(function) => self.function = Some(function),
+            ast::Stmt::ClassDef(_) => self.function = None,
+            _ => {}
+        }
+        walk_stmt(self, statement);
+        self.function = outer;
+    }
+
+    fn visit_expr(&mut self, expression: &'a Expr) {
+        if let Expr::Lambda(_) = expression {
+            let outer = self.function.take();
+            walk_expr(self, expression);
+            self.function = outer;
+            return;
+        }
         if let Expr::Call(call) = expression
             && let Expr::Attribute(callee) = &*call.func
         {
@@ -391,13 +446,9 @@ impl Visitor<'_> for PopoverPanels {
                 "call_panel" => keyword("name"),
                 _ => None,
             };
-            if let Some(Expr::StringLiteral(panel)) = panel
-                && !self
-                    .panels
-                    .iter()
-                    .any(|known| known == panel.value.to_str())
-            {
-                self.panels.push(Name::new(panel.value.to_str()));
+            if let Some(Expr::StringLiteral(panel)) = panel {
+                self.sites
+                    .push((Name::new(panel.value.to_str()), self.function, call.range()));
             }
         }
         walk_expr(self, expression);
