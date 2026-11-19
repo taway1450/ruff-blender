@@ -39,6 +39,7 @@ use ty_blender::folder_source_files;
 use ty_module_resolver::file_to_module;
 use ty_python_core::{Program, ProgramFile, semantic_index};
 
+use crate::place::global_symbol;
 use crate::types::{
     ClassLiteral, IntersectionType, StaticClassLiteral, Type, TypeVarBoundOrConstraints, UnionType,
     binding_type,
@@ -161,16 +162,42 @@ fn scope_mixins<'db>(
         .collect()
 }
 
-/// The class a user of a mixin is typed by: the first `bpy.types` class in the method resolution
-/// order of `class`, or without one `unittest.TestCase`. `None` for a class with neither, which
-/// may be a mixin.
+/// The class a user of a mixin is typed by: the `bpy.types` class `class` is the Python half of
+/// ([`bpy_types_counterpart`]), else the first `bpy.types` class in the method resolution order of
+/// `class`, or without one `unittest.TestCase`. `None` for a class with neither, which may be a
+/// mixin.
 fn anchor_class<'db>(
     db: &'db dyn Db,
     class: StaticClassLiteral<'db>,
 ) -> Option<StaticClassLiteral<'db>> {
-    mro_classes(db, class)
-        .find(|base| is_bpy_types_class(db, *base))
+    bpy_types_counterpart(db, class)
+        .or_else(|| mro_classes(db, class).find(|base| is_bpy_types_class(db, *base)))
         .or_else(|| mro_classes(db, class).find(|base| is_unittest_test_case(db, *base)))
+}
+
+/// The `bpy.types` class that a class of Blender's `_bpy_types` module adds Python methods to.
+///
+/// `_bpy_types` defines `class PoseBone(_StructRNA, _GenericBone, ...)`, and Blender merges it into
+/// `bpy.types.PoseBone`, the class with the bone's RNA properties. Its bases only name `bpy_struct`,
+/// so the bound of `Self` in the shared `_GenericBone` methods takes the bone classes from here:
+/// `self.head` is the head of a `PoseBone`, `Bone` or `EditBone`.
+fn bpy_types_counterpart<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+) -> Option<StaticClassLiteral<'db>> {
+    let file = class.program_file(db);
+    file_to_module(db, file.resolver_file(db))
+        .filter(|module| module.name(db).as_str() == "_bpy_types")?;
+    let types = module_by_name(db, file, "bpy.types")?;
+    let Type::ClassLiteral(counterpart) = global_symbol(db, types, class.name(db))
+        .place
+        .ignore_possibly_undefined()?
+    else {
+        return None;
+    };
+    counterpart
+        .as_static()
+        .filter(|counterpart| is_bpy_types_class(db, *counterpart))
 }
 
 /// Whether `class` is `unittest.TestCase` (defined in `unittest.case`).
