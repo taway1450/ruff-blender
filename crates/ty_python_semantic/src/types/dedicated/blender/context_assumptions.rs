@@ -32,13 +32,13 @@
 use ruff_db::parsed::parsed_module;
 use ruff_python_ast::comparable::ComparableExpr;
 use ruff_python_ast::name::Name;
-use ruff_python_ast::visitor::{Visitor, walk_expr, walk_stmt};
+use ruff_python_ast::visitor::{Visitor, walk_body, walk_expr, walk_stmt};
 use ruff_python_ast::{self as ast, Expr, Stmt};
-use ruff_text_size::{Ranged, TextRange};
+use ruff_text_size::{Ranged, TextRange, TextSize};
 use ty_blender::{
-    added_object_type, adds_object, assumes_editor, callback_of, is_added_object_member,
-    is_editor_member, is_preset_path, is_tool_draw_settings, preset_member_struct,
-    preset_set_pointer,
+    TypeArgument, added_object_type, adds_object, assumes_editor, callback_of,
+    is_added_object_member, is_editor_member, is_preset_path, is_tool_draw_settings,
+    preset_member_struct, preset_set_pointer,
 };
 use ty_python_core::scope::ScopeId;
 use ty_python_core::{global_scope, semantic_index};
@@ -185,7 +185,12 @@ fn assumption<'db>(
                 "`bpy.ops.{}()` before it is taken to have added an object and made it active",
                 added.operator
             ),
-            added.tag.as_ref().map(|tag| format!("_Object_{tag}")),
+            // A call in a branch the read is not in may not be the one that ran last.
+            added
+                .tag
+                .as_ref()
+                .filter(|_| attribute.start() <= added.block_end)
+                .map(|tag| format!("_Object_{tag}")),
         ));
     }
     if !in_function {
@@ -400,6 +405,8 @@ struct AddedObjectCall {
     operator: Name,
     /// The Type tag of the object it adds, when the call shows it.
     tag: Option<Name>,
+    /// The end of the innermost block holding the call: a read up to there runs after it.
+    block_end: TextSize,
 }
 
 /// The calls of an operator that adds an object (`bpy.ops.mesh.primitive_cube_add(...)`) directly in
@@ -416,13 +423,25 @@ fn added_object_calls<'db>(db: &'db dyn Db, scope: ScopeId<'db>) -> Box<[AddedOb
     };
     let mut calls = AddedObjectCalls::default();
     calls.visit_body(body);
-    calls.0.into_boxed_slice()
+    calls.calls.into_boxed_slice()
 }
 
 #[derive(Default)]
-struct AddedObjectCalls(Vec<AddedObjectCall>);
+struct AddedObjectCalls {
+    calls: Vec<AddedObjectCall>,
+    /// The ends of the blocks being visited, innermost last.
+    block_ends: Vec<TextSize>,
+}
 
 impl<'a> Visitor<'a> for AddedObjectCalls {
+    fn visit_body(&mut self, body: &'a [Stmt]) {
+        if let Some(last) = body.last() {
+            self.block_ends.push(last.end());
+            walk_body(self, body);
+            self.block_ends.pop();
+        }
+    }
+
     fn visit_stmt(&mut self, statement: &'a Stmt) {
         if !matches!(statement, Stmt::FunctionDef(_) | Stmt::ClassDef(_)) {
             walk_stmt(self, statement);
@@ -435,15 +454,28 @@ impl<'a> Visitor<'a> for AddedObjectCalls {
             Expr::Call(call) => {
                 walk_expr(self, expression);
                 if let Some((category, name)) = added_object_operator(&call.func) {
-                    let type_argument = call
-                        .arguments
-                        .find_keyword("type")
-                        .and_then(|keyword| keyword.value.as_string_literal_expr())
-                        .map(|string| string.value.to_str());
-                    self.0.push(AddedObjectCall {
+                    let keywords = &call.arguments.keywords;
+                    let type_argument = match keywords.iter().find(|keyword| {
+                        keyword
+                            .arg
+                            .as_ref()
+                            .is_none_or(|arg| arg.as_str() == "type")
+                    }) {
+                        None => TypeArgument::Absent,
+                        Some(keyword) => {
+                            match (&keyword.arg, keyword.value.as_string_literal_expr()) {
+                                (Some(_), Some(string)) => {
+                                    TypeArgument::Literal(string.value.to_str())
+                                }
+                                _ => TypeArgument::Unknown,
+                            }
+                        }
+                    };
+                    self.calls.push(AddedObjectCall {
                         call: call.range(),
                         operator: Name::new(format!("{category}.{name}")),
                         tag: added_object_type(category, name, type_argument).map(Name::new_static),
+                        block_end: self.block_ends.last().copied().unwrap_or(call.end()),
                     });
                 }
             }

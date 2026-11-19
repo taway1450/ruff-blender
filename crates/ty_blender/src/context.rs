@@ -114,15 +114,27 @@ pub fn adds_object(name: &str) -> bool {
     name == "add" || name.ends_with("_add")
 }
 
+/// The `type` keyword of an operator call, as far as its syntax shows it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TypeArgument<'a> {
+    /// No `type` keyword, nor `**kwargs` that could hold one: the operator's default.
+    Absent,
+    /// A string literal.
+    Literal(&'a str),
+    /// Any other value (`type=kind`), or `**kwargs`.
+    Unknown,
+}
+
 /// The Type tag (`Object.type`) of the object the operator `bpy.ops.<category>.<name>` adds, with
-/// `type_argument` the string literal its `type` keyword is given, if any: `mesh.primitive_*_add`
-/// adds a `'MESH'` object, `object.add(type='LATTICE')` a `'LATTICE'` one. `None` for an operator
-/// whose object type depends on more than that (`object.effector_add` adds a curve for a guide and
-/// an empty otherwise) and for operators that add no object.
+/// the `type` keyword it is given: `mesh.primitive_*_add` adds a `'MESH'` object,
+/// `object.add(type='LATTICE')` a `'LATTICE'` one and `object.add()` an `'EMPTY'` one. `None` for
+/// `object.add` with a `type` the call doesn't show, for an operator whose object type depends on
+/// more than that (`object.effector_add` adds a curve for a guide and an empty otherwise) and for
+/// operators that add no object.
 pub fn added_object_type(
     category: &str,
     name: &str,
-    type_argument: Option<&str>,
+    type_argument: TypeArgument,
 ) -> Option<&'static str> {
     if name.starts_with("primitive_") {
         return match category {
@@ -135,13 +147,15 @@ pub fn added_object_type(
     if category != "object" {
         return None;
     }
+    if name == "add" {
+        let tag = match type_argument {
+            TypeArgument::Absent => "EMPTY",
+            TypeArgument::Literal(tag) => tag,
+            TypeArgument::Unknown => return None,
+        };
+        return OBJECT_TYPES.iter().copied().find(|known| *known == tag);
+    }
     Some(match name {
-        "add" => {
-            return OBJECT_TYPES
-                .iter()
-                .copied()
-                .find(|tag| *tag == type_argument.unwrap_or("EMPTY"));
-        }
         "armature_add" => "ARMATURE",
         "camera_add" => "CAMERA",
         "curves_empty_hair_add" | "curves_random_add" => "CURVES",
@@ -336,10 +350,10 @@ const CHECKED_BY_CALL: [(&str, &str, &[&str]); 1] = [(
 #[cfg(test)]
 mod tests {
     use super::{
-        ContextGuarantee, added_object_type, adds_object, assumes_editor, context_guarantee,
-        draws_in_window, is_added_object_member, is_assumed_context_member, is_editor_member,
-        is_preset_path, is_tool_draw_settings, menu_space_type, preset_member_struct,
-        preset_set_pointer, runs_in_editor,
+        ContextGuarantee, TypeArgument, added_object_type, adds_object, assumes_editor,
+        context_guarantee, draws_in_window, is_added_object_member, is_assumed_context_member,
+        is_editor_member, is_preset_path, is_tool_draw_settings, menu_space_type,
+        preset_member_struct, preset_set_pointer, runs_in_editor,
     };
 
     #[test]
@@ -419,22 +433,45 @@ mod tests {
         assert!(is_added_object_member("active_object"));
         assert!(!is_added_object_member("scene"));
         assert_eq!(
-            added_object_type("mesh", "primitive_cube_add", None),
+            added_object_type("mesh", "primitive_cube_add", TypeArgument::Absent),
             Some("MESH")
         );
         assert_eq!(
-            added_object_type("surface", "primitive_nurbs_surface_torus_add", None),
+            added_object_type(
+                "surface",
+                "primitive_nurbs_surface_torus_add",
+                TypeArgument::Absent
+            ),
             Some("SURFACE")
         );
-        assert_eq!(added_object_type("object", "text_add", None), Some("FONT"));
-        assert_eq!(added_object_type("object", "add", None), Some("EMPTY"));
         assert_eq!(
-            added_object_type("object", "add", Some("LATTICE")),
+            added_object_type("object", "text_add", TypeArgument::Absent),
+            Some("FONT")
+        );
+        assert_eq!(
+            added_object_type("object", "add", TypeArgument::Absent),
+            Some("EMPTY")
+        );
+        assert_eq!(
+            added_object_type("object", "add", TypeArgument::Literal("LATTICE")),
             Some("LATTICE")
         );
-        assert_eq!(added_object_type("object", "add", Some("NOPE")), None);
-        assert_eq!(added_object_type("object", "effector_add", None), None);
-        assert_eq!(added_object_type("object", "modifier_add", None), None);
+        assert_eq!(
+            added_object_type("object", "add", TypeArgument::Literal("NOPE")),
+            None
+        );
+        assert_eq!(
+            added_object_type("object", "add", TypeArgument::Unknown),
+            None
+        );
+        assert_eq!(
+            added_object_type("object", "effector_add", TypeArgument::Absent),
+            None
+        );
+        assert_eq!(
+            added_object_type("object", "modifier_add", TypeArgument::Absent),
+            None
+        );
     }
 
     #[test]
