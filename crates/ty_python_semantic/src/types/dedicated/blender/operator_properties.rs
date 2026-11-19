@@ -56,7 +56,7 @@ use super::index::addon_in_program;
 use super::lints::{BLENDER_INVALID_OPERATOR_PROPERTY, BLENDER_UNKNOWN_OPERATOR};
 use super::operators::{
     AddonOperator, addon_operators, is_macro_class, is_operator_class, operator_call_hover,
-    operator_properties,
+    operator_properties, operators_of,
 };
 use super::properties::PropertyKind;
 use super::symbols::{blender_module_name, bpy_types_bases};
@@ -240,8 +240,8 @@ fn find_operator_at<'db>(
     idname: &OperatorIdname,
     depth: u32,
 ) -> Option<FoundOperator<'db>> {
-    if let Some(key) = addon_in_program(db, file)
-        && let Some(operator) = addon_operators(db, key).get(&idname.category, &idname.name)
+    if let Some(operator) =
+        operators_of(db, file).and_then(|operators| operators.get(&idname.category, &idname.name))
     {
         return Some(addon_operator(db, env, file, operator, depth));
     }
@@ -854,8 +854,7 @@ pub(super) fn class_properties_type<'db>(
     }
     let idname = operator_idname(db, class);
     let registered = idname.as_ref().and_then(|idname| {
-        let key = addon_in_program(db, file)?;
-        addon_operators(db, key)
+        operators_of(db, file)?
             .get(&idname.category, &idname.name)
             .filter(|operator| operator.class == class)
             .map(|operator| addon_operator(db, env, file, operator, 0))
@@ -1016,9 +1015,9 @@ pub(crate) fn idname_completions<'db>(
         return Vec::new();
     }
     let typed = string.value.to_str();
-    let mut idnames: Vec<String> = addon_in_program(db, file)
-        .map(|key| {
-            addon_operators(db, key)
+    let mut idnames: Vec<String> = operators_of(db, file)
+        .map(|operators| {
+            operators
                 .operators
                 .iter()
                 .map(|operator| operator.idname().py_form())
