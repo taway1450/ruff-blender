@@ -1,6 +1,7 @@
 //! Guaranteed context members: `context.scene` and its siblings are never `None` inside a Blender
-//! callback, and `context.space_data` is the editor's `Space` subclass in a Panel, Header or
-//! GizmoGroup of a known `bl_space_type`.
+//! callback, `context.window`, `screen` and `workspace` in the draw callbacks of a Panel, Menu,
+//! Header or UIList, and `context.space_data` is the editor's `Space` subclass in a Panel, Header
+//! or GizmoGroup of a known `bl_space_type`.
 //!
 //! The stubs type every pointer member of `bpy.types.Context` `X | None`, which is right for a
 //! context in general: a helper may get a restricted or overridden one. Blender's guarantee holds
@@ -39,8 +40,8 @@ use ruff_python_ast::name::Name;
 use ruff_python_ast::visitor::{Visitor, walk_expr};
 use ruff_python_ast::{self as ast, Expr};
 use ty_blender::{
-    ContextGuarantee, OperatorIdname, callback_of, context_guarantee, is_assumed_context_member,
-    menu_space_type, runs_in_editor,
+    ContextGuarantee, OperatorIdname, callback_of, context_guarantee, draws_in_window,
+    is_assumed_context_member, menu_space_type, runs_in_editor,
 };
 use ty_python_core::scope::ScopeId;
 use ty_python_core::{ProgramFile, global_scope, place_table, semantic_index};
@@ -92,6 +93,9 @@ pub(super) fn on_load<'db>(
             assumed_member(context, attribute, Some(function), place, Some(callback))
         }
         ContextGuarantee::Always => Some(place.map_type(|ty| without_none(db, ty))),
+        ContextGuarantee::InWindow => callback
+            .in_window
+            .then(|| place.map_type(|ty| without_none(db, ty))),
         ContextGuarantee::InEditor => {
             let space_type = callback.space_type.as_deref()?;
             let rule = match (callback.space_source, name) {
@@ -219,6 +223,9 @@ struct CallbackContext {
     /// Whether the callback is an Operator's that a FileHandler of the same add-on names as its
     /// `bl_import_operator`.
     import_operator: bool,
+    /// Whether Blender calls the callback only while it draws a window
+    /// ([`ty_blender::draws_in_window`]).
+    in_window: bool,
 }
 
 /// Where the editor of a callback comes from.
@@ -276,6 +283,7 @@ fn callback_context<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<Call
         space_type,
         space_source,
         import_operator,
+        in_window: draws_in_window(root, name),
     })
 }
 
