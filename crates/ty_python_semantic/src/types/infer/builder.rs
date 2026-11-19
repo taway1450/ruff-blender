@@ -9966,6 +9966,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         tcx: TypeContext<'db>,
     ) -> Type<'db> {
         let callable_type = self.infer_callee(&call_expression.func);
+        let callable_type = self.blender_assignment_callee(call_expression, callable_type);
 
         self.infer_call_expression_impl(call_expression, callable_type, tcx)
     }

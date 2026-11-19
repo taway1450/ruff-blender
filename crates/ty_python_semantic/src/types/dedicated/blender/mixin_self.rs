@@ -20,6 +20,10 @@
 //! method) still errors. The bound is silent: it states what holds for every user, so no rule
 //! reports it.
 //!
+//! A class made by a call `type("USERPREF_PT_theme_x", (Mixin, ThemePanel, Panel), {...})`
+//! anywhere in the scope is a user too, of each base that is a mixin, typed by the `bpy.types`
+//! class of its bases: Blender's theme panels are made so.
+//!
 //! The users are looked up in the mixin's add-on or, for a file in no add-on (Blender's `bl_ui`),
 //! in the `.py` files of its folder, through one cached pass per scope. A mixin with no user there
 //! keeps the bare type: its users may be in another add-on or made at runtime (`type(...)`).
@@ -49,7 +53,7 @@ use crate::{Db, FxIndexMap, ProgramEnvironment};
 use super::addon::is_first_party;
 use super::classes::mro_classes;
 use super::follow::module_by_name;
-use super::index::{addon_in_program, module_classes};
+use super::index::{addon_in_program, file_facts, module_classes};
 use super::symbols::is_bpy_types_class;
 
 /// The bounds of `Self` in the methods of `class`: `bounds` (the class itself), or for a mixin with
@@ -145,7 +149,8 @@ fn scope_mixins<'db>(
     let mut mixins: FxIndexMap<StaticClassLiteral<'db>, Vec<StaticClassLiteral<'db>>> =
         FxIndexMap::default();
     for file in scope.files(db) {
-        for user in module_class_literals(db, ProgramFile::new(db, *file, program)) {
+        let file = ProgramFile::new(db, *file, program);
+        for user in module_class_literals(db, file) {
             if anchor_class(db, *user).is_none() {
                 continue;
             }
@@ -155,7 +160,20 @@ fn scope_mixins<'db>(
                 }
             }
         }
+        for bases in &file_facts(db, file).type_calls {
+            // The made class is not a class literal: its `bpy.types` class stands for it.
+            let Some(anchor) = bases.iter().find_map(|base| anchor_class(db, *base)) else {
+                continue;
+            };
+            for base in bases.iter().flat_map(|base| mro_classes(db, *base)) {
+                let users = mixins.entry(base).or_default();
+                if anchor_class(db, base).is_none() && !users.contains(&anchor) {
+                    users.push(anchor);
+                }
+            }
+        }
     }
+    mixins.retain(|_, users| !users.is_empty());
     mixins
         .into_iter()
         .map(|(mixin, users)| (mixin, users.into_boxed_slice()))

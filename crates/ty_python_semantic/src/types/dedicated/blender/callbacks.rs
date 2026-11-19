@@ -16,6 +16,17 @@
 //! against [`declaration_callee`]: the `bpy.props` function with those parameters rewritten. A
 //! lambda then takes its parameter types from the rewritten `Callable`, the way ty types any
 //! lambda passed as an argument, and a `def` callback is checked against it.
+//!
+//! A property assigned to a class outside its body gets the same callee, with that class as the
+//! owner:
+//!
+//! ```python
+//! bpy.types.Armature.target = PointerProperty(type=Object, poll=lambda self, obj: obj.type == "ARMATURE")
+//! ```
+
+use ruff_python_ast::statement_visitor::{StatementVisitor, walk_stmt};
+use ruff_python_ast::{self as ast, Expr, Stmt};
+use ruff_text_size::{Ranged, TextRange};
 
 use crate::types::callable::CallableTypeKind;
 use crate::types::signatures::CallableSignature;
@@ -95,6 +106,52 @@ pub(crate) fn declaration_callee<'db>(
         CallableSignature::from_overloads(overloads),
         CallableTypeKind::FunctionLike,
     ))
+}
+
+/// The class expression of the assignment `call` is the value of, when it assigns to one attribute
+/// (`bpy.types.Armature.target = PointerProperty(...)`): `bpy.types.Armature`, whose instance
+/// Blender passes to the callbacks. `None` for any other call, and for a call that passes no
+/// callback, for which the owner changes nothing.
+pub(crate) fn assigned_property_owner<'a>(
+    module: &'a ast::ModModule,
+    call: &ast::ExprCall,
+) -> Option<&'a Expr> {
+    if !CALLBACK_PARAMETERS
+        .iter()
+        .any(|name| call.arguments.find_keyword(name).is_some())
+    {
+        return None;
+    }
+    let mut finder = AssignmentOwner {
+        call: call.range(),
+        owner: None,
+    };
+    finder.visit_body(&module.body);
+    finder.owner
+}
+
+/// Finds the statement `<owner>.<name> = <call>`, descending only into statements that contain
+/// the call.
+struct AssignmentOwner<'a> {
+    call: TextRange,
+    owner: Option<&'a Expr>,
+}
+
+impl<'a> StatementVisitor<'a> for AssignmentOwner<'a> {
+    fn visit_stmt(&mut self, stmt: &'a Stmt) {
+        if self.owner.is_some() || !stmt.range().contains_range(self.call) {
+            return;
+        }
+        if let Stmt::Assign(assignment) = stmt {
+            if assignment.value.range() == self.call
+                && let [Expr::Attribute(target)] = assignment.targets.as_slice()
+            {
+                self.owner = Some(&target.value);
+            }
+            return;
+        }
+        walk_stmt(self, stmt);
+    }
 }
 
 /// `ty` with the leading parameters of each `Callable` in it (`Callable[[bpy_struct, Context],

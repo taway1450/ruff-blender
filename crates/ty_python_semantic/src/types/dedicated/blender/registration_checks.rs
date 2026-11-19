@@ -107,7 +107,7 @@ impl<'db> AddonClasses<'db> {
         let mut classes = Vec::new();
         let mut type_call_bases = Vec::new();
         for file in key.files(db) {
-            type_call_bases.extend(file_facts(db, file).type_call_bases.iter().copied());
+            type_call_bases.extend(file_facts(db, file).type_calls.iter().flatten().copied());
             for class in &file_facts(db, file).classes {
                 classes.push((
                     class.class,

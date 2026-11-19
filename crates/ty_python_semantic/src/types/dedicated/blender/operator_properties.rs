@@ -50,7 +50,6 @@ use crate::types::{
 use crate::{Db, ProgramEnvironment};
 
 use super::classes::{class_string, operator_idname};
-use super::constructors;
 use super::imprecise::check_enum_arguments;
 use super::index::addon_in_program;
 use super::lints::{BLENDER_INVALID_OPERATOR_PROPERTY, BLENDER_UNKNOWN_OPERATOR};
@@ -61,6 +60,7 @@ use super::operators::{
 use super::properties::PropertyKind;
 use super::symbols::{blender_module_name, bpy_types_bases};
 use super::vector::module_class;
+use super::{constructors, drivers};
 
 /// The hidden member of a properties type that names its operator.
 const IDENTITY: &str = "__blender_operator__";
@@ -326,6 +326,18 @@ pub(super) fn builtin_operator<'db>(
     env: &ProgramEnvironment<'db>,
     idname: &OperatorIdname,
 ) -> Option<FoundOperator<'db>> {
+    builtin_operator_at(db, env, idname, 0)
+}
+
+/// [`builtin_operator`], `depth` macros deep. A built-in macro (`mesh.rip_move`) takes one keyword
+/// per step, named by the step's idname and typed `dict[str, Any]` in the stubs; its property is the
+/// step's properties, so `props.MESH_OT_rip.use_fill = False` sets a property of the rip step.
+fn builtin_operator_at<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    idname: &OperatorIdname,
+    depth: u32,
+) -> Option<FoundOperator<'db>> {
     let module_name = ModuleName::new(&format!("bpy.ops.{}", idname.category))?;
     let module = resolve_module_confident(db, env.resolver_environment(db), &module_name)?;
     let file = ProgramFile::new(db, module.file(db)?, env.program(db));
@@ -356,10 +368,15 @@ pub(super) fn builtin_operator<'db>(
         .iter()
         .filter(|parameter| parameter.is_keyword_only())
         .filter_map(|parameter| {
+            let name = parameter.name()?;
             let write = without_none(db, env, parameter.annotated_type());
+            let step = OperatorIdname::from_either(name)
+                .filter(|_| depth < MAX_MACRO_DEPTH)
+                .and_then(|step| builtin_operator_at(db, env, &step, depth + 1))
+                .and_then(|step| properties_type(db, env, &step));
             Some(FoundProperty {
-                name: parameter.name()?.clone(),
-                value: vector_value(db, env, write),
+                name: name.clone(),
+                value: step.unwrap_or_else(|| vector_value(db, env, write)),
                 write: Some(write),
                 is_enum: builtin_is_enum(db, env, write),
             })
@@ -534,6 +551,8 @@ pub(crate) fn on_call<'db>(
     check_enum_arguments(context, call, bindings, expression_type);
     // `ob.constraints.new('COPY_LOCATION')`, `tree.nodes.new(type='ShaderNodeMath')`.
     constructors::on_call(context, call, bindings, expression_type);
+    // `bone.driver_add("bbone_segments")`: one F-Curve for a property that is no array.
+    drivers::on_call(context, call, bindings, expression_type);
     let db = context.db();
     let env = context.program_environment();
     let file = context.program_file();

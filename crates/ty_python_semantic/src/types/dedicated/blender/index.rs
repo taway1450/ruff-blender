@@ -67,9 +67,10 @@ pub(super) struct FileFacts<'db> {
     pub(super) registered_properties: Box<[RegisteredProperty<'db>]>,
     /// The module-level classes of the file that `register_class` accepts.
     pub(super) classes: Box<[FileClass<'db>]>,
-    /// The classes named in the bases tuple of a three-argument `type(name, (C, ...), namespace)`
-    /// call anywhere in the file: bases of classes made at runtime, which ty doesn't see.
-    pub(super) type_call_bases: Box<[StaticClassLiteral<'db>]>,
+    /// The bases tuple of each three-argument `type(name, (C, ...), namespace)` call anywhere in the
+    /// file, as far as its names resolve to classes: the bases of a class made at runtime, which
+    /// ty doesn't see.
+    pub(super) type_calls: Box<[Box<[StaticClassLiteral<'db>]>]>,
 }
 
 /// A class that `bpy.utils.register_class` accepts: one whose method resolution order has a
@@ -346,32 +347,34 @@ pub(super) fn file_facts<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> FileFa
         .collect();
     let mut type_calls = TypeCalls::default();
     type_calls.visit_body(module.suite());
-    let mut type_call_bases: Vec<StaticClassLiteral<'db>> = Vec::new();
-    for base in type_calls.bases {
-        let Some(scope) = index.try_expression_scope_id(base) else {
-            continue;
-        };
-        let scope = scope.to_scope_id(db, file);
-        if let Some(Resolved::Value(Type::ClassLiteral(class))) =
-            resolve_expression(db, scope, base)
-            && let Some(class) = class.as_static()
-            && !type_call_bases.contains(&class)
-        {
-            type_call_bases.push(class);
-        }
-    }
+    let type_calls = type_calls
+        .calls
+        .into_iter()
+        .map(|bases| {
+            bases
+                .iter()
+                .filter_map(|base| {
+                    let scope = index.try_expression_scope_id(base)?.to_scope_id(db, file);
+                    match resolve_expression(db, scope, base) {
+                        Some(Resolved::Value(Type::ClassLiteral(class))) => class.as_static(),
+                        _ => None,
+                    }
+                })
+                .collect()
+        })
+        .collect();
     FileFacts {
         registered_properties,
         classes,
-        type_call_bases: type_call_bases.into_boxed_slice(),
+        type_calls,
     }
 }
 
-/// The bases of the three-argument `type(name, (C, ...), namespace)` calls of a body, by syntax
-/// alone.
+/// The bases tuple of each three-argument `type(name, (C, ...), namespace)` call of a body, by
+/// syntax alone.
 #[derive(Default)]
 struct TypeCalls<'a> {
-    bases: Vec<&'a Expr>,
+    calls: Vec<&'a [Expr]>,
 }
 
 impl<'a> Visitor<'a> for TypeCalls<'a> {
@@ -382,7 +385,7 @@ impl<'a> Visitor<'a> for TypeCalls<'a> {
             && call.arguments.keywords.is_empty()
             && let [_, Expr::Tuple(bases), _] = &*call.arguments.args
         {
-            self.bases.extend(bases.elts.iter());
+            self.calls.push(&bases.elts);
         }
         walk_expr(self, expression);
     }
