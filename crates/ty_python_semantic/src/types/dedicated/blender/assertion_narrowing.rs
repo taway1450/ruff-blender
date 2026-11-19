@@ -6,6 +6,9 @@
 //! ob.name
 //! ```
 //!
+//! `assertTrue` / `assertFalse` narrow as `assert x` / `assert not x`, `assertIsNone` as
+//! `assert x is None`, and `assertIsInstance(x, classinfo)` as `assert isinstance(x, classinfo)`.
+//!
 //! Only a `unittest.TestCase` narrows so: its assertion raises when it fails. A mixin's method
 //! that calls `self.assertIsNotNone` does not know `self` is a test case, and another class's
 //! method of that name may return.
@@ -18,8 +21,8 @@ use ruff_python_ast as ast;
 use ty_blender::UnittestAssertion;
 
 use super::{
-    Expression, NarrowingConstraint, NarrowingConstraints, NarrowingConstraintsBuilder, PlaceExpr,
-    Type,
+    ClassInfoConstraintFunction, Expression, NarrowingConstraint, NarrowingConstraints,
+    NarrowingConstraintsBuilder, PlaceExpr, Type,
 };
 use crate::types::blender::is_test_case_instance;
 use crate::types::infer::ExpressionInference;
@@ -47,18 +50,45 @@ impl<'db> NarrowingConstraintsBuilder<'db, '_> {
         }
         Some(match assertion {
             UnittestAssertion::IsNotNone(target) => {
-                let place = PlaceExpr::try_from_expr(target).map(|place| self.expect_place(&place));
-                place.map(|place| {
-                    let not_none = Type::none(self.db, &self.env).negate(self.db, &self.env);
-                    NarrowingConstraints::from_iter([(
-                        place,
-                        NarrowingConstraint::intersection(not_none),
-                    )])
-                })
+                let not_none = Type::none(self.db, &self.env).negate(self.db, &self.env);
+                self.place_intersection(target, not_none)
+            }
+            UnittestAssertion::IsNone(target) => {
+                self.place_intersection(target, Type::none(self.db, &self.env))
+            }
+            UnittestAssertion::IsInstance(target, classinfo) => {
+                // As `isinstance(x, classinfo)` narrows in an `assert`; a `classinfo` that is not
+                // a class or a tuple of classes narrows nothing.
+                ClassInfoConstraintFunction::IsInstance
+                    .generate_constraint(
+                        self.db,
+                        &self.env,
+                        inference.expression_type(classinfo),
+                        true,
+                        false,
+                    )
+                    .and_then(|instance| self.place_intersection(target, instance))
             }
             UnittestAssertion::True(target) => {
                 self.evaluate_expression_node_predicate(target, expression, true)
             }
+            UnittestAssertion::False(target) => {
+                self.evaluate_expression_node_predicate(target, expression, false)
+            }
         })
+    }
+
+    /// `target` narrowed to its intersection with `ty`, when `target` is a place (`ob`,
+    /// `ob.data`).
+    fn place_intersection(
+        &mut self,
+        target: &ast::Expr,
+        ty: Type<'db>,
+    ) -> Option<NarrowingConstraints<'db>> {
+        let place = self.expect_place(&PlaceExpr::try_from_expr(target)?);
+        Some(NarrowingConstraints::from_iter([(
+            place,
+            NarrowingConstraint::intersection(ty),
+        )]))
     }
 }
