@@ -75,7 +75,8 @@ pub(super) fn on_call<'db>(
                         constructor,
                         base,
                         argument,
-                        call.arguments.find_argument_value(constructor.parameter, 0),
+                        call.arguments
+                            .find_argument_value(constructor.parameter, constructor.position),
                         expression_type,
                     )
                 }
