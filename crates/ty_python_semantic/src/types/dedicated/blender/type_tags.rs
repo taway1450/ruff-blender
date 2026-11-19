@@ -210,7 +210,8 @@ pub(super) fn narrow_to_tag_values<'db>(
 }
 
 /// The type of the struct `value_ty` once its Type tag `attribute` is known to be one of `values`
-/// (`is_one_of`) or none of them.
+/// (`is_one_of`) or none of them. A union (`LineStyleColorModifier | LineStyleAlphaModifier`) is
+/// narrowed member by member, and not at all when one member cannot be.
 fn narrow_by_values<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
@@ -221,6 +222,14 @@ fn narrow_by_values<'db>(
 ) -> Option<Type<'db>> {
     if values.iter().any(|value| value == ADDON_TYPE_TAG) {
         return None;
+    }
+    if let Type::Union(union) = value_ty {
+        let narrowed = union
+            .elements(db)
+            .iter()
+            .map(|element| narrow_by_values(db, env, *element, attribute, values, is_one_of))
+            .collect::<Option<Vec<_>>>()?;
+        return Some(UnionType::from_elements(db, env, narrowed));
     }
     let (positive, negative): (Vec<Type<'db>>, Vec<Type<'db>>) = match value_ty {
         Type::NominalInstance(_) => (vec![value_ty], Vec::new()),
