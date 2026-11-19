@@ -15,7 +15,9 @@ use ty_blender::UnittestAssertion;
 
 use super::{
     Expression, NarrowingConstraint, NarrowingConstraints, NarrowingConstraintsBuilder, PlaceExpr, Type,
+    TypeContext, infer_expression_types,
 };
+use crate::types::blender::is_test_case_instance;
 
 impl<'db> NarrowingConstraintsBuilder<'db, '_> {
     /// The constraints of `call` when it is a test case's assertion (`self.assertIsNotNone(x)`), or
@@ -30,7 +32,14 @@ impl<'db> NarrowingConstraintsBuilder<'db, '_> {
         if !is_positive {
             return None;
         }
-        Some(match ty_blender::unittest_assertion(call)? {
+        let assertion = ty_blender::unittest_assertion(call)?;
+        // `self` must be a `TestCase`: another class's `assertIsNotNone` may return when the value is None.
+        let receiver = call.func.as_attribute_expr()?.value.as_ref();
+        let inference = infer_expression_types(self.db, expression, TypeContext::default());
+        if !is_test_case_instance(self.db, &self.env, inference.expression_type(receiver)) {
+            return None;
+        }
+        Some(match assertion {
             UnittestAssertion::IsNotNone(target) => {
                 let place = PlaceExpr::try_from_expr(target).map(|place| self.expect_place(&place));
                 place.map(|place| {

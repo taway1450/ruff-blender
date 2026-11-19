@@ -84,7 +84,7 @@ pub(super) fn on_load<'db>(
     let scope = function.unwrap_or_else(|| global_scope(db, file));
     let (rule, reason) = assumption(db, scope, function.is_some(), attribute)?;
     // A preset whose panel shows only for one struct reads the member as that struct.
-    let narrowed = if std::ptr::eq(rule, &BLENDER_ASSUMED_PRESET_CONTEXT)
+    let narrowed = if rule.name == BLENDER_ASSUMED_PRESET_CONTEXT.name
         && let Some(struct_name) =
             preset_member_struct(file.file(db).path(db).as_str(), attribute.attr.id.as_str())
         && let Some(class) = module_class(db, env, "bpy.types", struct_name)
