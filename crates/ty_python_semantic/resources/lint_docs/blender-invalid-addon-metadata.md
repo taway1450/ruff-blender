@@ -7,7 +7,8 @@ Checks the metadata Blender reads before it loads an add-on: the `bl_info` dict 
   ints.
 - `blender_manifest.toml` must be valid TOML with the keys `schema_version`, `id`, `version`, `name`,
   `tagline`, `maintainer`, `type`, `blender_version_min` and `license`, and `type` must be `"add-on"` or
-  `"theme"`.
+  `"theme"`. Each add-on its `[tool.blender] uses` declares (a table Blender ignores, read by the checker for
+  the add-ons whose registrations the add-on reads) must be a module the add-on can import.
 
 ## Why is this bad?
 

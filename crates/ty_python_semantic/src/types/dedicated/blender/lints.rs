@@ -45,6 +45,7 @@ use crate::{Db, ProgramEnvironment, declare_lint};
 use super::addon::is_first_party;
 use super::addon_of_file;
 use super::assumptions::check_assumptions;
+use super::external::resolves_addon;
 use super::index::addon_in_program;
 use super::operator_properties::check_keymaps;
 use super::overrides::check_overrides;
@@ -576,6 +577,14 @@ fn check_metadata(context: &InferContext, addon: &Addon) {
                 report(format!(
                     "`blender_manifest.toml` has `type = \"{addon_type}\"`; Blender expects `\"add-on\"` or `\"theme\"`"
                 ));
+            }
+            for name in &manifest.uses {
+                if !resolves_addon(db, context.program_file(), name) {
+                    report(format!(
+                        "`blender_manifest.toml` declares `uses = [\"{name}\"]`, but no module `{name}` \
+                         can be imported, so its registrations are not read"
+                    ));
+                }
             }
         }
     }

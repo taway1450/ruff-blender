@@ -12,7 +12,14 @@
 //!    read is reported under `blender-assumed-default-addon`.
 //!
 //! Each is found the way the file would import it at runtime, and read through its own `register()`
-//! walk. A module the program cannot resolve, or one only stubs give, adds nothing.
+//! walk. A module the program cannot resolve, or one only stubs give, adds nothing (a declared one
+//! is reported under `blender-invalid-addon-metadata`).
+//!
+//! Only an extension can declare: a legacy add-on or a file in no add-on gets the startup packages
+//! and the default add-ons alone. Only instance attributes read them: the class attribute
+//! (`bpy.types.Scene.cycles`), completions, `id_data` owners and the `bpy.ops` operators of
+//! another add-on still see the file's own add-on only, and a registration the other add-on makes on
+//! a branch is not reported as `blender-assumed-registration`.
 
 use ruff_python_ast::name::Name;
 use ty_blender::{DEFAULT_ADDONS, STARTUP_PACKAGES, module_addon};
@@ -41,6 +48,7 @@ pub(super) enum ExternalSource {
 pub(super) struct ExternalAddon<'db> {
     /// The module Blender imports it as.
     pub(super) name: Name,
+    // An interned id: its data lives in salsa's own tables, so it adds nothing to measure here.
     #[get_size(ignore)]
     pub(super) key: AddonInProgram<'db>,
     pub(super) source: ExternalSource,
@@ -109,9 +117,15 @@ fn resolve_addon<'db>(
     Some(AddonInProgram::new(db, addon, file.program(db)))
 }
 
-/// The registration of `name` that another add-on gives instances of `class` in `file`: the last
-/// one on the first class in the method resolution order that has one, from the first add-on of
-/// [`external_addons`] that registers it there.
+/// Whether `name` in a manifest's `uses` names a module `file` can import at runtime.
+pub(super) fn resolves_addon<'db>(db: &'db dyn Db, file: ProgramFile<'db>, name: &str) -> bool {
+    resolve_addon(db, file, name).is_some()
+}
+
+/// The registration of `name` that another add-on gives instances of `class` in `file`: from the
+/// first add-on of [`external_addons`] that registers it on a class in the method resolution order
+/// of `class`, its last one on the first such class. A declared add-on's registration on a base
+/// (`ID`) so wins over a default add-on's on the class itself (`Scene`).
 pub(super) fn external_registration<'db>(
     db: &'db dyn Db,
     file: ProgramFile<'db>,
@@ -122,18 +136,21 @@ pub(super) fn external_registration<'db>(
     if addons.is_empty() {
         return None;
     }
-    class.iter_mro(db, None).find_map(|base| {
-        let ClassBase::Class(base) = base else {
-            return None;
-        };
-        let base = base.class_literal(db).as_static()?;
-        addons.iter().find_map(|addon| {
-            addon_index(db, addon.key)
-                .registered_properties
+    let bases: Vec<StaticClassLiteral<'db>> = class
+        .iter_mro(db, None)
+        .filter_map(|base| match base {
+            ClassBase::Class(base) => base.class_literal(db).as_static(),
+            _ => None,
+        })
+        .collect();
+    addons.iter().find_map(|addon| {
+        let registered = &addon_index(db, addon.key).registered_properties;
+        bases.iter().find_map(|base| {
+            registered
                 .iter()
                 .rev()
                 .find(|property| {
-                    property.accepted && property.owner == base && property.name == name
+                    property.accepted && property.owner == *base && property.name == name
                 })
                 .map(|property| (property, addon))
         })
