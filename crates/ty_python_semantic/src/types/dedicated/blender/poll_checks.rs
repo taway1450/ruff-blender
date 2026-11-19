@@ -61,8 +61,8 @@ use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_text_size::{Ranged, TextRange};
 use rustc_hash::FxHashMap;
 use ty_blender::{
-    ModeFacts, bl_context_facts, checked_by_call, gated_by_poll, implied_paths, is_callback_name,
-    mode_facts, python_base_names, same_pointers,
+    ModeFacts, bl_context_facts, checked_by_call, folder_source_files, gated_by_poll,
+    implied_paths, is_callback_name, mode_facts, python_base_names, same_pointers,
 };
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::scope::{NodeWithScopeRef, ScopeId};
@@ -76,7 +76,7 @@ use crate::{Db, ProgramEnvironment};
 
 use super::classes::{class_string, mro_classes, own_binding};
 use super::context_members::{enclosing_function, is_popover, popover_sites_of, space_subclass};
-use super::follow::{Resolved, is_classmethod, resolve_expression};
+use super::follow::{Resolved, is_classmethod, module_by_name, resolve_expression};
 use super::index::{addon_in_program, file_facts};
 use super::lints::{
     BLENDER_NARROWED_BY_BL_CONTEXT, BLENDER_NARROWED_BY_POLL, BLENDER_NARROWED_BY_POPOVER,
@@ -156,10 +156,35 @@ impl Facts {
         )
     }
 
+    /// Records that `path` is not `None`. An empty path is the root itself: the context, which
+    /// is never `None`, or the member a helper is passed ([`Facts::under`]).
     fn not_none(&mut self, path: Option<Vec<Name>>) {
-        if let Some(path) = path.filter(|path| !path.is_empty()) {
+        if let Some(path) = path {
             self.add(Fact::NotNone(path.into_boxed_slice()));
         }
+    }
+
+    /// The facts with every path put under `prefix`: what a helper passed `context.object` checks
+    /// of its parameter holds for `context.object`.
+    fn under(self, prefix: &[Name]) -> Facts {
+        let prefixed = |path: &Path| prefix.iter().chain(path.iter()).cloned().collect::<Path>();
+        Facts(
+            self.0
+                .into_iter()
+                .map(|fact| match fact {
+                    Fact::NotNone(path) => Fact::NotNone(prefixed(&path)),
+                    Fact::Tag {
+                        path,
+                        attribute,
+                        values,
+                    } => Fact::Tag {
+                        path: prefixed(&path),
+                        attribute,
+                        values,
+                    },
+                })
+                .collect(),
+        )
     }
 }
 
@@ -457,7 +482,8 @@ fn parent_poll_facts<'db>(
 
 /// The parent panel of the panel `class`: the panel whose idname (its `bl_idname`, or else its
 /// class name) is the `bl_parent_id`, looked up among the classes of the same file, then of the
-/// same add-on. `None` without a `bl_parent_id`, or for one of Blender's own panels.
+/// same add-on, then of Blender's `bl_ui` package when its source is there (a Cycles sub-panel of
+/// `OBJECT_PT_shading`). `None` without a `bl_parent_id`, or for a parent not found.
 fn parent_panel<'db>(
     db: &'db dyn Db,
     class: StaticClassLiteral<'db>,
@@ -478,6 +504,14 @@ fn parent_panel<'db>(
     };
     find(file)
         .or_else(|| addon_in_program(db, file).and_then(|addon| addon.files(db).find_map(find)))
+        .or_else(|| {
+            let package = module_by_name(db, file, "bl_ui")?;
+            let folder = package.file(db).path(db).as_system_path()?.parent()?;
+            folder_source_files(db, folder)
+                .iter()
+                .map(|source| ProgramFile::new(db, *source, file.program(db)))
+                .find_map(find)
+        })
 }
 
 /// What the `bl_context` of the panel `class` gives where Blender enforces it
@@ -546,7 +580,15 @@ fn class_attribute_owner<'db>(
 )]
 fn poll_facts<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> Option<(Box<[Fact]>, Name)> {
     let (definition, defining) = method_on(db, class, "poll")?;
-    let facts = function_facts(db, definition, Owner::Class { class, defining }, 1, None, 0)?;
+    let facts = function_facts(
+        db,
+        definition,
+        Owner::Class { class, defining },
+        1,
+        None,
+        0,
+        false,
+    )?;
     Some((facts.0.into_boxed_slice(), defining.name(db).clone()))
 }
 
@@ -671,6 +713,7 @@ fn recorded_flow<'db>(
         db,
         scope: function,
         context,
+        member: false,
         first: positional.first().copied(),
         aliases: &aliases,
         owner: Owner::Class {
@@ -766,7 +809,8 @@ fn known_before(flow: &[(TextRange, Box<[Fact]>)], range: TextRange) -> Option<&
 }
 
 /// The facts that hold whenever the function `definition` returns a true value, its context being
-/// the parameter at `position` (or the one named `keyword`). `None` when it never returns one.
+/// the parameter at `position` (or the one named `keyword`), a member of the context when `member`
+/// is set. `None` when it never returns one.
 fn function_facts<'db>(
     db: &'db dyn Db,
     definition: Definition<'db>,
@@ -774,6 +818,7 @@ fn function_facts<'db>(
     position: usize,
     keyword: Option<&Name>,
     depth: usize,
+    member: bool,
 ) -> Option<Facts> {
     let DefinitionKind::Function(function) = definition.kind(db) else {
         return None;
@@ -803,6 +848,7 @@ fn function_facts<'db>(
         db,
         scope,
         context,
+        member,
         first: positional.first().copied(),
         aliases: &aliases,
         owner,
@@ -828,6 +874,10 @@ struct PollReader<'db, 'a> {
     /// The function's body scope, where its names are resolved.
     scope: ScopeId<'db>,
     context: &'a Name,
+    /// Whether `context` is a member of the context a helper was passed
+    /// (`has_geometry_visibility(context.object)`), not the context itself: its `mode` is then
+    /// the member's own attribute.
+    member: bool,
     /// The first parameter, `cls` or `self` in a method.
     first: Option<&'a Name>,
     aliases: &'a FxHashMap<Name, Alias>,
@@ -1130,7 +1180,7 @@ impl<'db> PollReader<'db, '_> {
         let Some(path) = self.path(value) else {
             return facts;
         };
-        if path.is_empty() {
+        if path.is_empty() && !self.member {
             if attr.id == "mode" {
                 facts.extend(mode_facts_of(&values));
             }
@@ -1227,37 +1277,53 @@ impl<'db> PollReader<'db, '_> {
 
     /// The facts of a helper `call` that is passed the context: a function (`helper(context)`,
     /// `module.helper(context)`), a method of the class (`cls._poll(context)`), of a named class
-    /// (`Base.poll(context)`) or of the next class (`super().poll(context)`).
+    /// (`Base.poll(context)`) or of the next class (`super().poll(context)`). A helper passed a
+    /// member of the context instead (`has_geometry_visibility(context.object)`) checks that
+    /// member: what it checks of its parameter holds for the member.
     fn call_facts(&self, call: &ast::ExprCall) -> Option<Facts> {
         if self.depth >= MAX_HELPER_DEPTH {
             return None;
         }
-        let is_context =
-            |expression: &Expr| self.path(expression).is_some_and(|path| path.is_empty());
-        let position = call.arguments.args.iter().position(is_context);
-        let keyword = call
-            .arguments
-            .keywords
-            .iter()
-            .find(|keyword| is_context(&keyword.value))
-            .and_then(|keyword| keyword.arg.as_ref())
-            .map(|keyword| keyword.id.clone());
-        if position.is_none() && keyword.is_none() {
-            return None;
-        }
+        let root = |is_root: &dyn Fn(&[Name]) -> bool| {
+            let matches =
+                |expression: &Expr| self.path(expression).is_some_and(|path| is_root(&path));
+            let position = call.arguments.args.iter().position(matches);
+            let keyword = call
+                .arguments
+                .keywords
+                .iter()
+                .find(|keyword| matches(&keyword.value))
+                .and_then(|keyword| keyword.arg.as_ref());
+            match (position, keyword) {
+                (Some(position), _) => Some((
+                    Some(position),
+                    None,
+                    self.path(&call.arguments.args[position])?,
+                )),
+                (None, Some(keyword)) => {
+                    let value = call.arguments.find_keyword(keyword.as_str())?;
+                    Some((None, Some(keyword.id.clone()), self.path(&value.value)?))
+                }
+                (None, None) => None,
+            }
+        };
+        let (position, keyword, prefix) =
+            root(&|path| path.is_empty()).or_else(|| root(&|path| !path.is_empty()))?;
         let (definition, owner, bound) = self.callee(&call.func)?;
         let (position, keyword) = match position {
             Some(position) => (position + usize::from(bound), None),
             None => (0, keyword.as_ref()),
         };
-        function_facts(
+        let facts = function_facts(
             self.db,
             definition,
             owner,
             position,
             keyword,
             self.depth + 1,
-        )
+            self.member || !prefix.is_empty(),
+        )?;
+        Some(facts.under(&prefix))
     }
 
     /// The function `callee` calls, the class it is read for, and whether the call binds its first

@@ -14,7 +14,7 @@ use ruff_db::parsed::parsed_module;
 use ruff_python_ast::helpers::any_over_expr;
 use ruff_python_ast::name::Name;
 use ruff_python_ast::{self as ast, Expr};
-use ty_python_core::definition::DefinitionKind;
+use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::scope::ScopeId;
 
 use crate::types::definition_resolution::{ImportAliasResolution, definitions_for_name};
@@ -64,7 +64,7 @@ impl PropertyKind {
 }
 
 /// Whether `callee` is one of the ten `bpy.props` functions that declare a property.
-pub(super) fn is_property_function<'db>(db: &'db dyn Db, callee: Type<'db>) -> bool {
+pub(crate) fn is_property_function<'db>(db: &'db dyn Db, callee: Type<'db>) -> bool {
     PropertyKind::of_callee(db, callee).is_some()
 }
 
@@ -628,39 +628,78 @@ fn string_set(expr: &Expr) -> Option<Box<[Name]>> {
 }
 
 /// The enum items `items` gives: static items (a list or tuple of 3- to 5-tuples whose first element
-/// is a string literal, with `None` separators) written inline or through one constant of the same
-/// module, or the name of a function of the same module.
+/// is a string literal, with `None` separators) written inline, through constants of the same
+/// module, or joined with `+` (`AXIS_MODES + (("NONE", "", ""),)`), or the name of a function of the
+/// same module.
 ///
 /// An imported constant is not followed, so that a file's inference never depends on another
 /// file's syntax tree; its items give `str`.
 fn enum_items<'db>(db: &'db dyn Db, scope: ScopeId<'db>, items: &Expr) -> Option<EnumItems> {
-    if let Expr::Name(name) = items {
-        let definitions = definitions_for_name(
-            db,
-            scope,
-            name.id.as_str(),
-            ImportAliasResolution::PreserveAliases,
-        );
-        let [resolved] = definitions.as_slice() else {
-            return None;
-        };
-        let definition = resolved.definition()?;
-        if definition.file(db) != scope.file(db) {
-            return None;
-        }
-        let module = parsed_module(db, definition.python_file(db)).load(db);
-        let value = match definition.kind(db) {
-            DefinitionKind::Assignment(assignment) => assignment.value(&module),
-            DefinitionKind::AnnotatedAssignment(assignment) => assignment.value(&module)?,
-            DefinitionKind::Function(_) => return Some(EnumItems::Function),
-            _ => return None,
-        };
-        return literal_enum_items(value).map(EnumItems::Static);
+    if let Expr::Name(name) = items
+        && let Some(definition) = same_file_definition(db, scope, name)
+        && matches!(definition.kind(db), DefinitionKind::Function(_))
+    {
+        return Some(EnumItems::Function);
     }
-    literal_enum_items(items).map(EnumItems::Static)
+    static_items(db, scope, items, 0).map(EnumItems::Static)
 }
 
-fn literal_enum_items(items: &Expr) -> Option<StaticItems> {
+/// The static items of `items`, whose first entry is entry `offset` of the whole sequence: that
+/// is the number of an item given as a 3-tuple.
+fn static_items<'db>(
+    db: &'db dyn Db,
+    scope: ScopeId<'db>,
+    items: &Expr,
+    offset: usize,
+) -> Option<StaticItems> {
+    match items {
+        Expr::Name(name) => {
+            let definition = same_file_definition(db, scope, name)?;
+            let module = parsed_module(db, definition.python_file(db)).load(db);
+            let value = match definition.kind(db) {
+                DefinitionKind::Assignment(assignment) => assignment.value(&module),
+                DefinitionKind::AnnotatedAssignment(assignment) => assignment.value(&module)?,
+                _ => return None,
+            };
+            static_items(db, definition.scope(db), value, offset)
+        }
+        Expr::BinOp(ast::ExprBinOp {
+            left,
+            op: ast::Operator::Add,
+            right,
+            ..
+        }) => {
+            let left = static_items(db, scope, left, offset)?;
+            let right = static_items(db, scope, right, offset + left.length)?;
+            Some(StaticItems {
+                items: left.items.iter().chain(&right.items).cloned().collect(),
+                length: left.length + right.length,
+            })
+        }
+        _ => literal_enum_items(items, offset),
+    }
+}
+
+/// The one definition of `name` in `scope`, when it is in the same file.
+fn same_file_definition<'db>(
+    db: &'db dyn Db,
+    scope: ScopeId<'db>,
+    name: &ast::ExprName,
+) -> Option<Definition<'db>> {
+    let definitions = definitions_for_name(
+        db,
+        scope,
+        name.id.as_str(),
+        ImportAliasResolution::PreserveAliases,
+    );
+    let [resolved] = definitions.as_slice() else {
+        return None;
+    };
+    let definition = resolved.definition()?;
+    (definition.file(db) == scope.file(db)).then_some(definition)
+}
+
+fn literal_enum_items(items: &Expr, offset: usize) -> Option<StaticItems> {
     let elements = match items {
         Expr::List(list) => &list.elts,
         Expr::Tuple(tuple) => &tuple.elts,
@@ -674,7 +713,7 @@ fn literal_enum_items(items: &Expr) -> Option<StaticItems> {
             let elements = &element.as_tuple_expr()?.elts;
             let identifier = elements.first()?.as_string_literal_expr()?;
             let number = match elements.len() {
-                3 => i64::try_from(index).ok(),
+                3 => i64::try_from(offset + index).ok(),
                 4 => int_literal(&elements[3]),
                 5 => int_literal(&elements[4]),
                 _ => return None,

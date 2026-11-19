@@ -114,21 +114,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
         let Some(owner) = nearest_enclosing_class(db, self.index, scope) else {
             return callee;
         };
-        // `poll`'s candidate is an instance of the `type=` class, which has to be known before the
-        // call is inferred, so `type` (a keyword, or the first positional argument) is read only
-        // when there is a `poll=`. A speculative builder infers it and is then discarded,
-        // diagnostics included; the call infers the argument again as usual.
-        let target = call
-            .arguments
-            .find_keyword("poll")
-            .and(call.arguments.find_argument_value("type", 0))
-            .and_then(|target| {
-                let mut speculative = self.speculate();
-                match speculative.infer_expression(target, TypeContext::default()) {
-                    Type::ClassLiteral(class) => class.as_static(),
-                    _ => None,
-                }
-            });
+        let target = self.blender_poll_target(call);
         blender::declaration_callee(db, self.program_environment(), callee, owner, target)
     }
 }

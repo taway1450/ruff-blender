@@ -37,13 +37,14 @@ use crate::types::{
 };
 use crate::{Db, ProgramEnvironment};
 
+use super::classes::registered_class;
 use super::evaluate::{PropertyValue, property_value};
 use super::external::{ExternalAddon, ExternalSource, external_registration};
 use super::follow::{Resolved, resolve_expression};
 use super::index::{RegisteredProperty, addon_in_program, file_facts, registered_properties};
 use super::mixin_self::mixin_users;
 use super::properties::PropertyDeclaration;
-use super::symbols::{blender_function_name, bpy_types_bases};
+use super::symbols::{blender_function_name, blender_module_name, bpy_types_bases};
 use super::{
     assumptions, context_assumptions, context_members, id_data, operator_properties, operators,
     pointer_aliases, poll_checks, preferences, subclass_members, tag_locals, tag_writes,
@@ -621,6 +622,16 @@ pub(crate) fn on_load<'db>(
         )
     {
         return Place::bound(ty).into();
+    }
+    // `bpy.types.POSELIB_OT_restore_previous_action`: a class the add-on registers.
+    if let Type::ModuleLiteral(module) = receiver
+        && place.is_undefined()
+        && let Some(module_file) = module.module(db).file(db)
+        && blender_module_name(db, ProgramFile::new(db, module_file, file.program(db)))
+            == Some("bpy.types")
+        && let Some(class) = registered_class(db, file, name)
+    {
+        return Place::bound(Type::from(class)).into();
     }
     // `layout.operator("my_addon.run").count`: the operator's properties, also where the stub's
     // `__getattr__` accepts any name.

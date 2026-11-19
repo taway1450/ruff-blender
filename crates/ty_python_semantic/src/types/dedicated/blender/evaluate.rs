@@ -48,7 +48,6 @@ use crate::types::{
 use crate::{Db, ProgramEnvironment};
 
 use super::addon::is_first_party;
-use super::addon_of_file;
 use super::follow::{Resolved, resolve_expression};
 use super::properties::{
     CallSite, DeclarationTemplate, Known, Open, OptionReader, ParameterRef, PropertyDeclaration,
@@ -530,8 +529,9 @@ pub(crate) fn annotation_value_type<'db>(
 
 /// Whether the annotation `x: callee(...)` of a member of `class` in `file`, which the evaluator
 /// cannot read, is still a property of any type: its function is dynamic
-/// (`getattr(bpy.props, name)()`), the class derives from a `bpy.types` class, and the file belongs
-/// to an add-on, where Blender would evaluate it. A class with a dynamic base
+/// (`getattr(bpy.props, name)()`), the class derives from a `bpy.types` class, and the file is
+/// first-party code that Blender runs: an add-on, a startup module or a script such as a test. A
+/// class with a dynamic base
 /// (`class Local(bpy.types.PropertyGroup)` where `bpy` is a parameter) keeps ty's error.
 ///
 /// The callee decides rather than the call's own type, so that the member query, which only sees
@@ -542,9 +542,7 @@ pub(crate) fn is_opaque_call<'db>(
     class: StaticClassLiteral<'db>,
     callee: Type<'db>,
 ) -> bool {
-    callee.is_dynamic()
-        && bpy_types_bases(db, class).next().is_some()
-        && addon_of_file(db, file).is_some()
+    callee.is_dynamic() && bpy_types_bases(db, class).next().is_some() && is_first_party(db, file)
 }
 
 /// The value type of the annotation `reference` (a name, dotted name or subscript, in `scope`),

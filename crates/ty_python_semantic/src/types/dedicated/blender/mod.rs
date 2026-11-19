@@ -62,6 +62,7 @@ mod classes;
 mod constructors;
 mod context_assumptions;
 mod context_members;
+mod drivers;
 mod evaluate;
 mod external;
 mod follow;
@@ -95,7 +96,7 @@ mod walk;
 
 pub(crate) use addon::addon_of_file;
 pub(crate) use bl_rna::rna_property_type;
-pub(crate) use callbacks::declaration_callee;
+pub(crate) use callbacks::{assigned_property_owner, declaration_callee};
 pub use categories::BlenderRuleCategory;
 pub(crate) use class_rules::has_invalid_bases;
 pub(crate) use evaluate::{
@@ -118,7 +119,7 @@ pub(crate) use operator_properties::{idname_completions, on_call};
 pub(crate) use overrides::{
     apply_override_types, override_contract, override_parameter_type, override_return_type,
 };
-pub(crate) use properties::may_be_property_call;
+pub(crate) use properties::{is_property_function, may_be_property_call};
 pub(crate) use reload_guard::reload_guard_type;
 pub(crate) use symbols::hides_star_import;
 pub(crate) use test_cases::is_test_case_instance;

@@ -7,7 +7,7 @@ use ruff_text_size::Ranged;
 use rustc_hash::FxHashSet;
 use ty_blender::OperatorIdname;
 use ty_python_core::definition::{Definition, DefinitionKind};
-use ty_python_core::{place_table, use_def_map};
+use ty_python_core::{ProgramFile, place_table, use_def_map};
 
 use crate::Db;
 use crate::types::class_base::ClassBase;
@@ -15,7 +15,8 @@ use crate::types::{
     LiteralValueType, StaticClassLiteral, Type, binding_type, definition_expression_type_in_scope,
 };
 
-use super::index::{AddonInProgram, addon_index, file_facts};
+use super::index::{AddonInProgram, addon_in_program, addon_index, file_facts};
+use super::operators::addon_operators;
 use super::symbols::{bpy_types_bases, is_bpy_types_class};
 use super::walk::Site;
 
@@ -43,6 +44,33 @@ pub(super) fn maybe_registered_classes<'db>(
         }
     }
     classes
+}
+
+/// The class of `file`'s add-on that the add-on reads back as `bpy.types.<name>`. Blender adds
+/// every registered class to `bpy.types` under its RNA identifier: for an operator, its idname in
+/// the `CATEGORY_OT_name` form, whatever the class is called; for any other class, its class name.
+///
+/// ```python
+/// # `bl_idname = "poselib.restore_previous_action"`
+/// if bpy.types.POSELIB_OT_restore_previous_action.poll(context):
+/// ```
+///
+/// A panel, menu or list whose `bl_idname` differs from its class name is not found under it.
+pub(super) fn registered_class<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    name: &str,
+) -> Option<StaticClassLiteral<'db>> {
+    let key = addon_in_program(db, file)?;
+    if name.contains("_OT_") {
+        let idname = OperatorIdname::from_lookup(name)?;
+        return addon_operators(db, key)
+            .get(&idname.category, &idname.name)
+            .map(|operator| operator.class);
+    }
+    maybe_registered_classes(db, key)
+        .into_iter()
+        .find(|class| class.name(db) == name)
 }
 
 /// The classes of `classes` that another of them derives from. Blender never needs them
