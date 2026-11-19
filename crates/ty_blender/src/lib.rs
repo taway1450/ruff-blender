@@ -32,7 +32,7 @@ pub use callbacks::{
     callbacks_of, gated_by_poll, is_callback_name, is_callback_root, problem, python_base_names,
 };
 pub use context::{
-    ContextGuarantee, added_object_type, adds_object, assumes_editor, checked_by_call,
+    ContextGuarantee, TypeArgument, added_object_type, adds_object, assumes_editor, checked_by_call,
     context_guarantee, draws_in_window, is_added_object_member, is_assumed_context_member,
     is_editor_member, is_preset_path, is_tool_draw_settings, menu_space_type, preset_member_struct,
     preset_set_pointer, runs_in_editor,
