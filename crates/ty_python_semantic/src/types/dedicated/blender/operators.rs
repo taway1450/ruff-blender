@@ -19,7 +19,7 @@
 
 use std::fmt::Write as _;
 
-use ruff_db::parsed::ParsedModuleRef;
+use ruff_db::parsed::{ParsedModuleRef, parsed_module};
 use ruff_python_ast::name::Name;
 use ruff_python_ast::visitor::source_order::{SourceOrderVisitor, walk_expr};
 use ruff_python_ast::{self as ast, Expr};
@@ -35,13 +35,15 @@ use crate::types::signatures::CallableSignature;
 use crate::types::typed_dict::{TypedDictFieldBuilder, TypedDictSchema};
 use crate::types::{
     CallableType, ClassBase, KnownClass, Parameter, Parameters, Signature, StaticClassLiteral,
-    Type, TypedDictType, UnionType,
+    Type, TypedDictType, UnionType, binding_type,
 };
 use crate::{Db, ProgramEnvironment};
 
+use super::addon::is_first_party;
 use super::assumptions::is_conditional_class;
 use super::classes::{derives_from, maybe_registered_classes, operator_idname};
 use super::evaluate::PropertyValue;
+use super::follow::module_by_name;
 use super::index::{AddonInProgram, addon_in_program, addon_index};
 use super::member::{annotated_property, decorator_properties};
 use super::operator_properties::builtin_operator;
@@ -166,9 +168,82 @@ pub(super) fn addon_operators<'db>(
     }
 }
 
-/// The operators of the add-on `file` belongs to.
-fn operators_of<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Option<&'db AddonOperators<'db>> {
-    Some(addon_operators(db, addon_in_program(db, file)?))
+/// The operators of the add-on `file` belongs to or, for a first-party file in no add-on (a doc
+/// example, a template, a test), its own ([`script_operators`]).
+pub(super) fn operators_of<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+) -> Option<&'db AddonOperators<'db>> {
+    match addon_in_program(db, file) {
+        Some(key) => Some(addon_operators(db, key)),
+        None if is_first_party(db, file) => Some(script_operators(db, file)),
+        None => None,
+    }
+}
+
+/// The operators of `file`, a first-party file in no add-on: every operator class it defines with
+/// an idname, at any scope (a test defines its operators in its test methods), since such a file
+/// registers its own operators and calls them (`bpy.ops.<category>.<name>()`,
+/// `layout.operator("<category>.<name>")`), as an add-on does. A macro's steps are not followed,
+/// and another such file's operators stay unknown to it.
+#[salsa::tracked(
+    returns(ref),
+    cycle_initial=|_, _, _| AddonOperators::default(),
+    heap_size=ruff_memory_usage::heap_size
+)]
+fn script_operators<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> AddonOperators<'db> {
+    #[derive(Default)]
+    struct ClassFinder<'m> {
+        classes: Vec<&'m ast::StmtClassDef>,
+    }
+    impl<'m> SourceOrderVisitor<'m> for ClassFinder<'m> {
+        fn visit_stmt(&mut self, statement: &'m ast::Stmt) {
+            if let ast::Stmt::ClassDef(class) = statement {
+                self.classes.push(class);
+            }
+            ruff_python_ast::visitor::source_order::walk_stmt(self, statement);
+        }
+    }
+    // Without `bpy.types` no class is an operator; the check keeps every other project from
+    // inferring the classes of its scripts.
+    if module_by_name(db, file, "bpy.types").is_none() {
+        return AddonOperators::default();
+    }
+    let module = parsed_module(db, file.python_file(db)).load(db);
+    let mut finder = ClassFinder::default();
+    finder.visit_body(module.suite());
+    let index = semantic_index(db, file);
+    let mut operators: Vec<AddonOperator<'db>> = Vec::new();
+    for statement in finder.classes {
+        let Some(definition) = index.try_definition(statement) else {
+            continue;
+        };
+        let Type::ClassLiteral(class) = binding_type(db, definition) else {
+            continue;
+        };
+        let Some(class) = class
+            .as_static()
+            .filter(|class| is_operator_class(db, *class))
+        else {
+            continue;
+        };
+        let Some(idname) = operator_idname(db, class) else {
+            continue;
+        };
+        let category = Name::new(&idname.category);
+        let name = Name::new(&idname.name);
+        operators.retain(|operator| operator.category != category || operator.name != name);
+        operators.push(AddonOperator {
+            category,
+            name,
+            class,
+            steps: Box::default(),
+        });
+    }
+    AddonOperators {
+        operators: operators.into_boxed_slice(),
+        complete: false,
+    }
 }
 
 /// The operator class of the add-on of `file` that `attribute`, `bpy.ops.<category>.<name>` (or
