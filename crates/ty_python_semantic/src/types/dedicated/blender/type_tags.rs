@@ -117,8 +117,10 @@ pub(crate) fn narrow_type_tag<'db>(
 }
 
 /// The add-on's registered class whose `bl_idname` is `value`, when `value_ty` (a `Node`, a
-/// `NodeSocket`, ...) is a base of it: every element of an intersection, so a `ShaderNode` does not
-/// narrow to an add-on's plain `Node`.
+/// `NodeSocket`, ...) is a base of it: `node.bl_idname == "MyShaderNode"` narrows a `Node` but
+/// leaves a `ShaderNode` when the add-on's class is a plain `Node`. `None` when no registered class
+/// or several have that `bl_idname` (a subclass that inherits it replaces its base in Blender, but
+/// which one the add-on registers last is not known here).
 fn addon_class_by_idname<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
@@ -127,9 +129,13 @@ fn addon_class_by_idname<'db>(
     value: &Name,
 ) -> Option<Type<'db>> {
     let key = addon_in_program(db, file)?;
-    let class = maybe_registered_classes(db, key)
+    let mut classes = maybe_registered_classes(db, key)
         .into_iter()
-        .find(|class| class_string(db, *class, "bl_idname").as_deref() == Some(value.as_str()))?;
+        .filter(|class| class_string(db, *class, "bl_idname").as_deref() == Some(value.as_str()));
+    let class = classes.next()?;
+    if classes.next().is_some() {
+        return None;
+    }
     let class_ty = instance(db, env, class);
     class_ty
         .is_subtype_of(db, env, value_ty)

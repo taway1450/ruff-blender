@@ -36,7 +36,7 @@ use ruff_python_ast as ast;
 use ruff_python_ast::helpers::ReturnStatementVisitor;
 use ruff_python_ast::statement_visitor::StatementVisitor;
 use ruff_text_size::{Ranged, TextRange};
-use ty_blender::callbacks_of;
+use ty_blender::{callbacks_of, idname_constructor};
 use ty_python_core::ProgramFile;
 use ty_python_core::definition::{Definition, DefinitionKind};
 
@@ -54,11 +54,12 @@ use super::lints::{
     BLENDER_IMPRECISE_OPERATOR_RETURN,
 };
 use super::member::without_none;
+use super::operator_properties::receiver_class;
 use super::operators::is_operator_call;
 use super::overrides::{
     callback_root, defining_class, is_string_literals, override_types, parent_callback_types,
 };
-use super::symbols::{is_blender_stub_file, is_bpy_types_class};
+use super::symbols::{bpy_types_bases, is_blender_stub_file, is_bpy_types_class};
 
 /// The item type of `ty` when it is an enum set: a `set`, `frozenset` or abstract `Set` of string
 /// literals.
@@ -445,7 +446,7 @@ pub(super) fn check_enum_arguments<'db>(
                 let Some(value) = expression_type(argument) else {
                     continue;
                 };
-                if is_addon_idname(db, argument, expression_type) {
+                if is_addon_idname(db, env, callable.signature_type, argument, expression_type) {
                     continue;
                 }
                 let Some(expected) = matched.parameters.iter().find_map(|parameter| {
@@ -467,19 +468,32 @@ pub(super) fn check_enum_arguments<'db>(
     }
 }
 
-/// Whether `argument` is the `bl_idname` of one of the add-on's classes (`MyTree.bl_idname`): the
-/// name of a type the add-on registers. Blender's enums of type names (the `type` of
-/// `bpy.data.node_groups.new`) list the registered types too, which the stubs, written from
-/// Blender's own, cannot.
+/// Whether `argument` is the `bl_idname` of one of the add-on's classes (`MyTree.bl_idname`)
+/// passed to a constructor that takes a type's idname (`bpy.data.node_groups.new`,
+/// [`ty_blender::idname_constructor`]): the name of a type the add-on registers. Blender's enum
+/// of type names lists the registered types too, which the stubs, written from Blender's own,
+/// cannot.
 fn is_addon_idname<'db>(
     db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    callable: Type<'db>,
     argument: &ast::Expr,
     expression_type: &dyn Fn(&ast::Expr) -> Option<Type<'db>>,
 ) -> bool {
     let ast::Expr::Attribute(attribute) = argument else {
         return false;
     };
-    attribute.attr.as_str() == "bl_idname"
+    let Type::BoundMethod(method) = callable else {
+        return false;
+    };
+    let is_constructor = method.function(db).is_some_and(|function| {
+        receiver_class(db, env, method.self_instance(db)).is_some_and(|receiver| {
+            bpy_types_bases(db, receiver)
+                .any(|base| idname_constructor(base, function.name(db).as_str()).is_some())
+        })
+    });
+    is_constructor
+        && attribute.attr.as_str() == "bl_idname"
         && matches!(
             expression_type(&attribute.value),
             Some(Type::ClassLiteral(class))
