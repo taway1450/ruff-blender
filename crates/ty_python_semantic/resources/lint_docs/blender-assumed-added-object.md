@@ -5,8 +5,11 @@ call of an operator that adds an object (`bpy.ops.object.add()` or any `bpy.ops.
 such as `bpy.ops.mesh.primitive_cube_add()`) earlier in the same function, or earlier in a
 module-level script.
 
-The read is typed without `None`. A read that the code only tests for truth or `None` is not
-reported.
+The read is typed without `None`, and as the Type tag view of the object the operator adds where
+the call shows its type and the stubs have the view: `_Object_MESH` after
+`bpy.ops.mesh.primitive_cube_add()`, `_Object_LATTICE` after `bpy.ops.object.add(type='LATTICE')`,
+so its `data` is a `Mesh` or a `Lattice`. A read that the code only tests for truth or `None` is
+not reported.
 
 The rule belongs to the category `blender-assumptions`.
 

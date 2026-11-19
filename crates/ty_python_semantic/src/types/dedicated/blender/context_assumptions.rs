@@ -3,7 +3,8 @@
 //!
 //! - `blender-assumed-added-object`: `context.object` / `active_object` after a
 //!   `bpy.ops.<category>.*_add()` call earlier in the same function or module-level script
-//!   ([`ty_blender::adds_object`]);
+//!   ([`ty_blender::adds_object`]), read as the Type tag view of the object the operator adds
+//!   (`_Object_MESH` after `mesh.primitive_cube_add()`, [`ty_blender::added_object_type`]);
 //! - `blender-assumed-editor-member`: `area`, `region` and `space_data` in a Panel's, Menu's or
 //!   asset shelf's `poll`, a tool's `draw_settings` and `RenderEngine.view_update` / `view_draw`
 //!   ([`ty_blender::assumes_editor`]);
@@ -11,7 +12,9 @@
 //!   operator, `'INTERNAL'` in its `bl_options`;
 //! - `blender-assumed-preset-context`: any member read at module level in a preset, a file in a
 //!   `presets` folder ([`ty_blender::is_preset_path`]). A preset whose panel shows only for one
-//!   struct reads the member as that struct ([`ty_blender::preset_member_struct`]).
+//!   struct reads the member as that struct ([`ty_blender::preset_member_struct`]), and a pointer
+//!   the panel's poll requires is read as set ([`ty_blender::preset_set_pointer`],
+//!   [`on_preset_pointer_load`]).
 //!
 //! ```python
 //! class MY_OT_show(Operator):
@@ -33,8 +36,9 @@ use ruff_python_ast::visitor::{Visitor, walk_expr, walk_stmt};
 use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_text_size::{Ranged, TextRange};
 use ty_blender::{
-    adds_object, assumes_editor, callback_of, is_added_object_member, is_editor_member,
-    is_preset_path, is_tool_draw_settings, preset_member_struct,
+    added_object_type, adds_object, assumes_editor, callback_of, is_added_object_member,
+    is_editor_member, is_preset_path, is_tool_draw_settings, preset_member_struct,
+    preset_set_pointer,
 };
 use ty_python_core::scope::ScopeId;
 use ty_python_core::{global_scope, semantic_index};
@@ -55,7 +59,7 @@ use super::lints::{
 use super::member::without_none;
 use super::overrides::callback_root;
 use super::poll_checks::{is_tested_read, single_comparison};
-use super::symbols::is_bpy_types_class;
+use super::symbols::{bpy_types_class_name, is_bpy_types_class};
 use super::vector::module_class;
 
 /// The member `attribute` read from `receiver`, where ty found `place`, typed without `None` and
@@ -82,9 +86,14 @@ pub(super) fn on_load<'db>(
     }
     let function = enclosing_function(db, file, attribute);
     let scope = function.unwrap_or_else(|| global_scope(db, file));
-    let (rule, reason) = assumption(db, scope, function.is_some(), attribute)?;
-    // A preset whose panel shows only for one struct reads the member as that struct.
-    let narrowed = if rule.name == BLENDER_ASSUMED_PRESET_CONTEXT.name
+    let (rule, reason, struct_name) = assumption(db, scope, function.is_some(), attribute)?;
+    // The object an operator adds is its Type tag's view; a preset whose panel shows only for one
+    // struct reads the member as that struct.
+    let narrowed = if let Some(struct_name) = struct_name
+        && let Some(class) = module_class(db, env, "bpy.types", &struct_name)
+    {
+        Type::instance(db, env, class.default_specialization(db))
+    } else if rule.name == BLENDER_ASSUMED_PRESET_CONTEXT.name
         && let Some(struct_name) =
             preset_member_struct(file.file(db).path(db).as_str(), attribute.attr.id.as_str())
         && let Some(class) = module_class(db, env, "bpy.types", struct_name)
@@ -106,28 +115,77 @@ pub(super) fn on_load<'db>(
     Some(place.map_type(|_| narrowed))
 }
 
+/// The pointer `attribute` read at module level in a preset from an instance of a `bpy.types`
+/// struct, typed without `None` and reported under `blender-assumed-preset-context` when the panel
+/// that applies the preset shows only with it set: `material.grease_pencil` in a Grease Pencil
+/// material preset. `None` leaves the read as it is.
+pub(super) fn on_preset_pointer_load<'db>(
+    context: &InferContext<'db, '_>,
+    attribute: &ast::ExprAttribute,
+    receiver: Type<'db>,
+    place: PlaceAndQualifiers<'db>,
+) -> Option<PlaceAndQualifiers<'db>> {
+    if !attribute.ctx.is_load() {
+        return None;
+    }
+    let db = context.db();
+    let env = context.program_environment();
+    let file = context.program_file();
+    let Type::NominalInstance(instance) = receiver else {
+        return None;
+    };
+    let class = instance.class(db, env).class_literal(db).as_static()?;
+    let struct_name = bpy_types_class_name(db, class)?;
+    if enclosing_function(db, file, attribute).is_some()
+        || !preset_set_pointer(
+            file.file(db).path(db).as_str(),
+            struct_name,
+            attribute.attr.id.as_str(),
+        )
+    {
+        return None;
+    }
+    let original = place.place.ignore_possibly_undefined()?;
+    let narrowed = without_none(db, original);
+    if narrowed == original {
+        return None;
+    }
+    if !is_tested_read(db, global_scope(db, file), attribute)
+        && let Some(builder) = context.report_lint(&BLENDER_ASSUMED_PRESET_CONTEXT, attribute)
+    {
+        builder.into_diagnostic(format_args!(
+            "`{struct_name}.{}` is taken as `{}`: a preset runs from the panel that applies it, \
+             which shows only when it is set",
+            attribute.attr.id,
+            narrowed.display(db, env),
+        ));
+    }
+    Some(place.map_type(|_| narrowed))
+}
+
 /// The rule that takes the read `attribute` in `scope` (a function when `in_function`, else the
-/// module) as set, and why.
+/// module) as set, why, and the `bpy.types` class it is read as when that is narrower than the
+/// member's type.
 fn assumption<'db>(
     db: &'db dyn Db,
     scope: ScopeId<'db>,
     in_function: bool,
     attribute: &ast::ExprAttribute,
-) -> Option<(&'static LintMetadata, String)> {
+) -> Option<(&'static LintMetadata, String, Option<String>)> {
     let name = attribute.attr.id.as_str();
     if is_added_object_member(name)
-        && let Some(operator) = added_object_calls(db, scope)
+        && let Some(added) = added_object_calls(db, scope)
             .iter()
             .rev()
-            .find(|(call, _)| call.end() <= attribute.start())
-            .map(|(_, operator)| operator)
+            .find(|added| added.call.end() <= attribute.start())
     {
         return Some((
             &BLENDER_ASSUMED_ADDED_OBJECT,
             format!(
-                "`bpy.ops.{operator}()` before it is taken to have added an object and made it \
-                 active"
+                "`bpy.ops.{}()` before it is taken to have added an object and made it active",
+                added.operator
             ),
+            added.tag.as_ref().map(|tag| format!("_Object_{tag}")),
         ));
     }
     if !in_function {
@@ -136,6 +194,7 @@ fn assumption<'db>(
             (
                 &BLENDER_ASSUMED_PRESET_CONTEXT,
                 "a preset runs with the context of the panel or menu that applies it".to_string(),
+                None,
             )
         });
     }
@@ -154,7 +213,7 @@ fn assumption<'db>(
             _ => None,
         };
         if let Some(reason) = reason {
-            return Some((&BLENDER_ASSUMED_EDITOR_MEMBER, reason));
+            return Some((&BLENDER_ASSUMED_EDITOR_MEMBER, reason, None));
         }
     }
     let (class, root) = callback?;
@@ -164,6 +223,7 @@ fn assumption<'db>(
             "the operator's `bl_options` has `'INTERNAL'`, so it is taken to run only from the UI \
              that offers it"
                 .to_string(),
+            None,
         ));
     }
     None
@@ -332,11 +392,21 @@ fn is_internal(db: &dyn Db, class: StaticClassLiteral<'_>) -> bool {
     })
 }
 
+/// A call of an operator that adds an object.
+#[derive(Debug, Clone, PartialEq, Eq, get_size2::GetSize)]
+struct AddedObjectCall {
+    call: TextRange,
+    /// `category.name` of the operator.
+    operator: Name,
+    /// The Type tag of the object it adds, when the call shows it.
+    tag: Option<Name>,
+}
+
 /// The calls of an operator that adds an object (`bpy.ops.mesh.primitive_cube_add(...)`) directly in
-/// the scope `scope`, a function or a module, with the operator's `category.name`; by syntax
-/// alone, in source order, not those in a nested function, class or lambda.
+/// the scope `scope`, a function or a module; by syntax alone, in source order, not those in a
+/// nested function, class or lambda.
 #[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
-fn added_object_calls<'db>(db: &'db dyn Db, scope: ScopeId<'db>) -> Box<[(TextRange, Name)]> {
+fn added_object_calls<'db>(db: &'db dyn Db, scope: ScopeId<'db>) -> Box<[AddedObjectCall]> {
     let file = scope.program_file(db);
     let module = parsed_module(db, file.python_file(db)).load(db);
     let body = match scope.node(db).as_function() {
@@ -350,7 +420,7 @@ fn added_object_calls<'db>(db: &'db dyn Db, scope: ScopeId<'db>) -> Box<[(TextRa
 }
 
 #[derive(Default)]
-struct AddedObjectCalls(Vec<(TextRange, Name)>);
+struct AddedObjectCalls(Vec<AddedObjectCall>);
 
 impl<'a> Visitor<'a> for AddedObjectCalls {
     fn visit_stmt(&mut self, statement: &'a Stmt) {
@@ -364,8 +434,17 @@ impl<'a> Visitor<'a> for AddedObjectCalls {
             Expr::Lambda(_) => {}
             Expr::Call(call) => {
                 walk_expr(self, expression);
-                if let Some(operator) = added_object_operator(&call.func) {
-                    self.0.push((call.range(), operator));
+                if let Some((category, name)) = added_object_operator(&call.func) {
+                    let type_argument = call
+                        .arguments
+                        .find_keyword("type")
+                        .and_then(|keyword| keyword.value.as_string_literal_expr())
+                        .map(|string| string.value.to_str());
+                    self.0.push(AddedObjectCall {
+                        call: call.range(),
+                        operator: Name::new(format!("{category}.{name}")),
+                        tag: added_object_type(category, name, type_argument).map(Name::new_static),
+                    });
                 }
             }
             _ => walk_expr(self, expression),
@@ -373,9 +452,9 @@ impl<'a> Visitor<'a> for AddedObjectCalls {
     }
 }
 
-/// `category.name` when `callee` is `bpy.ops.<category>.<name>` (or `ops.<category>.<name>`) of an
-/// operator that adds an object.
-fn added_object_operator(callee: &Expr) -> Option<Name> {
+/// `(category, name)` when `callee` is `bpy.ops.<category>.<name>` (or `ops.<category>.<name>`) of
+/// an operator that adds an object.
+fn added_object_operator(callee: &Expr) -> Option<(&str, &str)> {
     let Expr::Attribute(ast::ExprAttribute {
         value, attr: name, ..
     }) = callee
@@ -397,5 +476,5 @@ fn added_object_operator(callee: &Expr) -> Option<Name> {
         }
         _ => false,
     };
-    (is_ops && adds_object(name.id.as_str())).then(|| Name::new(format!("{category}.{name}")))
+    (is_ops && adds_object(name.id.as_str())).then(|| (category.id.as_str(), name.id.as_str()))
 }

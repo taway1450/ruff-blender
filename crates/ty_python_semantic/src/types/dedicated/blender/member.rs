@@ -45,7 +45,7 @@ use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
 use super::{
     assumptions, context_assumptions, context_members, id_data, operator_properties, operators,
-    pointer_aliases, poll_checks, preferences, subclass_members, temp_override,
+    pointer_aliases, poll_checks, preferences, subclass_members, tag_writes, temp_override,
 };
 
 /// The property that gives instances of `class` the attribute `name` in `file`.
@@ -555,6 +555,10 @@ pub(crate) fn on_load<'db>(
     {
         return Place::bound(ty).into();
     }
+    // `fluid.domain_settings` after `fluid.fluid_type = 'DOMAIN'`.
+    if let Some(member) = tag_writes::on_load(context, attribute, receiver) {
+        return member;
+    }
     // A Grease Pencil brush's settings, a member passed to `temp_override`.
     if let Some(member) = pointer_aliases::on_load(context, attribute, place) {
         return member;
@@ -572,6 +576,11 @@ pub(crate) fn on_load<'db>(
         return member;
     }
     if let Some(member) = context_assumptions::on_load(context, attribute, receiver, place) {
+        return member;
+    }
+    if let Some(member) =
+        context_assumptions::on_preset_pointer_load(context, attribute, receiver, place)
+    {
         return member;
     }
     if place.place.is_definitely_bound() {
