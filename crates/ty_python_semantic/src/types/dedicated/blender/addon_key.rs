@@ -107,9 +107,9 @@ pub(super) fn expression_key<'db>(
                     addon,
                     path: Vec::new(),
                 },
-                AddonKey::Literal(literal) => AddonKey::Literal(
-                    literal.split('.').next().unwrap_or_default().to_string(),
-                ),
+                AddonKey::Literal(literal) => {
+                    AddonKey::Literal(literal.split('.').next().unwrap_or_default().to_string())
+                }
                 AddonKey::Unknown => AddonKey::Unknown,
             },
             None => AddonKey::Unknown,

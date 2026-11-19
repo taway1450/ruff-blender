@@ -636,10 +636,12 @@ pub(crate) fn override_parameter_type<'db>(
         // `UIList.draw_item`'s and `filter_items`' `data`: the `dataptr` the add-on shows the list
         // with ([`super::list_sources`]).
         if types.list_data_position == Some(position) {
-            return types.positional(position).map(|ty| match defining_class(db, definition) {
-                Some(class) => list_data_type(db, class, ty),
-                None => ty,
-            });
+            return types
+                .positional(position)
+                .map(|ty| match defining_class(db, definition) {
+                    Some(class) => list_data_type(db, class, ty),
+                    None => ty,
+                });
         }
         return types.positional(position);
     }
