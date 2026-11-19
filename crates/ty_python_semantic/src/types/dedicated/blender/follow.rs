@@ -12,7 +12,7 @@ use ty_module_resolver::{ModuleName, file_to_module, resolve_module_confident};
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::place::ScopedPlaceId;
 use ty_python_core::scope::ScopeId;
-use ty_python_core::{ProgramFile, global_scope, place_table, semantic_index};
+use ty_python_core::{ProgramFile, global_scope, place_table, semantic_index, use_def_map};
 
 use crate::types::definition_resolution::{
     self, ImportAliasResolution, ResolvedDefinition, find_symbol_in_scope,
@@ -71,8 +71,9 @@ pub(super) fn registration_argument_type<'db>(
         Some(Resolved::Value(ty)) => ty,
         Some(Resolved::Function(definition)) => binding_type(db, definition),
         Some(Resolved::Module(_) | Resolved::Constant(_)) => Type::unknown(),
-        None => classmethod_class(db, module, scope, argument)
-            .map_or_else(Type::unknown, Type::from),
+        None => {
+            classmethod_class(db, module, scope, argument).map_or_else(Type::unknown, Type::from)
+        }
     }
 }
 
@@ -180,6 +181,11 @@ pub(super) fn module_by_name<'db>(
 }
 
 /// The definitions of `name` read in `scope`: those of the nearest enclosing scope that has any.
+///
+/// A name of an enclosing scope is read when the function runs, after that scope has run: in
+/// `register()`, a module-level name is what the module last bound it to. So only the definitions
+/// that reach the end of the enclosing scope count there, and `class Text(PropertyGroup)` after
+/// `from bpy.types import Text` is the one `Text` in `register()`.
 pub(super) fn nearest_definitions<'db>(
     db: &'db dyn Db,
     scope: ScopeId<'db>,
@@ -187,10 +193,74 @@ pub(super) fn nearest_definitions<'db>(
 ) -> Option<IndexSet<Definition<'db>>> {
     let file = scope.program_file(db);
     let index = semantic_index(db, file);
+    let own_scope = scope.file_scope_id(db);
     index
-        .visible_ancestor_scopes(scope.file_scope_id(db))
-        .map(|(ancestor, _)| find_symbol_in_scope(db, ancestor.to_scope_id(db, file), name))
+        .visible_ancestor_scopes(own_scope)
+        .map(|(ancestor, _)| {
+            let ancestor_scope = ancestor.to_scope_id(db, file);
+            if ancestor == own_scope {
+                find_symbol_in_scope(db, ancestor_scope, name)
+            } else {
+                definitions_at_end(db, ancestor_scope, name)
+            }
+        })
         .find(|definitions| !definitions.is_empty())
+}
+
+/// The definitions of `name` in `scope` that reach its end, or all of them when none of those is
+/// one that [`find_symbol_in_scope`] lists.
+fn definitions_at_end<'db>(
+    db: &'db dyn Db,
+    scope: ScopeId<'db>,
+    name: &str,
+) -> IndexSet<Definition<'db>> {
+    let definitions = find_symbol_in_scope(db, scope, name);
+    let at_end = end_of_scope_definitions(db, scope, name);
+    let reaching: IndexSet<Definition<'db>> = definitions
+        .iter()
+        .copied()
+        .filter(|definition| at_end.contains(definition))
+        .collect();
+    if reaching.is_empty() {
+        definitions
+    } else {
+        reaching
+    }
+}
+
+/// Resolve the module-level name `name` of `file` as a function of the module reads it once the
+/// module has run (`register()`): through the definitions that reach the end of the module.
+pub(super) fn resolve_module_name_at_end<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    name: &str,
+) -> Option<Resolved<'db>> {
+    all_same(
+        definitions_at_end(db, global_scope(db, file), name)
+            .iter()
+            .map(|definition| resolve_binding(db, *definition, name, 0)),
+    )
+}
+
+/// The bindings and declarations of `name` that reach the end of `scope`.
+fn end_of_scope_definitions<'db>(
+    db: &'db dyn Db,
+    scope: ScopeId<'db>,
+    name: &str,
+) -> Vec<Definition<'db>> {
+    let Some(symbol) = place_table(db, scope).symbol_id(name) else {
+        return Vec::new();
+    };
+    let use_def = use_def_map(db, scope);
+    use_def
+        .end_of_scope_symbol_bindings(symbol)
+        .filter_map(|binding| binding.binding.definition())
+        .chain(
+            use_def
+                .end_of_scope_symbol_declarations(symbol)
+                .filter_map(|declaration| declaration.declaration.definition()),
+        )
+        .collect()
 }
 
 /// The value all of `values` agree on, or `None` when there are none or two differ.
