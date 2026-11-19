@@ -82,6 +82,39 @@ fn default_addon_property<'db>(
     (addon.source == ExternalSource::Default).then_some(addon)
 }
 
+/// The default add-on whose registration gives some arm of `receiver` the attribute `name` in
+/// `file`, taken apart as [`instance_value_type`] does: an arm of a union, an element of an
+/// intersection, a bound or constraint of a type variable.
+fn default_addon_of<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    file: ProgramFile<'db>,
+    receiver: Type<'db>,
+    name: &str,
+) -> Option<&'db ExternalAddon<'db>> {
+    let first = |mut arms: &mut dyn Iterator<Item = &Type<'db>>| {
+        Iterator::find_map(&mut arms, |arm| default_addon_of(db, env, file, *arm, name))
+    };
+    match receiver {
+        Type::NominalInstance(instance) => {
+            let class = instance.class(db, env).class_literal(db).as_static()?;
+            default_addon_property(db, file, class, name)
+        }
+        Type::Union(union) => first(&mut union.elements(db).iter()),
+        Type::Intersection(intersection) => first(&mut intersection.positive(db).iter()),
+        Type::TypeVar(typevar) => match typevar.typevar(db).bound_or_constraints(db, env)? {
+            TypeVarBoundOrConstraints::UpperBound(bound) => {
+                default_addon_of(db, env, file, bound, name)
+            }
+            TypeVarBoundOrConstraints::Constraints(constraints) => {
+                first(&mut constraints.elements(db).iter())
+            }
+        },
+        Type::TypeAlias(alias) => default_addon_of(db, env, file, alias.value_type(db), name),
+        _ => None,
+    }
+}
+
 /// The property that the add-on of `file` gives instances of `class` for `name` (see
 /// [`instance_property`]): `Some(None)` when a class decides there is none, `None` when no class
 /// decides.
@@ -568,9 +601,7 @@ pub(crate) fn on_load<'db>(
                 );
             }
             if attribute.ctx.is_load()
-                && let Type::NominalInstance(instance) = receiver
-                && let Some(class) = instance.class(db, env).class_literal(db).as_static()
-                && let Some(addon) = default_addon_property(db, file, class, name)
+                && let Some(addon) = default_addon_of(db, env, file, receiver, name)
             {
                 assumptions::report_default_addon(context, attribute, &addon.name);
             }

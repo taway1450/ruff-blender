@@ -276,11 +276,6 @@ pub(super) fn report_conditional_property<'db>(
     }
 }
 
-/// Reports the read `attribute` of an add-on's preferences (`addons[...].preferences`), which the
-/// checker typed as the add-on's preferences class: under `blender-assumed-preferences` when it
-/// runs while `register()` has not registered the class yet, or `unregister()` has unregistered
-/// it, and else under `blender-assumed-registration` when the class is registered only on a
-/// branch.
 /// Reports a read of a property that the add-on `addon`, which Blender enables by default,
 /// registers.
 pub(super) fn report_default_addon(
@@ -297,6 +292,11 @@ pub(super) fn report_default_addon(
     }
 }
 
+/// Reports the read `attribute` of an add-on's preferences (`addons[...].preferences`), which the
+/// checker typed as the add-on's preferences class: under `blender-assumed-preferences` when it
+/// runs while `register()` has not registered the class yet, or `unregister()` has unregistered
+/// it, and else under `blender-assumed-registration` when the class is registered only on a
+/// branch.
 pub(super) fn report_preferences_read(context: &InferContext, attribute: &ast::ExprAttribute) {
     let db = context.db();
     let Some(key) = addon_in_program(db, context.program_file()) else {
