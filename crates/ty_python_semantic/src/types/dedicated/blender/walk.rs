@@ -49,7 +49,7 @@ use super::classes::mro_classes;
 use super::evaluate::{Evaluator, PropertyValue};
 use super::follow::{
     Resolved, imported_definitions, is_classmethod, module_by_name, registration_argument_type,
-    resolve_expression, resolve_name_in,
+    resolve_expression, resolve_module_name_at_end, resolve_name_in,
 };
 use super::index::{AddonInProgram, RegisteredProperty, accepts_registered_properties};
 use super::symbols::{bpy_types_bases, is_bpy_types_class};
@@ -1510,7 +1510,7 @@ fn module_name_value<'db>(
     range: TextRange,
 ) -> Val<'db> {
     let scope = global_scope(db, file);
-    match resolve_name_in(db, scope, name) {
+    match resolve_module_name_at_end(db, file, name) {
         Some(Resolved::Module(module)) => Val::Module(module),
         Some(Resolved::Value(Type::ClassLiteral(class))) => class
             .as_static()

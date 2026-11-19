@@ -42,7 +42,7 @@ use super::mixin_self::mixin_users;
 use super::properties::PropertyDeclaration;
 use super::symbols::{blender_function_name, bpy_types_bases};
 use super::{
-    assumptions, context_assumptions, context_members, operator_properties, operators,
+    assumptions, context_assumptions, context_members, id_data, operator_properties, operators,
     pointer_aliases, poll_checks, preferences, subclass_members, temp_override,
 };
 
@@ -483,6 +483,11 @@ pub(crate) fn on_load<'db>(
     }
     if name == "layout" && is_drawn_layout(db, file, attribute) {
         return place.map_type(|ty| without_none(db, ty));
+    }
+    if name == "id_data"
+        && let Some(ty) = id_data::id_data_type(db, env, receiver)
+    {
+        return Place::bound(ty).into();
     }
     // A Grease Pencil brush's settings, a member passed to `temp_override`.
     if let Some(member) = pointer_aliases::on_load(context, attribute, place) {
