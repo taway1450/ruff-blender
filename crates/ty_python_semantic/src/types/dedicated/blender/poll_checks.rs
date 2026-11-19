@@ -18,8 +18,9 @@
 //! ```
 //!
 //! [`poll_facts`] reads what a poll checks from its code, without inference: the conjuncts of its
-//! `return` (`X`, `X is not None`, `isinstance(X, T)`, `bool(X)`, `X.type == 'LIT'` / `in {...}`),
-//! the attribute reads always evaluated while it computes the result (a poll that raises is a poll
+//! `return` (`X`, `X is not None`, `isinstance(X, T)`, `bool(X)`, `type(X) is T` / `in {A, B}`,
+//! `X.type == 'LIT'` / `in {...}`), the attribute reads always evaluated while it computes the
+//! result (a poll that raises is a poll
 //! that failed, so `ob.data.is_editmode` means `ob` and `ob.data` were set), early `return False`
 //! guards, single-assignment aliases (also `getattr(context, "x", None)` and `(ob := context.x)`),
 //! `bool(a and b)`, a `try` whose handlers never return true, `super().poll(context)` /
@@ -60,8 +61,8 @@ use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_text_size::{Ranged, TextRange};
 use rustc_hash::FxHashMap;
 use ty_blender::{
-    ModeFacts, bl_context_facts, checked_by_call, gated_by_poll, implied_paths, mode_facts,
-    same_pointers,
+    ModeFacts, bl_context_facts, checked_by_call, gated_by_poll, implied_paths, is_callback_name,
+    mode_facts, python_base_names, same_pointers,
 };
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::scope::{NodeWithScopeRef, ScopeId};
@@ -519,8 +520,8 @@ fn class_attribute_owner<'db>(
 }
 
 /// What the `poll` Blender calls for `class` checks, with the name of the class that defines it:
-/// the first `poll` in its method resolution order, before the `bpy.types` classes. `None` for a
-/// class without one.
+/// the first `poll` in its method resolution order that is not a `bpy.types` class's
+/// ([`method_after`]). `None` for a class without one.
 #[salsa::tracked(
     returns(ref),
     cycle_initial=|_, _, _| None,
@@ -533,7 +534,7 @@ fn poll_facts<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> Option<(B
 }
 
 /// The method `name` of `class`: its definition and the class whose body defines it, the first in
-/// the method resolution order before the `bpy.types` classes.
+/// the method resolution order ([`method_after`]).
 fn method_on<'db>(
     db: &'db dyn Db,
     class: StaticClassLiteral<'db>,
@@ -544,6 +545,11 @@ fn method_on<'db>(
 
 /// The method `name` of `class` found after `after` in its method resolution order
 /// (`super().name` in a method of `after`), or from the start without one.
+///
+/// A `bpy.types` class ends the search, unless `name` is a Blender callback its Python base does
+/// not define: Blender's `Operator` or `Menu` has no `poll` attribute (the callback is looked up
+/// on the registered class), so `class X(Operator, Mixin)` uses `Mixin.poll`, while `Node.poll`
+/// is a Python base name and wins over a mixin listed after `Node`.
 fn method_after<'db>(
     db: &'db dyn Db,
     class: StaticClassLiteral<'db>,
@@ -559,7 +565,10 @@ fn method_after<'db>(
         }
     }
     for base in mro {
-        if is_bpy_types_class(db, base) {
+        if let Some(blender_name) = bpy_types_class_name(db, base) {
+            if is_callback_name(name) && !python_base_names(blender_name).contains(&name) {
+                continue;
+            }
             return None;
         }
         if let Some((definition, _)) = own_binding(db, base, name) {
@@ -932,6 +941,9 @@ impl<'db> PollReader<'db, '_> {
                         _ => {}
                     }
                 }
+                if let Some(checked) = type_test_argument(compare, true) {
+                    facts.not_none(self.path(checked));
+                }
             }
             Expr::Call(call) if let Some(value) = bool_argument(call) => {
                 facts.extend(self.truthy(value));
@@ -991,6 +1003,9 @@ impl<'db> PollReader<'db, '_> {
                         }
                         _ => {}
                     }
+                }
+                if let Some(checked) = type_test_argument(compare, false) {
+                    facts.not_none(self.path(checked));
                 }
             }
             _ => facts.extend(self.reads(test)),
@@ -1375,6 +1390,40 @@ fn checked_argument(call: &ast::ExprCall) -> Option<&Expr> {
         }
         _ => None,
     }
+}
+
+/// The `X` of a test of its exact type that holds only when `X` is not `None`: when `holds`,
+/// `type(X) is T`, `type(X) == T` or `type(X) in {A, B}` (a set, tuple or list of classes); when
+/// not, the negated forms (`is not`, `!=`, `not in`), which are false only then. The classes are
+/// names or attributes, never `NoneType` or `type(None)`.
+fn type_test_argument(compare: &ast::ExprCompare, holds: bool) -> Option<&Expr> {
+    let (left, op, right) = compare.as_single()?;
+    let Expr::Call(call) = left else {
+        return None;
+    };
+    let (Expr::Name(function), [checked]) = (&*call.func, &*call.arguments.args) else {
+        return None;
+    };
+    if function.id != "type" || !call.arguments.keywords.is_empty() || checked.is_starred_expr() {
+        return None;
+    }
+    let is_class = |class: &Expr| match class {
+        Expr::Name(name) => name.id != "NoneType",
+        Expr::Attribute(attribute) => attribute.attr.as_str() != "NoneType",
+        _ => false,
+    };
+    let classes_ok = match (op, holds) {
+        (ast::CmpOp::Is | ast::CmpOp::Eq, true)
+        | (ast::CmpOp::IsNot | ast::CmpOp::NotEq, false) => is_class(right),
+        (ast::CmpOp::In, true) | (ast::CmpOp::NotIn, false) => match right {
+            Expr::Set(ast::ExprSet { elts, .. })
+            | Expr::Tuple(ast::ExprTuple { elts, .. })
+            | Expr::List(ast::ExprList { elts, .. }) => elts.iter().all(is_class),
+            _ => false,
+        },
+        _ => false,
+    };
+    classes_ok.then_some(checked)
 }
 
 /// The argument of `bool(X)`, which is true exactly when `X` is: `bool(a and b)` checks `a` and
@@ -1987,6 +2036,10 @@ impl Tests<'_> {
                     )
                 {
                     self.tested_read(operand);
+                } else if let Some(checked) =
+                    type_test_argument(compare, true).or_else(|| type_test_argument(compare, false))
+                {
+                    self.tested_read(checked);
                 }
             }
             Expr::Call(call) => {
@@ -2037,7 +2090,10 @@ impl Tests<'_> {
                 {
                     self.path(operand).into_iter().collect()
                 }
-                _ => Vec::new(),
+                _ => type_test_argument(compare, true)
+                    .and_then(|checked| self.path(checked))
+                    .into_iter()
+                    .collect(),
             },
             Expr::Call(call) => checked_argument(call)
                 .and_then(|checked| self.path(checked))
@@ -2070,7 +2126,10 @@ impl Tests<'_> {
                 {
                     self.path(operand).into_iter().collect()
                 }
-                _ => Vec::new(),
+                _ => type_test_argument(compare, false)
+                    .and_then(|checked| self.path(checked))
+                    .into_iter()
+                    .collect(),
             },
             _ => Vec::new(),
         }
