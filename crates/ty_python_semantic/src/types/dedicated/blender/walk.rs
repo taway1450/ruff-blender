@@ -1092,7 +1092,9 @@ impl<'db> IrBuilder<'db, '_> {
                 ]),
             ),
             Expr::StringLiteral(string) => Val::Str(Name::new(string.value.to_str())),
-            Expr::Subscript(_) => self.with_reads(expression, scope, Val::Opaque(expression.range())),
+            Expr::Subscript(_) => {
+                self.with_reads(expression, scope, Val::Opaque(expression.range()))
+            }
             Expr::Named(named) => self.expression(&named.value, scope),
             Expr::NoneLiteral(_)
             | Expr::BooleanLiteral(_)
@@ -2577,11 +2579,13 @@ impl<'db> Walker<'db> {
         if is_bpy_types_class(db, class) || !is_first_party(db, class.program_file(db)) {
             return None;
         }
-        let name = bpy_types_bases(db, class)
-            .find_map(|base| registration_classmethod(base, register))?;
-        let Value::Function(method) =
-            self.attribute(Value::Class(class, named_at), &Name::new_static(name), named_at)
-        else {
+        let name =
+            bpy_types_bases(db, class).find_map(|base| registration_classmethod(base, register))?;
+        let Value::Function(method) = self.attribute(
+            Value::Class(class, named_at),
+            &Name::new_static(name),
+            named_at,
+        ) else {
             return None;
         };
         let DefinitionKind::Function(function) = method.kind(db) else {
