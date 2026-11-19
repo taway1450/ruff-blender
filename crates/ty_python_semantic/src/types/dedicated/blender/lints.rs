@@ -281,7 +281,7 @@ declare_lint! {
 declare_lint! {
     #[doc = include_str!("../../../../resources/lint_docs/blender-narrowed-by-popover.md")]
     pub(crate) static BLENDER_NARROWED_BY_POPOVER = {
-        summary: "detects `context.space_data` in a panel the add-on opens as a popover, typed by its `bl_space_type`",
+        summary: "detects `context.space_data` in a panel the add-on opens as a popover, typed by its `bl_space_type`, and a pointer checked before opening a header popover",
         status: LintStatus::stable("0.0.97"),
         default_level: Level::Warn,
     }
@@ -362,7 +362,7 @@ declare_lint! {
 declare_lint! {
     #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-editor-member.md")]
     pub(crate) static BLENDER_ASSUMED_EDITOR_MEMBER = {
-        summary: "detects `context.area`, `region` or `space_data` read in a panel's or menu's `poll`, a tool's `draw_settings` or a viewport render callback, taken as set",
+        summary: "detects `context.area`, `region` or `space_data` read in a panel's or menu's `poll`, a tool's `draw_settings`, a viewport render callback or a draw handler, taken as set",
         status: LintStatus::stable("0.0.103"),
         default_level: Level::Warn,
     }

@@ -7,7 +7,9 @@
 //!   (`_Object_MESH` after `mesh.primitive_cube_add()`, [`ty_blender::added_object_type`]);
 //! - `blender-assumed-editor-member`: `area`, `region` and `space_data` in a Panel's, Menu's or
 //!   asset shelf's `poll`, a tool's `draw_settings` and `RenderEngine.view_update` / `view_draw`
-//!   ([`ty_blender::assumes_editor`]);
+//!   ([`ty_blender::assumes_editor`]), and in
+//!   a function given to `SpaceX.draw_handler_add` or a helper only such a function calls
+//!   ([`draw_handler`]);
 //! - `blender-assumed-internal-operator`: any member in a callback (but `poll`) of an Internal
 //!   operator, `'INTERNAL'` in its `bl_options`;
 //! - `blender-assumed-preset-context`: any member read at module level in a preset, a file in a
@@ -41,7 +43,7 @@ use ty_blender::{
     preset_member_struct, preset_set_pointer,
 };
 use ty_python_core::scope::ScopeId;
-use ty_python_core::{global_scope, semantic_index};
+use ty_python_core::{ProgramFile, global_scope, semantic_index};
 
 use crate::Db;
 use crate::lint::LintMetadata;
@@ -52,6 +54,7 @@ use crate::types::{StaticClassLiteral, Type};
 
 use super::classes::{mro_classes, own_binding};
 use super::context_members::{enclosing_function, is_context_instance};
+use super::index::addon_in_program;
 use super::lints::{
     BLENDER_ASSUMED_ADDED_OBJECT, BLENDER_ASSUMED_EDITOR_MEMBER, BLENDER_ASSUMED_INTERNAL_OPERATOR,
     BLENDER_ASSUMED_PRESET_CONTEXT,
@@ -219,6 +222,22 @@ fn assumption<'db>(
         };
         if let Some(reason) = reason {
             return Some((&BLENDER_ASSUMED_EDITOR_MEMBER, reason, None));
+        }
+        if let Some(handler) = draw_handler(db, scope) {
+            let reason = match &handler.caller {
+                None => format!(
+                    "Blender calls the function as a draw handler of `{}` (`draw_handler_add`), \
+                     while it draws a region of that editor",
+                    handler.space
+                ),
+                Some(caller) => format!(
+                    "the function is called only from `{caller}`, which Blender calls as a draw \
+                     handler of `{}` while it draws a region of that editor",
+                    handler.space
+                ),
+            };
+            let space = (name == "space_data").then(|| handler.space.to_string());
+            return Some((&BLENDER_ASSUMED_EDITOR_MEMBER, reason, space));
         }
     }
     let (class, root) = callback?;
@@ -509,4 +528,221 @@ fn added_object_operator(callee: &Expr) -> Option<(&str, &str)> {
         _ => false,
     };
     (is_ops && adds_object(name.id.as_str())).then(|| (category.id.as_str(), name.id.as_str()))
+}
+
+/// How Blender calls a module-level function from a draw handler: the function itself is given to
+/// `SpaceX.draw_handler_add(function, args, region_type, draw_type)`, or it is a helper that only
+/// such functions call.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize)]
+struct DrawHandler {
+    /// The `Space` subclass whose `draw_handler_add` registers it (`SpaceNodeEditor`).
+    space: Name,
+    /// For a helper, the draw handler that calls it.
+    caller: Option<Name>,
+}
+
+/// The draw handler the module-level function scope `scope` is, or is a helper of, one call deep:
+///
+/// ```python
+/// def draw_callback(self, context):         # a draw handler of `SpaceNodeEditor`
+///     draw_border(self.node)
+///
+/// def draw_border(node):                    # called only from `draw_callback`
+///     bpy.context.region.view2d             # `Region`: reported
+///
+/// class MY_OT_modal(Operator):
+///     def invoke(self, context, event):
+///         self._handle = bpy.types.SpaceNodeEditor.draw_handler_add(
+///             draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+/// ```
+///
+/// By syntax alone: a draw handler is named by its function's name in a `draw_handler_add` call in
+/// any file of its add-on (or of its own file, outside an add-on), and every such call must give
+/// the same `Space` subclass. A helper is a module-level function of the same file that is used
+/// only as the callee of calls by name, each in a draw handler of the same `Space` subclass.
+/// Blender sets the context's window, area and region while it draws a region, and runs the
+/// handlers of that region's editor then; the function may still be called another way, so the
+/// read is an Assumption.
+#[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
+fn draw_handler<'db>(db: &'db dyn Db, scope: ScopeId<'db>) -> Option<DrawHandler> {
+    let file = scope.program_file(db);
+    let index = semantic_index(db, file);
+    if !index.parent_scope_id(scope.file_scope_id(db))?.is_global() {
+        return None;
+    }
+    let name = function_name(db, scope)?;
+    if let Some(space) = handler_space(db, file, &name) {
+        return Some(DrawHandler {
+            space,
+            caller: None,
+        });
+    }
+    let mut found: Option<DrawHandler> = None;
+    for usage in module_function_uses(db, file)
+        .iter()
+        .filter(|usage| usage.callee == name)
+    {
+        let caller = usage.caller.as_ref()?;
+        if !usage.is_call || *caller == name {
+            return None;
+        }
+        let space = handler_space(db, file, caller)?;
+        match &found {
+            Some(known) if known.space != space => return None,
+            Some(_) => {}
+            None => {
+                found = Some(DrawHandler {
+                    space,
+                    caller: Some(caller.clone()),
+                });
+            }
+        }
+    }
+    found
+}
+
+/// The `Space` subclass that every `draw_handler_add` call naming `function` registers it with, in
+/// the files of the add-on of `file` (or in `file`, outside an add-on).
+fn handler_space<'db>(db: &'db dyn Db, file: ProgramFile<'db>, function: &Name) -> Option<Name> {
+    let spaces = |file| {
+        draw_handler_calls(db, file)
+            .iter()
+            .filter(|(handler, _)| handler == function)
+            .map(|(_, space)| space.clone())
+            .collect::<Vec<_>>()
+    };
+    let spaces: Vec<Name> = match addon_in_program(db, file) {
+        Some(addon) => addon.files(db).flat_map(spaces).collect(),
+        None => spaces(file),
+    };
+    let first = spaces.first()?;
+    spaces
+        .iter()
+        .all(|space| space == first)
+        .then(|| first.clone())
+}
+
+/// The `SpaceX.draw_handler_add(function, ...)` calls of `file`, by syntax alone: the last name of
+/// the function argument (`draw_callback`, `utils.draw_callback`) and the `Space` subclass
+/// (`bpy.types.SpaceView3D` or an imported `SpaceView3D`).
+#[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
+fn draw_handler_calls<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Box<[(Name, Name)]> {
+    let module = parsed_module(db, file.python_file(db)).load(db);
+    let mut finder = DrawHandlerCalls::default();
+    finder.visit_body(module.suite());
+    finder.calls.into_boxed_slice()
+}
+
+#[derive(Default)]
+struct DrawHandlerCalls {
+    calls: Vec<(Name, Name)>,
+}
+
+impl<'a> Visitor<'a> for DrawHandlerCalls {
+    fn visit_expr(&mut self, expression: &'a Expr) {
+        let last_name = |expression: &Expr| match expression {
+            Expr::Name(name) => Some(name.id.clone()),
+            Expr::Attribute(attribute) => Some(attribute.attr.id.clone()),
+            _ => None,
+        };
+        if let Expr::Call(call) = expression
+            && let Expr::Attribute(callee) = &*call.func
+            && callee.attr.id == "draw_handler_add"
+            && let Some(space) = last_name(&callee.value)
+            && space.starts_with("Space")
+            && let Some(handler) = call.arguments.args.first().and_then(last_name)
+        {
+            self.calls.push((handler, space));
+        }
+        walk_expr(self, expression);
+    }
+}
+
+/// A use of a module-level function of a file by its name.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, get_size2::GetSize)]
+struct FunctionUse {
+    callee: Name,
+    /// The module-level function the use is directly in; `None` at module level, in a class or in
+    /// a nested function or lambda.
+    caller: Option<Name>,
+    /// Whether the use is the callee of a call (`draw_border(node)`), not a value.
+    is_call: bool,
+}
+
+/// The uses by name of the module-level functions of `file`, by syntax alone.
+#[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
+fn module_function_uses<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> Box<[FunctionUse]> {
+    let module = parsed_module(db, file.python_file(db)).load(db);
+    let functions: Vec<Name> = module
+        .suite()
+        .iter()
+        .filter_map(|statement| statement.as_function_def_stmt())
+        .map(|function| function.name.id.clone())
+        .collect();
+    let mut finder = FunctionUses {
+        functions: &functions,
+        caller: None,
+        depth: 0,
+        uses: Vec::new(),
+    };
+    for statement in module.suite() {
+        if let Stmt::FunctionDef(function) = statement {
+            finder.caller = Some(function.name.id.clone());
+            finder.visit_body(&function.body);
+            finder.caller = None;
+        } else {
+            finder.visit_stmt(statement);
+        }
+    }
+    finder.uses.into_boxed_slice()
+}
+
+struct FunctionUses<'f> {
+    functions: &'f [Name],
+    caller: Option<Name>,
+    /// How many nested functions, classes and lambdas the visitor is in.
+    depth: usize,
+    uses: Vec<FunctionUse>,
+}
+
+impl FunctionUses<'_> {
+    fn push(&mut self, name: &ast::ExprName, is_call: bool) {
+        if self.functions.contains(&name.id) {
+            self.uses.push(FunctionUse {
+                callee: name.id.clone(),
+                caller: self.caller.clone().filter(|_| self.depth == 0),
+                is_call,
+            });
+        }
+    }
+}
+
+impl<'a> Visitor<'a> for FunctionUses<'_> {
+    fn visit_stmt(&mut self, statement: &'a Stmt) {
+        if matches!(statement, Stmt::FunctionDef(_) | Stmt::ClassDef(_)) {
+            self.depth += 1;
+            walk_stmt(self, statement);
+            self.depth -= 1;
+        } else {
+            walk_stmt(self, statement);
+        }
+    }
+
+    fn visit_expr(&mut self, expression: &'a Expr) {
+        match expression {
+            Expr::Call(call) if let Expr::Name(callee) = &*call.func => {
+                self.push(callee, true);
+                for argument in call.arguments.iter_source_order() {
+                    self.visit_expr(argument.value());
+                }
+            }
+            Expr::Name(name) if name.ctx.is_load() => self.push(name, false),
+            Expr::Lambda(_) => {
+                self.depth += 1;
+                walk_expr(self, expression);
+                self.depth -= 1;
+            }
+            _ => walk_expr(self, expression),
+        }
+    }
 }

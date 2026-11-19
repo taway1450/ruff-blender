@@ -5,6 +5,13 @@ Checks the reads of `context.space_data` in a Panel that the same add-on opens a
 panel's `bl_space_type`, as in any panel, and reported. A panel the add-on never opens as a popover
 gets the same type without a report.
 
+In a panel of the `'HEADER'` region type, which Blender draws only as a popover, it also checks the
+reads of a pointer that every function opening the panel checked before the call, by its own control
+flow (`if context.space_data.node_tree: layout.popover(...)`, an early `return`): the read is typed
+without `None`, or as the subclass a Type tag test names, in the panel's `draw` and the other
+callbacks a poll would gate, and reported. The checks are read as in a `poll()`
+(`blender-narrowed-by-poll`).
+
 The rule belongs to the category `blender-implied-narrowings`.
 
 ## Why is this bad?
@@ -12,7 +19,9 @@ The rule belongs to the category `blender-implied-narrowings`.
 Blender draws a panel in an editor of its `bl_space_type`, but a popover is drawn with the area of
 whatever editor opened it, whatever `bl_space_type` says. Blender's own popover-only panels often
 give a dummy `bl_space_type`. The panel's `space_data` is that editor's only when every place that
-opens it is in that editor.
+opens it is in that editor. Likewise, the popover is drawn with the context of the editor that
+opened it, so what the opener checked still holds, unless the user changes it while the popover is
+open.
 
 ## Examples
 

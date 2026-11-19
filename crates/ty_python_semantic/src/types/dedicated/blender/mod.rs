@@ -85,6 +85,7 @@ mod reload_guard;
 mod rules;
 mod subclass_members;
 mod symbols;
+mod tag_locals;
 mod tag_writes;
 mod temp_override;
 mod test_cases;

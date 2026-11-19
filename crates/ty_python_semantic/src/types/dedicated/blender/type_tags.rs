@@ -212,7 +212,7 @@ pub(super) fn narrow_to_tag_values<'db>(
 /// The type of the struct `value_ty` once its Type tag `attribute` is known to be one of `values`
 /// (`is_one_of`) or none of them. A union (`LineStyleColorModifier | LineStyleAlphaModifier`) is
 /// narrowed member by member, and not at all when one member cannot be.
-fn narrow_by_values<'db>(
+pub(super) fn narrow_by_values<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
     value_ty: Type<'db>,
