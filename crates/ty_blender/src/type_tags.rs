@@ -54,7 +54,10 @@ pub struct IdnameConstructor {
 /// idname too (`rna_NodeTreeInterfaceItems_new_socket`), and the interface socket is refined to
 /// the type's interface struct (`ext_interface.srna`), which `make_standard_socket_type` names
 /// after the socket idname, `NodeTreeInterfaceSocket<X>` for `NodeSocket<X>`
-/// (`node_static_socket_interface_type_new`).
+/// (`node_static_socket_interface_type_new`). The call swaps a socket type the tree does not
+/// support for another, but the parameter's enum lists only the supported ones
+/// (`rna_NodeTreeInterfaceSocket_socket_type_itemf`, the same `is_socket_type_supported`), so an
+/// unsupported one raises `TypeError` before the swap.
 const IDNAME_CONSTRUCTORS: [IdnameConstructor; 6] = [
     IdnameConstructor {
         class: "Nodes",
