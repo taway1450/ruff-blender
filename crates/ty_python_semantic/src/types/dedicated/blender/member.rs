@@ -38,6 +38,7 @@ use crate::{Db, ProgramEnvironment};
 
 use super::evaluate::{PropertyValue, property_value};
 use super::external::{ExternalAddon, ExternalSource, external_registration};
+use super::follow::{Resolved, resolve_expression};
 use super::index::{RegisteredProperty, registered_properties};
 use super::mixin_self::mixin_users;
 use super::properties::PropertyDeclaration;
@@ -662,7 +663,10 @@ fn is_drawn_layout<'db>(
 
 /// Whether the function scope `function` is a draw callback: a method, in the body of a class
 /// deriving from the `bpy.types` class that declares the callback ([`DRAW_CALLBACKS`]), or any
-/// instance method of a class deriving from a Panel, Menu or Header ([`DRAWN_CLASSES`]).
+/// instance method of a class deriving from a Panel, Menu or Header ([`DRAWN_CLASSES`]). A
+/// module-level function whose first parameter is annotated with such a class
+/// (`def menu_func(self: Menu, context)`, a function given to `Menu.append`) is one too: its first
+/// argument is an instance, which exists only while Blender draws it.
 ///
 /// The callback is found by its name, not by registration: an unregistered base's `draw` is
 /// inherited by the registered subclass that Blender calls it on. Since the hook changes the type
@@ -671,14 +675,19 @@ fn is_drawn_layout<'db>(
 fn is_draw_callback<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> bool {
     let file = function.program_file(db);
     let index = semantic_index(db, file);
-    let in_class_body = index
-        .parent_scope_id(function.file_scope_id(db))
-        .is_some_and(|parent| index.scope(parent).node().as_class().is_some());
-    let Some(node) = function.node(db).as_function().filter(|_| in_class_body) else {
+    let Some(parent) = index.parent_scope_id(function.file_scope_id(db)) else {
+        return false;
+    };
+    let in_class_body = index.scope(parent).node().as_class().is_some();
+    let Some(node) = function.node(db).as_function() else {
         return false;
     };
     let module = parsed_module(db, file.python_file(db)).load(db);
     let node = node.node(&module);
+    if !in_class_body {
+        return parent.is_global()
+            && has_drawn_first_parameter(db, parent.to_scope_id(db, file), node);
+    }
     let name = node.name.as_str();
     let Some(class) = nearest_enclosing_class(db, index, function) else {
         return false;
@@ -704,6 +713,33 @@ fn is_draw_callback<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> bool {
         let users = mixin_users(db, class);
         !users.is_empty() && users.iter().all(|user| is_drawn(*user))
     }
+}
+
+/// Whether the first parameter of the module-level function `node`, defined in `scope`, is
+/// annotated with a class deriving from a Panel, Menu or Header ([`DRAWN_CLASSES`]).
+fn has_drawn_first_parameter<'db>(
+    db: &'db dyn Db,
+    scope: ScopeId<'db>,
+    node: &ast::StmtFunctionDef,
+) -> bool {
+    let parameters = &node.parameters;
+    let Some(annotation) = parameters
+        .posonlyargs
+        .iter()
+        .chain(&parameters.args)
+        .next()
+        .and_then(|first| first.parameter.annotation.as_deref())
+    else {
+        return false;
+    };
+    let Some(Resolved::Value(Type::ClassLiteral(class))) =
+        resolve_expression(db, scope, annotation)
+    else {
+        return false;
+    };
+    class
+        .as_static()
+        .is_some_and(|class| bpy_types_bases(db, class).any(|base| DRAWN_CLASSES.contains(&base)))
 }
 
 /// `ty` without `None`.
