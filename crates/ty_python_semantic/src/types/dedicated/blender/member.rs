@@ -24,7 +24,7 @@ use ty_python_core::{place_table, semantic_index, use_def_map};
 use crate::place::{Definedness, Place, PlaceAndQualifiers};
 use crate::types::attribute_write::{
     AttributeWriteRequirement, ClassAttributeWriteMember, ExplicitAttributeWriteRequirement,
-    FallbackAttributeWriteRequirement, InstanceAttributeWriteMember,
+    FallbackAttributeWriteRequirement, InstanceAttributeWriteMember, attribute_write_requirement,
 };
 use crate::types::context::InferContext;
 use crate::types::diagnostic::INVALID_ASSIGNMENT;
@@ -783,6 +783,27 @@ pub(in crate::types) fn on_store<'db>(
             },
             None => AttributeWriteRequirement::CannotAssign,
         };
+    }
+    // `coll.my_prop = 1` after `if coll:` (`BoneCollection & ~AlwaysFalsy`) or `hasattr`: ty
+    // resolves the write on the positive elements of the intersection later, without this hook, so
+    // the element that has the property decides here.
+    if let AttributeWriteRequirement::Any {
+        intersection,
+        receiver,
+        ..
+    } = requirement
+        && let Some(element) = intersection
+            .positive(db)
+            .iter()
+            .find(|element| instance_write_type(db, env, file, **element, attribute).is_some())
+    {
+        return on_store(
+            db,
+            env,
+            file,
+            attribute,
+            attribute_write_requirement(db, env, *element, attribute, receiver),
+        );
     }
     match requirement {
         AttributeWriteRequirement::Instance {
