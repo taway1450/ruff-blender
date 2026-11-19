@@ -19,12 +19,27 @@ enum PointerAlias {
 ///   inside it).
 /// - `context.active_node` is provided by the node editor only, as
 ///   `node_get_active(*snode->edittree)`: the edited tree's active node.
-const POINTER_ALIASES: [PointerAlias; 2] = [
+///
+/// And of the context (`buttons_context.cc`, `screen_context.cc`):
+///
+/// - `context.particle_system` is provided by the Properties editor only, from a context path
+///   through an object (`buttons_context_path_particle`), which is then `context.object`; pinned
+///   particle settings give `particle_settings` instead.
+/// - `context.active_strip` is the active strip of `CTX_data_sequencer_scene`
+///   (`screen_ctx_active_strip`), the scene `context.sequencer_scene` gives.
+///
+/// Not aliases: `active_pose_bone` and `active_object` (the 3D viewport leaves `active_object`
+/// `None` for a hidden object in object mode, `view3d_context.cc`, while the pose bone may be of
+/// the armature that deforms it, `BKE_object_pose_armature_get`), and `tool_settings` and
+/// `scene.tool_settings` (the sequencer gives the sequencer scene's, `sequencer_context`).
+const POINTER_ALIASES: [PointerAlias; 4] = [
     PointerAlias::Implies(&["space_data", "node_tree"], &["space_data", "edit_tree"]),
     PointerAlias::Same(
         &["active_node"],
         &["space_data", "edit_tree", "nodes", "active"],
     ),
+    PointerAlias::Implies(&["particle_system"], &["object"]),
+    PointerAlias::Implies(&["active_strip"], &["sequencer_scene"]),
 ];
 
 /// The paths that are set whenever the context path `path` is: the other sides of its Pointer
@@ -284,6 +299,17 @@ mod tests {
             vec![&["space_data", "edit_tree", "nodes", "active"][..]]
         );
         assert!(same_pointers(&["space_data", "node_tree"]).is_empty());
+    }
+
+    #[test]
+    fn context_pointers() {
+        assert_eq!(implied_paths(&["particle_system"]), vec![&["object"][..]]);
+        assert_eq!(
+            implied_paths(&["active_strip"]),
+            vec![&["sequencer_scene"][..]]
+        );
+        assert!(implied_paths(&["object"]).is_empty());
+        assert!(implied_paths(&["active_pose_bone"]).is_empty());
     }
 
     #[test]
