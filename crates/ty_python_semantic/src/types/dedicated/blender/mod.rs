@@ -84,8 +84,8 @@ mod rules;
 mod subclass_members;
 mod symbols;
 mod temp_override;
-mod type_tags;
 mod test_cases;
+mod type_tags;
 mod vector;
 mod walk;
 

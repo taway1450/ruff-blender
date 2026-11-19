@@ -4641,7 +4641,9 @@ impl<'db> NarrowingConstraintsBuilder<'db, '_> {
             return None;
         }
 
-        if let Some(constraints) = self.evaluate_unittest_assertion(expr_call, expression, is_positive) {
+        if let Some(constraints) =
+            self.evaluate_unittest_assertion(expr_call, expression, &inference, is_positive)
+        {
             return constraints;
         }
 
