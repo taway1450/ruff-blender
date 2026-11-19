@@ -5502,7 +5502,7 @@ impl<'db> NarrowingConstraintsBuilder<'db, '_> {
         if let Some(narrowed) = crate::types::blender::narrow_type_tag(
             db,
             &self.env,
-            self.places(),
+            self.scope(),
             attribute_value_expr,
             attribute_value_type,
             attribute_name,
