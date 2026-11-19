@@ -172,6 +172,15 @@ pub fn pointer_tag(class: &str, attribute: &str) -> Option<PointerTag> {
         .find(|tag| tag.class == class && tag.attribute == attribute)
 }
 
+/// Whether writing the Type tag `attribute` of a `class` rebuilds the sibling pointers the tag
+/// implies, so that the struct then has the members of the new value's tag view:
+/// `rna_fluid_set_type` frees the fluid modifier's settings and allocates those of the new
+/// `fluid_type` (`domain_settings` for `'DOMAIN'`). A tag that refines the struct's class
+/// (`Light.type`) does not count: the Python object keeps the class it had.
+pub fn rebuilds_on_tag_write(class: &str, attribute: &str) -> bool {
+    matches!((class, attribute), ("FluidModifier", "fluid_type"))
+}
+
 /// The attributes whose write changes the Type tag `attribute`: the tag itself, and for a `type`
 /// also a `ui_type` (`rna_Area_ui_type_set` sets an area's space type).
 pub fn tag_writers(attribute: &str) -> impl Iterator<Item = &str> {

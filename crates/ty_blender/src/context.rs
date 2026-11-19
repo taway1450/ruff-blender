@@ -114,6 +114,70 @@ pub fn adds_object(name: &str) -> bool {
     name == "add" || name.ends_with("_add")
 }
 
+/// The Type tag (`Object.type`) of the object the operator `bpy.ops.<category>.<name>` adds, with
+/// `type_argument` the string literal its `type` keyword is given, if any: `mesh.primitive_*_add`
+/// adds a `'MESH'` object, `object.add(type='LATTICE')` a `'LATTICE'` one. `None` for an operator
+/// whose object type depends on more than that (`object.effector_add` adds a curve for a guide and
+/// an empty otherwise) and for operators that add no object.
+pub fn added_object_type(
+    category: &str,
+    name: &str,
+    type_argument: Option<&str>,
+) -> Option<&'static str> {
+    if name.starts_with("primitive_") {
+        return match category {
+            "mesh" => Some("MESH"),
+            "curve" => Some("CURVE"),
+            "surface" => Some("SURFACE"),
+            _ => None,
+        };
+    }
+    if category != "object" {
+        return None;
+    }
+    Some(match name {
+        "add" => {
+            return OBJECT_TYPES
+                .iter()
+                .copied()
+                .find(|tag| *tag == type_argument.unwrap_or("EMPTY"));
+        }
+        "armature_add" => "ARMATURE",
+        "camera_add" => "CAMERA",
+        "curves_empty_hair_add" | "curves_random_add" => "CURVES",
+        "empty_add" | "empty_image_add" | "collection_instance_add" => "EMPTY",
+        "grease_pencil_add" => "GREASEPENCIL",
+        "light_add" => "LIGHT",
+        "lightprobe_add" => "LIGHT_PROBE",
+        "metaball_add" => "META",
+        "pointcloud_random_add" => "POINTCLOUD",
+        "speaker_add" => "SPEAKER",
+        "text_add" => "FONT",
+        "volume_add" => "VOLUME",
+        _ => return None,
+    })
+}
+
+/// The values of `Object.type` (`rna_enum_object_type_items`).
+const OBJECT_TYPES: &[&str] = &[
+    "MESH",
+    "CURVE",
+    "SURFACE",
+    "META",
+    "FONT",
+    "CURVES",
+    "POINTCLOUD",
+    "VOLUME",
+    "GREASEPENCIL",
+    "ARMATURE",
+    "LATTICE",
+    "EMPTY",
+    "LIGHT",
+    "LIGHT_PROBE",
+    "CAMERA",
+    "SPEAKER",
+];
+
 /// Whether the file at `path` is a preset: a Python file in a folder named `presets`
 /// (`scripts/presets/camera/1_inch.py`, an add-on's `presets/<subdir>/`). Blender runs a preset with
 /// the context of the panel or menu that applies it (`script.execute_preset`).
@@ -147,10 +211,48 @@ struct PresetMemberStruct {
     struct_name: &'static str,
 }
 
-const PRESET_MEMBER_STRUCTS: &[PresetMemberStruct] = &[PresetMemberStruct {
-    folders: &["presets", "sequencer", "text_style"],
-    member: "active_strip",
-    struct_name: "TextStrip",
+const PRESET_MEMBER_STRUCTS: &[PresetMemberStruct] = &[
+    PresetMemberStruct {
+        folders: &["presets", "sequencer", "text_style"],
+        member: "active_strip",
+        struct_name: "TextStrip",
+    },
+    // The fluid presets apply from the Viscosity panel, which shows only for a domain.
+    PresetMemberStruct {
+        folders: &["presets", "fluid"],
+        member: "fluid",
+        struct_name: "_FluidModifier_DOMAIN",
+    },
+];
+
+/// Whether a preset at `path` takes the pointer `member` of a `struct_name` as set, because the
+/// panel that applies it shows only when it is: a Grease Pencil material preset
+/// (`presets/gpencil_material/`) applies from the Surface panel of a Grease Pencil material, so
+/// its `material.grease_pencil` is set.
+pub fn preset_set_pointer(path: &str, struct_name: &str, member: &str) -> bool {
+    let folders: Vec<&str> = path.split(['/', '\\']).collect();
+    let folders = folders.split_last().map_or(&[][..], |(_, folders)| folders);
+    PRESET_SET_POINTERS.iter().any(|preset| {
+        preset.struct_name == struct_name
+            && preset.member == member
+            && folders.ends_with(preset.folders)
+    })
+}
+
+/// A preset folder whose presets take a pointer of a struct as set.
+struct PresetSetPointer {
+    /// The folders the preset file sits in, innermost last.
+    folders: &'static [&'static str],
+    /// The `bpy.types` struct the pointer belongs to.
+    struct_name: &'static str,
+    /// The pointer.
+    member: &'static str,
+}
+
+const PRESET_SET_POINTERS: &[PresetSetPointer] = &[PresetSetPointer {
+    folders: &["presets", "gpencil_material"],
+    struct_name: "Material",
+    member: "grease_pencil",
 }];
 
 /// Whether Blender calls the callback `name` of the root `root` in an editor of the class's
@@ -234,9 +336,10 @@ const CHECKED_BY_CALL: [(&str, &str, &[&str]); 1] = [(
 #[cfg(test)]
 mod tests {
     use super::{
-        ContextGuarantee, adds_object, assumes_editor, context_guarantee, draws_in_window,
-        is_added_object_member, is_assumed_context_member, is_editor_member, is_preset_path,
-        is_tool_draw_settings, menu_space_type, preset_member_struct, runs_in_editor,
+        ContextGuarantee, added_object_type, adds_object, assumes_editor, context_guarantee,
+        draws_in_window, is_added_object_member, is_assumed_context_member, is_editor_member,
+        is_preset_path, is_tool_draw_settings, menu_space_type, preset_member_struct,
+        preset_set_pointer, runs_in_editor,
     };
 
     #[test]
@@ -315,6 +418,39 @@ mod tests {
         assert!(!adds_object("add_named"));
         assert!(is_added_object_member("active_object"));
         assert!(!is_added_object_member("scene"));
+        assert_eq!(
+            added_object_type("mesh", "primitive_cube_add", None),
+            Some("MESH")
+        );
+        assert_eq!(
+            added_object_type("surface", "primitive_nurbs_surface_torus_add", None),
+            Some("SURFACE")
+        );
+        assert_eq!(added_object_type("object", "text_add", None), Some("FONT"));
+        assert_eq!(added_object_type("object", "add", None), Some("EMPTY"));
+        assert_eq!(
+            added_object_type("object", "add", Some("LATTICE")),
+            Some("LATTICE")
+        );
+        assert_eq!(added_object_type("object", "add", Some("NOPE")), None);
+        assert_eq!(added_object_type("object", "effector_add", None), None);
+        assert_eq!(added_object_type("object", "modifier_add", None), None);
+    }
+
+    #[test]
+    fn preset_set_pointers() {
+        let path = "scripts/presets/gpencil_material/Fill_Only.py";
+        assert!(preset_set_pointer(path, "Material", "grease_pencil"));
+        assert!(!preset_set_pointer(path, "Material", "node_tree"));
+        assert!(!preset_set_pointer(
+            "scripts/presets/camera/1_inch.py",
+            "Material",
+            "grease_pencil"
+        ));
+        assert_eq!(
+            preset_member_struct("scripts/presets/fluid/Honey.py", "fluid"),
+            Some("_FluidModifier_DOMAIN")
+        );
     }
 
     #[test]
