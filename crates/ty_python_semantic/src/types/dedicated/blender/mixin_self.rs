@@ -26,11 +26,17 @@
 //!
 //! A mixin method also counts as a draw callback (`self.layout` is never `None`) when it is one for
 //! every user ([`super::member`]).
+//!
+//! Test mixins work the same way: a class that derives from `unittest.TestCase` and has no
+//! `bpy.types` class is a user too, with `TestCase` in place of the Blender class, so the `self` of
+//! a mixin of test cases (`class GenericSliceMixIn` in Blender's tests) is the mixin intersected
+//! with `TestCase`, and has the test case's assertions.
 
 use ruff_db::files::File;
 use ruff_db::parsed::parsed_module;
 use ruff_db::system::SystemPath;
 use ty_blender::folder_source_files;
+use ty_module_resolver::file_to_module;
 use ty_python_core::{Program, ProgramFile, semantic_index};
 
 use crate::types::{
@@ -62,11 +68,9 @@ pub(crate) fn mixin_self_bounds<'db>(
     }
     let instance =
         |class: StaticClassLiteral<'db>| Type::instance(db, env, class.identity_specialization(db));
-    let blender_classes = users.iter().filter_map(|user| {
-        mro_classes(db, *user)
-            .find(|base| is_bpy_types_class(db, *base))
-            .map(instance)
-    });
+    let blender_classes = users
+        .iter()
+        .filter_map(|user| anchor_class(db, *user).map(instance));
     let blender_classes = UnionType::from_elements(db, env, blender_classes);
     TypeVarBoundOrConstraints::UpperBound(IntersectionType::from_elements(
         db,
@@ -75,9 +79,9 @@ pub(crate) fn mixin_self_bounds<'db>(
     ))
 }
 
-/// The users of `class` when it is a mixin: the module-level classes with a `bpy.types` class that
-/// derive from it, in its add-on or, for a file in no add-on, in its folder. Empty for any other
-/// class.
+/// The users of `class` when it is a mixin: the module-level classes with a `bpy.types` class (or
+/// a `unittest.TestCase`, [`anchor_class`]) that derive from it, in its add-on or, for a file in no
+/// add-on, in its folder. Empty for any other class.
 #[salsa::tracked(
     returns(deref),
     cycle_initial=|_, _, _| Box::default(),
@@ -92,7 +96,7 @@ pub(super) fn mixin_users<'db>(
     // the classes of whole folders.
     if !is_first_party(db, file)
         || module_by_name(db, file, "bpy.types").is_none()
-        || has_bpy_types_class(db, class)
+        || anchor_class(db, class).is_some()
     {
         return Box::default();
     }
@@ -141,11 +145,11 @@ fn scope_mixins<'db>(
         FxIndexMap::default();
     for file in scope.files(db) {
         for user in module_class_literals(db, ProgramFile::new(db, *file, program)) {
-            if !has_bpy_types_class(db, *user) {
+            if anchor_class(db, *user).is_none() {
                 continue;
             }
             for base in mro_classes(db, *user).skip(1) {
-                if !has_bpy_types_class(db, base) {
+                if anchor_class(db, base).is_none() {
                     mixins.entry(base).or_default().push(*user);
                 }
             }
@@ -157,9 +161,23 @@ fn scope_mixins<'db>(
         .collect()
 }
 
-/// Whether the method resolution order of `class` has a `bpy.types` class.
-fn has_bpy_types_class<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool {
-    mro_classes(db, class).any(|base| is_bpy_types_class(db, base))
+/// The class a user of a mixin is typed by: the first `bpy.types` class in the method resolution
+/// order of `class`, or without one `unittest.TestCase`. `None` for a class with neither, which
+/// may be a mixin.
+fn anchor_class<'db>(
+    db: &'db dyn Db,
+    class: StaticClassLiteral<'db>,
+) -> Option<StaticClassLiteral<'db>> {
+    mro_classes(db, class)
+        .find(|base| is_bpy_types_class(db, *base))
+        .or_else(|| mro_classes(db, class).find(|base| is_unittest_test_case(db, *base)))
+}
+
+/// Whether `class` is `unittest.TestCase` (defined in `unittest.case`).
+fn is_unittest_test_case<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> bool {
+    class.name(db) == "TestCase"
+        && file_to_module(db, class.program_file(db).resolver_file(db))
+            .is_some_and(|module| module.name(db).as_str() == "unittest.case")
 }
 
 /// The module-level classes of `file`.
