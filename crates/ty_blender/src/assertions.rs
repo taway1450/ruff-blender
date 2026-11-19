@@ -10,6 +10,13 @@ pub enum UnittestAssertion<'a> {
     IsNotNone(&'a Expr),
     /// `self.assertTrue(x)`: `x` is truthy, as after `assert x`.
     True(&'a Expr),
+    /// `self.assertIsNone(x)`: `x` is `None`, as after `assert x is None`.
+    IsNone(&'a Expr),
+    /// `self.assertFalse(x)`: `x` is falsy, as after `assert not x`.
+    False(&'a Expr),
+    /// `self.assertIsInstance(x, classinfo)`: `x` is an instance of `classinfo`, as after
+    /// `assert isinstance(x, classinfo)`.
+    IsInstance(&'a Expr, &'a Expr),
 }
 
 /// The assertion `call` makes, when it is one of the test case's own (`self.assertIsNotNone(x)`,
@@ -32,6 +39,12 @@ pub fn unittest_assertion(call: &ast::ExprCall) -> Option<UnittestAssertion<'_>>
     match method.attr.as_str() {
         "assertIsNotNone" => Some(UnittestAssertion::IsNotNone(target)),
         "assertTrue" => Some(UnittestAssertion::True(target)),
+        "assertIsNone" => Some(UnittestAssertion::IsNone(target)),
+        "assertFalse" => Some(UnittestAssertion::False(target)),
+        "assertIsInstance" => {
+            let classinfo = call.arguments.args.get(1)?;
+            (!classinfo.is_starred_expr()).then_some(UnittestAssertion::IsInstance(target, classinfo))
+        }
         _ => None,
     }
 }
@@ -51,6 +64,9 @@ mod tests {
         unittest_assertion(call).map(|assertion| match assertion {
             UnittestAssertion::IsNotNone(_) => "is-not-none",
             UnittestAssertion::True(_) => "true",
+            UnittestAssertion::IsNone(_) => "is-none",
+            UnittestAssertion::False(_) => "false",
+            UnittestAssertion::IsInstance(..) => "is-instance",
         })
     }
 
@@ -60,7 +76,13 @@ mod tests {
         assert_eq!(assertion_kind("self.assertIsNotNone(ob.data, 'msg')"), Some("is-not-none"));
         assert_eq!(assertion_kind("self.assertTrue(ob)"), Some("true"));
         assert_eq!(assertion_kind("other.assertIsNotNone(ob)"), None);
-        assert_eq!(assertion_kind("self.assertIsNone(ob)"), None);
+        assert_eq!(assertion_kind("self.assertIsNone(ob)"), Some("is-none"));
+        assert_eq!(assertion_kind("self.assertFalse(ob)"), Some("false"));
+        assert_eq!(assertion_kind("self.assertIsInstance(con, ChildOfConstraint)"), Some("is-instance"));
+        assert_eq!(assertion_kind("self.assertIsInstance(con, (A, B), 'msg')"), Some("is-instance"));
+        assert_eq!(assertion_kind("self.assertIsInstance(con)"), None);
+        assert_eq!(assertion_kind("self.assertIsInstance(con, *classes)"), None);
+        assert_eq!(assertion_kind("self.assertEqual(ob, None)"), None);
         assert_eq!(assertion_kind("self.assertIsNotNone(*args)"), None);
         assert_eq!(assertion_kind("self.assertTrue()"), None);
     }
