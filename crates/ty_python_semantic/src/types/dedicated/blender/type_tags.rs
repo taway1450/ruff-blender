@@ -38,26 +38,32 @@ use ruff_text_size::Ranged;
 use ty_blender::{ADDON_TYPE_TAG, excludes_on_mismatch, pointer_tag, tag_writers};
 use ty_python_core::ProgramFile;
 use ty_python_core::place::{PlaceExpr, PlaceTable};
+use ty_python_core::place_table;
+use ty_python_core::scope::ScopeId;
 
 use crate::place::imported_symbol;
 use crate::types::{IntersectionBuilder, StaticClassLiteral, Type, UnionType};
 use crate::{Db, ProgramEnvironment};
 
-use super::classes::mro_classes;
+use super::classes::{class_string, maybe_registered_classes, mro_classes};
 use super::context_members::space_subclass;
+use super::index::addon_in_program;
 use super::symbols::{bpy_types_class_name, is_bpy_types_class};
 
 /// The type of the struct `value_ty` once the test `<value>.<attribute> <operator> <rhs>` gave
 /// `is_positive`, when `attribute` is a Type tag of its `bpy.types` class. `rhs_ty` is a string
 /// literal for `==` and `!=`, and a tuple of them for `in` and `not in` (a set or list display is
 /// given as a tuple). `None` leaves the test to ty: a struct of no `bpy.types` class, a value no
-/// stub class declares, a test that cannot rule a class out, or a scope (`places`) that writes the
-/// tag of `value`.
+/// stub class declares, a test that cannot rule a class out, or a `scope` that writes the tag of
+/// `value`.
+///
+/// A `bl_idname` no stub class declares names the add-on's registered class with that `bl_idname`
+/// ([`addon_class_by_idname`]): Blender wraps such a node, socket or tree in that class.
 #[expect(clippy::too_many_arguments)]
 pub(crate) fn narrow_type_tag<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
-    places: &PlaceTable,
+    scope: ScopeId<'db>,
     value: &ast::Expr,
     value_ty: Type<'db>,
     attribute: &str,
@@ -80,13 +86,54 @@ pub(crate) fn narrow_type_tag<'db>(
     // Whether the tag is one of `values` where the test narrows: the `if` branch of `==` and `in`,
     // the `else` branch of `!=` and `not in`.
     let is_one_of = matches!(operator, ast::CmpOp::Eq | ast::CmpOp::In) == is_positive;
-    if writes_tag(places, value, attribute) {
+    if writes_tag(place_table(db, scope), value, attribute) {
         return None;
     }
     if is_one_of && let Some(narrowed) = narrow_pointer_tag(db, env, value_ty, attribute, &values) {
         return Some(narrowed);
     }
-    narrow_by_values(db, env, value_ty, attribute, &values, is_one_of)
+    if let Some(narrowed) = narrow_by_values(db, env, value_ty, attribute, &values, is_one_of) {
+        return Some(narrowed);
+    }
+    if !is_one_of || attribute != "bl_idname" {
+        return None;
+    }
+    // Each value names a stub class or one of the add-on's.
+    let classes = values
+        .iter()
+        .map(|value| {
+            narrow_by_values(
+                db,
+                env,
+                value_ty,
+                attribute,
+                std::slice::from_ref(value),
+                true,
+            )
+            .or_else(|| addon_class_by_idname(db, env, scope.program_file(db), value_ty, value))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(UnionType::from_elements(db, env, classes))
+}
+
+/// The add-on's registered class whose `bl_idname` is `value`, when `value_ty` (a `Node`, a
+/// `NodeSocket`, ...) is a base of it: every element of an intersection, so a `ShaderNode` does not
+/// narrow to an add-on's plain `Node`.
+fn addon_class_by_idname<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    file: ProgramFile<'db>,
+    value_ty: Type<'db>,
+    value: &Name,
+) -> Option<Type<'db>> {
+    let key = addon_in_program(db, file)?;
+    let class = maybe_registered_classes(db, key)
+        .into_iter()
+        .find(|class| class_string(db, *class, "bl_idname").as_deref() == Some(value.as_str()))?;
+    let class_ty = instance(db, env, class);
+    class_ty
+        .is_subtype_of(db, env, value_ty)
+        .then_some(class_ty)
 }
 
 /// Whether the scope of `places` writes the tag `attribute` of `value` (`area.type = ...`)
