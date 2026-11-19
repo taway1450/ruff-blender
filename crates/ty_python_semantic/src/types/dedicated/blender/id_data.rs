@@ -13,8 +13,9 @@
 //! an ID gives itself; an owner that is another group gives that group's `id_data`, so a group nested
 //! in a group on `Scene` is in a `Scene`; any other owner (a `PoseBone`, a `Node`) gives its own
 //! `id_data`. A property to a base of the group does not store the group, but one to a subclass
-//! does: a method of the base may run on an instance of the subclass. With no known owner, or an
-//! owner whose `id_data` is unknown, the stubs' `ID` stays.
+//! does: a method of the base may run on an instance of the subclass. With no known owner, an
+//! owner whose `id_data` is unknown, or a property the checker cannot read (which may store the
+//! group), the stubs' type stays.
 
 use ty_python_core::place_table;
 
@@ -25,7 +26,7 @@ use super::classes::{derives_from, maybe_registered_classes, mro_classes};
 use super::evaluate::PropertyValue;
 use super::index::{addon_in_program, file_facts, registered_properties};
 use super::member::{annotated_property, is_ignored_host};
-use super::properties::{Known, PropertyDeclaration, PropertyKind};
+use super::properties::{Known, PropertyKind};
 use super::symbols::{bpy_types_bases, is_bpy_types_class};
 
 /// The type of `receiver.id_data`, when it is known better than the stubs say.
@@ -88,7 +89,7 @@ fn owners_id_data<'db>(
     if visiting.contains(&group) {
         return Some(Type::Never);
     }
-    let owners = group_owners(db, group);
+    let owners = group_owners(db, group).as_deref()?;
     if owners.is_empty() {
         return None;
     }
@@ -114,37 +115,43 @@ fn owners_id_data<'db>(
 
 /// The classes that store instances of the add-on's `PropertyGroup` class `group`, in the order
 /// they are found: the owners of its Registered properties, then the registered classes whose
-/// annotations (or a mixin's) declare one.
+/// annotations (or a mixin's) declare one. `None` when a property may store it but the checker
+/// cannot tell: a pointer or collection whose `type=` it cannot read (see [`target_stores`]), or a
+/// property it cannot read at all. One such property anywhere in the add-on may store any group.
 ///
 /// Reading a property's value infers the class its `type=` names, which may read the owners again;
 /// such a cycle starts from no owners.
 #[salsa::tracked(
-    returns(deref),
-    cycle_initial=|_, _, _| Box::default(),
+    returns(ref),
+    cycle_initial=|_, _, _| Some(Box::default()),
     heap_size=ruff_memory_usage::heap_size
 )]
 fn group_owners<'db>(
     db: &'db dyn Db,
     group: StaticClassLiteral<'db>,
-) -> Box<[StaticClassLiteral<'db>]> {
+) -> Option<Box<[StaticClassLiteral<'db>]>> {
     let file = group.program_file(db);
-    let stores_group = |declaration: &PropertyDeclaration<'db>| {
-        let Known::Value(target) = declaration.target else {
-            return false;
-        };
-        matches!(
-            declaration.kind,
-            PropertyKind::Pointer | PropertyKind::Collection
-        ) && target_classes(db, target)
-            .any(|target| mro_classes(db, target).any(|base| base == group))
-    };
+    // Whether the property `value` stores `group`, or `None` when that is unknown.
     let stores = |value: &PropertyValue<'db>| match value {
-        PropertyValue::Declarations(declarations) => declarations.iter().any(stores_group),
-        PropertyValue::Opaque => false,
+        PropertyValue::Declarations(declarations) => {
+            declarations.iter().try_fold(false, |stores, declaration| {
+                if !matches!(
+                    declaration.kind,
+                    PropertyKind::Pointer | PropertyKind::Collection
+                ) {
+                    return Some(stores);
+                }
+                let Known::Value(target) = declaration.target else {
+                    return None;
+                };
+                Some(stores || target_stores(db, target, group)?)
+            })
+        }
+        PropertyValue::Opaque => None,
     };
     let mut owners: Vec<StaticClassLiteral<'db>> = Vec::new();
     for property in registered_properties(db, file) {
-        if property.accepted && stores(&property.value) && !owners.contains(&property.owner) {
+        if property.accepted && stores(&property.value)? && !owners.contains(&property.owner) {
             owners.push(property.owner);
         }
     }
@@ -160,33 +167,39 @@ fn group_owners<'db>(
         if owners.contains(&host) || is_ignored_host(db, host) {
             continue;
         }
-        let declares = mro_classes(db, host)
-            .filter(|class| !is_bpy_types_class(db, *class))
-            .any(|class| {
-                place_table(db, class.body_scope(db))
-                    .symbols()
-                    .any(|symbol| annotated_property(db, class, symbol.name()).is_some_and(stores))
-            });
+        let mut declares = false;
+        for class in mro_classes(db, host).filter(|class| !is_bpy_types_class(db, *class)) {
+            for symbol in place_table(db, class.body_scope(db)).symbols() {
+                if let Some(value) = annotated_property(db, class, symbol.name()) {
+                    declares |= stores(value)?;
+                }
+            }
+        }
         if declares {
             owners.push(host);
         }
     }
-    owners.into_boxed_slice()
+    Some(owners.into_boxed_slice())
 }
 
-/// The classes a property's `type=` names: one class, or each class of a union, as where the name
-/// is bound twice (`from bpy.types import ActionSlot`, then `class ActionSlot(PropertyGroup)`) and a
-/// function reads it.
-fn target_classes<'db>(
+/// Whether a pointer or collection whose `type=` is `target` may store an instance of `group`, or
+/// `None` when the checker cannot tell.
+///
+/// `type=Group` stores `Group` and its subclasses, so a property to a subclass of `group` does too;
+/// a union may store `group` through any of its arms. Any other type (a call the checker cannot
+/// infer, a `type[...]`) may name `group`.
+fn target_stores<'db>(
     db: &'db dyn Db,
     target: Type<'db>,
-) -> impl Iterator<Item = StaticClassLiteral<'db>> {
-    let elements = match target {
-        Type::Union(union) => union.elements(db).to_vec(),
-        _ => vec![target],
-    };
-    elements.into_iter().filter_map(|element| match element {
-        Type::ClassLiteral(class) => class.as_static(),
+    group: StaticClassLiteral<'db>,
+) -> Option<bool> {
+    match target {
+        Type::ClassLiteral(class) => {
+            Some(mro_classes(db, class.as_static()?).any(|base| base == group))
+        }
+        Type::Union(union) => union.elements(db).iter().try_fold(false, |stores, arm| {
+            Some(stores || target_stores(db, *arm, group)?)
+        }),
         _ => None,
-    })
+    }
 }

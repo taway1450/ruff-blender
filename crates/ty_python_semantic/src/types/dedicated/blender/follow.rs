@@ -186,6 +186,9 @@ pub(super) fn module_by_name<'db>(
 /// `register()`, a module-level name is what the module last bound it to. So only the definitions
 /// that reach the end of the enclosing scope count there, and `class Text(PropertyGroup)` after
 /// `from bpy.types import Text` is the one `Text` in `register()`.
+///
+/// This assumes the function runs after the module body: a helper called while the module is
+/// still importing, before a later rebinding, would read the earlier value instead.
 pub(super) fn nearest_definitions<'db>(
     db: &'db dyn Db,
     scope: ScopeId<'db>,
