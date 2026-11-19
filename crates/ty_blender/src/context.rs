@@ -12,6 +12,9 @@
 //!   class's `bl_space_type`: a Panel or a Header is registered into that editor's region type and
 //!   drawn only there, and a gizmo group is kept in that editor's gizmo map. A Menu, a UIList, an
 //!   Operator or a RenderEngine has no `bl_space_type` and runs from any editor, or none.
+//! - `window`, `screen` and `workspace` are filled when Blender draws a Panel, Menu, Header or
+//!   UIList ([`draws_in_window`]): it draws them only in a window's screen. An operator may run in
+//!   background mode, with no window.
 //!
 //! Only Blender calling the callback guarantees this: a helper function or `bpy.context` while an
 //! add-on is imported gets no such promise, and `context.temp_override(scene=None)` breaks it.
@@ -24,6 +27,8 @@ pub enum ContextGuarantee {
     /// In a callback that Blender calls in an editor of the class's `bl_space_type`
     /// ([`runs_in_editor`]).
     InEditor,
+    /// In a draw callback of a Panel, Menu, Header or UIList ([`draws_in_window`]).
+    InWindow,
 }
 
 /// When Blender fills the member `name` of `bpy.types.Context`, or `None` when it may be `None` in
@@ -33,8 +38,20 @@ pub fn context_guarantee(name: &str) -> Option<ContextGuarantee> {
         "preferences" | "window_manager" | "blend_data" | "scene" | "view_layer"
         | "tool_settings" | "collection" => Some(ContextGuarantee::Always),
         "area" | "space_data" | "region" => Some(ContextGuarantee::InEditor),
+        "window" | "screen" | "workspace" => Some(ContextGuarantee::InWindow),
         _ => None,
     }
+}
+
+/// Whether Blender calls the callback `name` of the root `root` only while it draws a window's
+/// screen: the draw callbacks of a Panel, Menu, Header or UIList, which a region, a popup or a
+/// `template_list` draws. The window's screen and workspace are then set too.
+pub fn draws_in_window(root: &str, name: &str) -> bool {
+    matches!(root, "Panel" | "Menu" | "Header" | "UIList")
+        && matches!(
+            name,
+            "draw" | "draw_header" | "draw_header_preset" | "draw_item" | "draw_filter"
+        )
 }
 
 /// Whether the member `name` of `bpy.types.Context` is an assumed one outside Blender callbacks:
@@ -217,9 +234,9 @@ const CHECKED_BY_CALL: [(&str, &str, &[&str]); 1] = [(
 #[cfg(test)]
 mod tests {
     use super::{
-        ContextGuarantee, adds_object, assumes_editor, context_guarantee, is_added_object_member,
-        is_assumed_context_member, is_editor_member, is_preset_path, is_tool_draw_settings,
-        menu_space_type, preset_member_struct, runs_in_editor,
+        ContextGuarantee, adds_object, assumes_editor, context_guarantee, draws_in_window,
+        is_added_object_member, is_assumed_context_member, is_editor_member, is_preset_path,
+        is_tool_draw_settings, menu_space_type, preset_member_struct, runs_in_editor,
     };
 
     #[test]
@@ -237,8 +254,20 @@ mod tests {
             context_guarantee("collection"),
             Some(ContextGuarantee::Always)
         );
-        assert_eq!(context_guarantee("window"), None);
+        assert_eq!(
+            context_guarantee("window"),
+            Some(ContextGuarantee::InWindow)
+        );
         assert_eq!(context_guarantee("object"), None);
+    }
+
+    #[test]
+    fn window_draws() {
+        assert!(draws_in_window("Panel", "draw_header_preset"));
+        assert!(draws_in_window("UIList", "draw_filter"));
+        assert!(draws_in_window("Header", "draw"));
+        assert!(!draws_in_window("Panel", "poll"));
+        assert!(!draws_in_window("Operator", "draw"));
     }
 
     #[test]

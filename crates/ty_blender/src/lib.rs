@@ -33,8 +33,8 @@ pub use callbacks::{
 };
 pub use context::{
     ContextGuarantee, adds_object, assumes_editor, checked_by_call, context_guarantee,
-    is_added_object_member, is_assumed_context_member, is_editor_member, is_preset_path,
-    is_tool_draw_settings, menu_space_type, preset_member_struct, runs_in_editor,
+    draws_in_window, is_added_object_member, is_assumed_context_member, is_editor_member,
+    is_preset_path, is_tool_draw_settings, menu_space_type, preset_member_struct, runs_in_editor,
 };
 pub use discovery::{Addon, AddonKind, addon_for_path};
 pub use external::{DEFAULT_ADDONS, STARTUP_PACKAGES, module_addon};
