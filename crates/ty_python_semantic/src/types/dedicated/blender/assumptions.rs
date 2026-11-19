@@ -18,6 +18,9 @@
 //!   `blender-assumed-preset-context` and `blender-assumed-added-object`: a context member that an
 //!   Internal operator, an editor's UI callback, a preset or a call that adds an object takes as
 //!   set, reported by [`super::context_assumptions`].
+//! - `blender-assumed-default-addon`: a property that an add-on Blender enables by default
+//!   registers (`scene.cycles`) is read as registered, though a user can disable the add-on; found
+//!   by [`super::external`], reported at each read here.
 //! - `blender-assumed-subclass-member`: a member a refined base lacks but some of its tagged
 //!   subclasses declare, read as the union of their declarations, reported by
 //!   [`super::subclass_members`].
@@ -36,8 +39,8 @@ use crate::types::context::InferContext;
 
 use super::index::{AddonInProgram, addon_in_program, addon_index};
 use super::lints::{
-    BLENDER_ASSUMED_COMPLETE_REGISTRATION, BLENDER_ASSUMED_LIST_ITEM, BLENDER_ASSUMED_PREFERENCES,
-    BLENDER_ASSUMED_REGISTRATION,
+    BLENDER_ASSUMED_COMPLETE_REGISTRATION, BLENDER_ASSUMED_DEFAULT_ADDON,
+    BLENDER_ASSUMED_LIST_ITEM, BLENDER_ASSUMED_PREFERENCES, BLENDER_ASSUMED_REGISTRATION,
 };
 use super::member::without_none;
 use super::overrides::{assumed_item_type, override_types};
@@ -278,6 +281,22 @@ pub(super) fn report_conditional_property<'db>(
 /// runs while `register()` has not registered the class yet, or `unregister()` has unregistered
 /// it, and else under `blender-assumed-registration` when the class is registered only on a
 /// branch.
+/// Reports a read of a property that the add-on `addon`, which Blender enables by default,
+/// registers.
+pub(super) fn report_default_addon(
+    context: &InferContext,
+    attribute: &ast::ExprAttribute,
+    addon: &Name,
+) {
+    if let Some(builder) = context.report_lint(&BLENDER_ASSUMED_DEFAULT_ADDON, attribute) {
+        builder.into_diagnostic(format_args!(
+            "`{}` is taken as registered by `{addon}`, an add-on Blender enables by default but a \
+             user can disable",
+            attribute.attr.id,
+        ));
+    }
+}
+
 pub(super) fn report_preferences_read(context: &InferContext, attribute: &ast::ExprAttribute) {
     let db = context.db();
     let Some(key) = addon_in_program(db, context.program_file()) else {

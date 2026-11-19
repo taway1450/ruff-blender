@@ -30,6 +30,9 @@ pub struct Manifest {
     pub addon_type: Option<String>,
     /// The required keys the manifest lacks, in [`REQUIRED_MANIFEST_KEYS`] order.
     pub missing_keys: Vec<&'static str>,
+    /// The add-ons whose registrations the add-on reads, from `uses` in its `[tool.blender]` table
+    /// (Blender ignores keys it does not know). Entries that are not strings are dropped.
+    pub uses: Vec<String>,
 }
 
 impl Manifest {
@@ -70,6 +73,12 @@ pub fn manifest(db: &dyn Db, file: File) -> Manifest {
             .into_iter()
             .filter(|key| !table.contains_key(*key))
             .collect(),
+        uses: table
+            .get("tool")
+            .and_then(|tool| tool.get("blender"))
+            .and_then(|blender| blender.get("uses"))
+            .map(string_array)
+            .unwrap_or_default(),
     }
 }
 
@@ -80,19 +89,21 @@ pub(crate) fn tool_blender_addons(db: &dyn Db, file: File) -> Option<Vec<String>
     let source = source_text(db, file);
     let table = source.as_str().parse::<toml::Table>().ok()?;
     let blender = table.get("tool")?.as_table()?.get("blender")?.as_table()?;
-    Some(
-        blender
-            .get("addons")
-            .and_then(toml::Value::as_array)
-            .map(|addons| {
-                addons
-                    .iter()
-                    .filter_map(toml::Value::as_str)
-                    .map(str::to_string)
-                    .collect()
-            })
-            .unwrap_or_default(),
-    )
+    Some(blender.get("addons").map(string_array).unwrap_or_default())
+}
+
+/// The strings of the array `value`, or none when it is not an array.
+fn string_array(value: &toml::Value) -> Vec<String> {
+    value
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(toml::Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn is_identifier(name: &str) -> bool {

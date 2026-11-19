@@ -63,6 +63,7 @@ mod constructors;
 mod context_assumptions;
 mod context_members;
 mod evaluate;
+mod external;
 mod follow;
 mod id_data;
 mod imprecise;

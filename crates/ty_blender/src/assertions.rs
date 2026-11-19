@@ -43,7 +43,8 @@ pub fn unittest_assertion(call: &ast::ExprCall) -> Option<UnittestAssertion<'_>>
         "assertFalse" => Some(UnittestAssertion::False(target)),
         "assertIsInstance" => {
             let classinfo = call.arguments.args.get(1)?;
-            (!classinfo.is_starred_expr()).then_some(UnittestAssertion::IsInstance(target, classinfo))
+            (!classinfo.is_starred_expr())
+                .then_some(UnittestAssertion::IsInstance(target, classinfo))
         }
         _ => None,
     }
@@ -72,14 +73,26 @@ mod tests {
 
     #[test]
     fn assertions() {
-        assert_eq!(assertion_kind("self.assertIsNotNone(ob)"), Some("is-not-none"));
-        assert_eq!(assertion_kind("self.assertIsNotNone(ob.data, 'msg')"), Some("is-not-none"));
+        assert_eq!(
+            assertion_kind("self.assertIsNotNone(ob)"),
+            Some("is-not-none")
+        );
+        assert_eq!(
+            assertion_kind("self.assertIsNotNone(ob.data, 'msg')"),
+            Some("is-not-none")
+        );
         assert_eq!(assertion_kind("self.assertTrue(ob)"), Some("true"));
         assert_eq!(assertion_kind("other.assertIsNotNone(ob)"), None);
         assert_eq!(assertion_kind("self.assertIsNone(ob)"), Some("is-none"));
         assert_eq!(assertion_kind("self.assertFalse(ob)"), Some("false"));
-        assert_eq!(assertion_kind("self.assertIsInstance(con, ChildOfConstraint)"), Some("is-instance"));
-        assert_eq!(assertion_kind("self.assertIsInstance(con, (A, B), 'msg')"), Some("is-instance"));
+        assert_eq!(
+            assertion_kind("self.assertIsInstance(con, ChildOfConstraint)"),
+            Some("is-instance")
+        );
+        assert_eq!(
+            assertion_kind("self.assertIsInstance(con, (A, B), 'msg')"),
+            Some("is-instance")
+        );
         assert_eq!(assertion_kind("self.assertIsInstance(con)"), None);
         assert_eq!(assertion_kind("self.assertIsInstance(con, *classes)"), None);
         assert_eq!(assertion_kind("self.assertEqual(ob, None)"), None);

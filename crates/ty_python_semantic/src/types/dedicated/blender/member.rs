@@ -37,6 +37,7 @@ use crate::types::{
 use crate::{Db, ProgramEnvironment};
 
 use super::evaluate::{PropertyValue, property_value};
+use super::external::{ExternalAddon, ExternalSource, external_registration};
 use super::index::{RegisteredProperty, registered_properties};
 use super::mixin_self::mixin_users;
 use super::properties::PropertyDeclaration;
@@ -52,13 +53,44 @@ use super::{
 /// decorator adds `name` decides, as does the first whose body declares or assigns `name`: its Annotated property, or nothing when it is a plain class
 /// attribute, or when the class is an Ignored host (`value: IntProperty()` on a Panel creates no
 /// property). A body that only reads the name (`alias = items`) does not decide. A class whose body
-/// does not mention `name` gives way to the last registration of `name` on it in the add-on.
+/// does not mention `name` gives way to the last registration of `name` on it in the add-on. A name
+/// that no class decides comes from another add-on's registration ([`external_registration`]).
 fn instance_property<'db>(
     db: &'db dyn Db,
     file: ProgramFile<'db>,
     class: StaticClassLiteral<'db>,
     name: &str,
 ) -> Option<&'db PropertyValue<'db>> {
+    match own_instance_property(db, file, class, name) {
+        Some(decided) => decided,
+        None => external_registration(db, file, class, name).map(|(property, _)| &property.value),
+    }
+}
+
+/// The add-on Blender enables by default whose registration gives instances of `class` the
+/// attribute `name` in `file`, when [`instance_property`] takes it from one.
+fn default_addon_property<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    class: StaticClassLiteral<'db>,
+    name: &str,
+) -> Option<&'db ExternalAddon<'db>> {
+    if own_instance_property(db, file, class, name).is_some() {
+        return None;
+    }
+    let (_, addon) = external_registration(db, file, class, name)?;
+    (addon.source == ExternalSource::Default).then_some(addon)
+}
+
+/// The property that the add-on of `file` gives instances of `class` for `name` (see
+/// [`instance_property`]): `Some(None)` when a class decides there is none, `None` when no class
+/// decides.
+fn own_instance_property<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    class: StaticClassLiteral<'db>,
+    name: &str,
+) -> Option<Option<&'db PropertyValue<'db>>> {
     let registered = registered_properties(db, file);
     let registered = registered.iter().any(|property| property.name == name);
     class.iter_mro(db, None).find_map(|base| {
@@ -79,7 +111,7 @@ fn instance_property<'db>(
             .flatten()
             .filter(|property| property.accepted)
             .map(|property| Some(&property.value))
-    })?
+    })
 }
 
 /// The two properties that `@bpy_extras.io_utils.orientation_helper(...)` adds to the class it
@@ -534,6 +566,13 @@ pub(crate) fn on_load<'db>(
                     property.owner,
                     &property.name,
                 );
+            }
+            if attribute.ctx.is_load()
+                && let Type::NominalInstance(instance) = receiver
+                && let Some(class) = instance.class(db, env).class_literal(db).as_static()
+                && let Some(addon) = default_addon_property(db, file, class, name)
+            {
+                assumptions::report_default_addon(context, attribute, &addon.name);
             }
             Place::bound(ty).into()
         }
