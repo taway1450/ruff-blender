@@ -33,24 +33,52 @@ pub struct IdnameConstructor {
     pub class: &'static str,
     pub method: &'static str,
     pub parameter: &'static str,
+    /// The position of `parameter` among the positional arguments.
+    pub position: usize,
     pub attribute: &'static str,
 }
 
 /// The constructors whose argument is a `bl_idname`: `nodes.new(type=...)` looks the node type up
-/// by idname (`rna_NodeTree_node_new`, `nodeAddNode`), `gizmos.new(type=...)` the gizmo type
-/// (`rna_GizmoGroup_gizmo_new`, `WM_gizmotype_find`), and the new struct is refined to that type's
-/// class, an add-on's own one included.
-const IDNAME_CONSTRUCTORS: [IdnameConstructor; 2] = [
+/// by idname (`rna_NodeTree_node_new`, `nodeAddNode`), a node's `inputs.new(type=...)` and
+/// `outputs.new(type=...)` the socket type (`rna_Node_inputs_new`, `nodeAddSocket`),
+/// `bpy.data.node_groups.new(name, type=...)` the tree type (`rna_Main_nodetree_new`,
+/// `ntreeAddTree`), `gizmos.new(type=...)` the gizmo type (`rna_GizmoGroup_gizmo_new`,
+/// `WM_gizmotype_find`), and the new struct is refined to that type's class, an add-on's own one
+/// included.
+const IDNAME_CONSTRUCTORS: [IdnameConstructor; 5] = [
     IdnameConstructor {
         class: "Nodes",
         method: "new",
         parameter: "type",
+        position: 0,
+        attribute: "bl_idname",
+    },
+    IdnameConstructor {
+        class: "NodeInputs",
+        method: "new",
+        parameter: "type",
+        position: 0,
+        attribute: "bl_idname",
+    },
+    IdnameConstructor {
+        class: "NodeOutputs",
+        method: "new",
+        parameter: "type",
+        position: 0,
+        attribute: "bl_idname",
+    },
+    IdnameConstructor {
+        class: "BlendDataNodeTrees",
+        method: "new",
+        parameter: "type",
+        position: 1,
         attribute: "bl_idname",
     },
     IdnameConstructor {
         class: "Gizmos",
         method: "new",
         parameter: "type",
+        position: 0,
         attribute: "bl_idname",
     },
 ];

@@ -58,7 +58,7 @@ use super::operators::is_operator_call;
 use super::overrides::{
     callback_root, defining_class, is_string_literals, override_types, parent_callback_types,
 };
-use super::symbols::is_blender_stub_file;
+use super::symbols::{is_blender_stub_file, is_bpy_types_class};
 
 /// The item type of `ty` when it is an enum set: a `set`, `frozenset` or abstract `Set` of string
 /// literals.
@@ -445,6 +445,9 @@ pub(super) fn check_enum_arguments<'db>(
                 let Some(value) = expression_type(argument) else {
                     continue;
                 };
+                if is_addon_idname(db, argument, expression_type) {
+                    continue;
+                }
                 let Some(expected) = matched.parameters.iter().find_map(|parameter| {
                     parameters
                         .get(parameter.index)
@@ -462,6 +465,26 @@ pub(super) fn check_enum_arguments<'db>(
             }
         }
     }
+}
+
+/// Whether `argument` is the `bl_idname` of one of the add-on's classes (`MyTree.bl_idname`): the
+/// name of a type the add-on registers. Blender's enums of type names (the `type` of
+/// `bpy.data.node_groups.new`) list the registered types too, which the stubs, written from
+/// Blender's own, cannot.
+fn is_addon_idname<'db>(
+    db: &'db dyn Db,
+    argument: &ast::Expr,
+    expression_type: &dyn Fn(&ast::Expr) -> Option<Type<'db>>,
+) -> bool {
+    let ast::Expr::Attribute(attribute) = argument else {
+        return false;
+    };
+    attribute.attr.as_str() == "bl_idname"
+        && matches!(
+            expression_type(&attribute.value),
+            Some(Type::ClassLiteral(class))
+                if class.as_static().is_some_and(|class| !is_bpy_types_class(db, class))
+        )
 }
 
 /// Whether `value` is a set display (`{"A", "B"}`) or comprehension. A display gets its item types
