@@ -116,13 +116,25 @@ pub fn preset_member_struct(path: &str, member: &str) -> Option<&'static str> {
     let folders = folders.split_last().map_or(&[][..], |(_, folders)| folders);
     PRESET_MEMBER_STRUCTS
         .iter()
-        .find(|(subdir, preset_member, _)| *preset_member == member && folders.ends_with(subdir))
-        .map(|(_, _, struct_name)| *struct_name)
+        .find(|preset| preset.member == member && folders.ends_with(preset.folders))
+        .map(|preset| preset.struct_name)
 }
 
-/// Preset folders, the context member their presets read and the struct it is.
-const PRESET_MEMBER_STRUCTS: &[(&[&str], &str, &str)] =
-    &[(&["presets", "sequencer", "text_style"], "active_strip", "TextStrip")];
+/// A preset folder whose presets read a context member as one struct.
+struct PresetMemberStruct {
+    /// The folders the preset file sits in, innermost last.
+    folders: &'static [&'static str],
+    /// The context member the presets read.
+    member: &'static str,
+    /// The `bpy.types` struct the member is when the preset runs.
+    struct_name: &'static str,
+}
+
+const PRESET_MEMBER_STRUCTS: &[PresetMemberStruct] = &[PresetMemberStruct {
+    folders: &["presets", "sequencer", "text_style"],
+    member: "active_strip",
+    struct_name: "TextStrip",
+}];
 
 /// Whether Blender calls the callback `name` of the root `root` in an editor of the class's
 /// `bl_space_type`: every callback of a Panel and a Header, and of a GizmoGroup but

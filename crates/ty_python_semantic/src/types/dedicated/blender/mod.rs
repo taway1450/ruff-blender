@@ -85,6 +85,7 @@ mod subclass_members;
 mod symbols;
 mod temp_override;
 mod type_tags;
+mod test_cases;
 mod vector;
 mod walk;
 
@@ -116,4 +117,5 @@ pub(crate) use overrides::{
 pub(crate) use properties::may_be_property_call;
 pub(crate) use reload_guard::reload_guard_type;
 pub(crate) use symbols::hides_star_import;
+pub(crate) use test_cases::is_test_case_instance;
 pub(crate) use type_tags::narrow_type_tag;
