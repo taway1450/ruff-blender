@@ -50,5 +50,5 @@ pub use script_guard::is_script_test;
 pub use source::{BlInfo, BlInfoDict, BlInfoEntry, bl_info};
 pub use type_tags::{
     ADDON_TYPE_TAG, IdnameConstructor, NO_SUBCLASS_MEMBERS, PointerTag, excludes_on_mismatch,
-    idname_constructor, pointer_tag, tag_writers,
+    idname_constructor, object_types_of_data, pointer_tag, tag_writers,
 };

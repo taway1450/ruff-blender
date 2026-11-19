@@ -33,9 +33,15 @@ pub struct IdnameConstructor {
     pub class: &'static str,
     pub method: &'static str,
     pub parameter: &'static str,
-    /// The position of `parameter` among the positional arguments.
+    /// The position of `parameter` among the positional arguments (`usize::MAX` for a
+    /// keyword-only one).
     pub position: usize,
     pub attribute: &'static str,
+    /// When the struct is not the idname's own type but one paired with it, the prefix of the
+    /// idname and the one that replaces it in the name of the struct's class: `("Node",
+    /// "NodeTreeInterface")` makes the interface socket of `NodeSocketFloat` a
+    /// `NodeTreeInterfaceSocketFloat`.
+    pub class_prefix: Option<(&'static str, &'static str)>,
 }
 
 /// The constructors whose argument is a `bl_idname`: `nodes.new(type=...)` looks the node type up
@@ -44,14 +50,19 @@ pub struct IdnameConstructor {
 /// `bpy.data.node_groups.new(name, type=...)` the tree type (`rna_Main_nodetree_new`,
 /// `ntreeAddTree`), `gizmos.new(type=...)` the gizmo type (`rna_GizmoGroup_gizmo_new`,
 /// `WM_gizmotype_find`), and the new struct is refined to that type's class, an add-on's own one
-/// included.
-const IDNAME_CONSTRUCTORS: [IdnameConstructor; 5] = [
+/// included. A node tree interface's `new_socket(socket_type=...)` looks the socket type up by
+/// idname too (`rna_NodeTreeInterfaceItems_new_socket`), and the interface socket is refined to
+/// the type's interface struct (`ext_interface.srna`), which `make_standard_socket_type` names
+/// after the socket idname, `NodeTreeInterfaceSocket<X>` for `NodeSocket<X>`
+/// (`node_static_socket_interface_type_new`).
+const IDNAME_CONSTRUCTORS: [IdnameConstructor; 6] = [
     IdnameConstructor {
         class: "Nodes",
         method: "new",
         parameter: "type",
         position: 0,
         attribute: "bl_idname",
+        class_prefix: None,
     },
     IdnameConstructor {
         class: "NodeInputs",
@@ -59,6 +70,7 @@ const IDNAME_CONSTRUCTORS: [IdnameConstructor; 5] = [
         parameter: "type",
         position: 0,
         attribute: "bl_idname",
+        class_prefix: None,
     },
     IdnameConstructor {
         class: "NodeOutputs",
@@ -66,6 +78,7 @@ const IDNAME_CONSTRUCTORS: [IdnameConstructor; 5] = [
         parameter: "type",
         position: 0,
         attribute: "bl_idname",
+        class_prefix: None,
     },
     IdnameConstructor {
         class: "BlendDataNodeTrees",
@@ -73,6 +86,15 @@ const IDNAME_CONSTRUCTORS: [IdnameConstructor; 5] = [
         parameter: "type",
         position: 1,
         attribute: "bl_idname",
+        class_prefix: None,
+    },
+    IdnameConstructor {
+        class: "NodeTreeInterface",
+        method: "new_socket",
+        parameter: "socket_type",
+        position: usize::MAX,
+        attribute: "bl_idname",
+        class_prefix: Some(("Node", "NodeTreeInterface")),
     },
     IdnameConstructor {
         class: "Gizmos",
@@ -80,6 +102,7 @@ const IDNAME_CONSTRUCTORS: [IdnameConstructor; 5] = [
         parameter: "type",
         position: 0,
         attribute: "bl_idname",
+        class_prefix: None,
     },
 ];
 
@@ -89,6 +112,37 @@ pub fn idname_constructor(class: &str, method: &str) -> Option<IdnameConstructor
         .into_iter()
         .find(|constructor| constructor.class == class && constructor.method == method)
 }
+
+/// The `Object.type` values of an object `bpy.data.objects.new(name, data)` creates from a `data`
+/// of the `bpy.types` class `data_class` (`rna_Main_objects_new` takes the type from
+/// `BKE_object_obdata_to_type`). A curve's object type is the curve's own `ob_type`, which its
+/// refined class names: a `TextCurve` is a `'FONT'`, a `SurfaceCurve` a `'SURFACE'`, and a
+/// `Curve` may be either or a `'CURVE'`. `None` for a class that is no object data. A `None`
+/// data makes an `'EMPTY'`.
+pub fn object_types_of_data(data_class: &str) -> Option<&'static [&'static str]> {
+    OBJECT_DATA_TYPES
+        .iter()
+        .find(|(class, _)| *class == data_class)
+        .map(|(_, types)| *types)
+}
+
+const OBJECT_DATA_TYPES: [(&str, &[&str]); 15] = [
+    ("Mesh", &["MESH"]),
+    ("TextCurve", &["FONT"]),
+    ("SurfaceCurve", &["SURFACE"]),
+    ("Curve", &["CURVE", "SURFACE", "FONT"]),
+    ("MetaBall", &["META"]),
+    ("Light", &["LIGHT"]),
+    ("Speaker", &["SPEAKER"]),
+    ("Camera", &["CAMERA"]),
+    ("Lattice", &["LATTICE"]),
+    ("Armature", &["ARMATURE"]),
+    ("LightProbe", &["LIGHT_PROBE"]),
+    ("Curves", &["CURVES"]),
+    ("PointCloud", &["POINTCLOUD"]),
+    ("Volume", &["VOLUME"]),
+    ("GreasePencil", &["GREASEPENCIL"]),
+];
 
 /// A Type tag that names the class of a pointer below its struct rather than the struct's own:
 /// the value of `class.attribute` is the `Space` Type tag of `<struct>.<path>`.
