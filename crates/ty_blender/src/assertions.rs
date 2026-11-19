@@ -6,7 +6,8 @@ use ruff_python_ast::{self as ast, Expr};
 /// the test.
 #[derive(Clone, Copy, Debug)]
 pub enum UnittestAssertion<'a> {
-    /// `self.assertIsNotNone(x)`: `x` is not `None`, as after `assert x is not None`.
+    /// `self.assertIsNotNone(x)`, or `self.assertNotEqual(x, None)` with `None` on either side:
+    /// `x` is not `None`, as after `assert x is not None`.
     IsNotNone(&'a Expr),
     /// `self.assertTrue(x)`: `x` is truthy, as after `assert x`.
     True(&'a Expr),
@@ -38,6 +39,16 @@ pub fn unittest_assertion(call: &ast::ExprCall) -> Option<UnittestAssertion<'_>>
     }
     match method.attr.as_str() {
         "assertIsNotNone" => Some(UnittestAssertion::IsNotNone(target)),
+        "assertNotEqual" => {
+            let other = call.arguments.args.get(1)?;
+            match (target.is_none_literal_expr(), other.is_none_literal_expr()) {
+                (false, true) => Some(UnittestAssertion::IsNotNone(target)),
+                (true, false) if !other.is_starred_expr() => {
+                    Some(UnittestAssertion::IsNotNone(other))
+                }
+                _ => None,
+            }
+        }
         "assertTrue" => Some(UnittestAssertion::True(target)),
         "assertIsNone" => Some(UnittestAssertion::IsNone(target)),
         "assertFalse" => Some(UnittestAssertion::False(target)),
@@ -96,6 +107,16 @@ mod tests {
         assert_eq!(assertion_kind("self.assertIsInstance(con)"), None);
         assert_eq!(assertion_kind("self.assertIsInstance(con, *classes)"), None);
         assert_eq!(assertion_kind("self.assertEqual(ob, None)"), None);
+        assert_eq!(
+            assertion_kind("self.assertNotEqual(ob, None)"),
+            Some("is-not-none")
+        );
+        assert_eq!(
+            assertion_kind("self.assertNotEqual(None, ob.data, 'msg')"),
+            Some("is-not-none")
+        );
+        assert_eq!(assertion_kind("self.assertNotEqual(ob, other)"), None);
+        assert_eq!(assertion_kind("self.assertNotEqual(None, *args)"), None);
         assert_eq!(assertion_kind("self.assertIsNotNone(*args)"), None);
         assert_eq!(assertion_kind("self.assertTrue()"), None);
     }
