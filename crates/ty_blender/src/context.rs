@@ -291,15 +291,27 @@ mod tests {
     #[test]
     fn preset_member_structs() {
         let path = "scripts/presets/sequencer/text_style/Main_Title.py";
-        assert_eq!(preset_member_struct(path, "active_strip"), Some("TextStrip"));
-        assert_eq!(preset_member_struct(path, "scene"), None);
         assert_eq!(
-            preset_member_struct("C:\\addon\\presets\\sequencer\\text_style\\a.py", "active_strip"),
+            preset_member_struct(path, "active_strip"),
             Some("TextStrip")
         );
-        assert_eq!(preset_member_struct("scripts/presets/camera/1_inch.py", "active_strip"), None);
+        assert_eq!(preset_member_struct(path, "scene"), None);
         assert_eq!(
-            preset_member_struct("scripts/presets/sequencer/text_style/old/a.py", "active_strip"),
+            preset_member_struct(
+                "C:\\addon\\presets\\sequencer\\text_style\\a.py",
+                "active_strip"
+            ),
+            Some("TextStrip")
+        );
+        assert_eq!(
+            preset_member_struct("scripts/presets/camera/1_inch.py", "active_strip"),
+            None
+        );
+        assert_eq!(
+            preset_member_struct(
+                "scripts/presets/sequencer/text_style/old/a.py",
+                "active_strip"
+            ),
             None
         );
     }

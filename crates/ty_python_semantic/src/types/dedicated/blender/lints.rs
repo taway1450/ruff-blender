@@ -341,6 +341,15 @@ declare_lint! {
 }
 
 declare_lint! {
+    #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-default-addon.md")]
+    pub(crate) static BLENDER_ASSUMED_DEFAULT_ADDON = {
+        summary: "detects a read of a property that an add-on Blender enables by default registers",
+        status: LintStatus::stable("0.0.103"),
+        default_level: Level::Warn,
+    }
+}
+
+declare_lint! {
     #[doc = include_str!("../../../../resources/lint_docs/blender-assumed-internal-operator.md")]
     pub(crate) static BLENDER_ASSUMED_INTERNAL_OPERATOR = {
         summary: "detects a context member read in a callback of an operator whose `bl_options` has `'INTERNAL'`, taken as set",
@@ -418,6 +427,7 @@ pub(crate) fn register_lints(registry: &mut LintRegistryBuilder) {
     registry.register_lint(&BLENDER_ASSUMED_REGISTRATION);
     registry.register_lint(&BLENDER_ASSUMED_COMPLETE_REGISTRATION);
     registry.register_lint(&BLENDER_ASSUMED_PREFERENCES);
+    registry.register_lint(&BLENDER_ASSUMED_DEFAULT_ADDON);
     registry.register_lint(&BLENDER_ASSUMED_INTERNAL_OPERATOR);
     registry.register_lint(&BLENDER_ASSUMED_EDITOR_MEMBER);
     registry.register_lint(&BLENDER_ASSUMED_PRESET_CONTEXT);

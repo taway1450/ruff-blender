@@ -14,6 +14,7 @@ mod bl_context;
 mod callbacks;
 mod context;
 mod discovery;
+mod external;
 mod files;
 mod metadata;
 mod operators;
@@ -36,6 +37,7 @@ pub use context::{
     is_tool_draw_settings, menu_space_type, preset_member_struct, runs_in_editor,
 };
 pub use discovery::{Addon, AddonKind, addon_for_path};
+pub use external::{DEFAULT_ADDONS, STARTUP_PACKAGES, module_addon};
 pub use files::{addon_source_files, folder_source_files};
 pub use metadata::{MANIFEST_FILE, Manifest, REQUIRED_MANIFEST_KEYS, manifest};
 pub use operators::{
