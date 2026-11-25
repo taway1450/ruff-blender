@@ -8,7 +8,7 @@
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.64">0.0.64</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22abstract-and-final-method%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1241" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1243" target="_blank">View source</a>
 </small>
 
 
@@ -44,7 +44,7 @@ class Base(ABC):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.100">0.0.100</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22abstract-class-instantiation%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1268" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1270" target="_blank">View source</a>
 </small>
 
 
@@ -103,7 +103,7 @@ HasName()  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.16">0.0.16</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22abstract-method-call%22+OR+%22call-abstract-method%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1259" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1261" target="_blank">View source</a>
 </small>
 
 
@@ -162,7 +162,7 @@ Foo.method()  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.13">0.0.13</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22abstract-method-in-final-class%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1250" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1252" target="_blank">View source</a>
 </small>
 
 
@@ -208,7 +208,7 @@ class Derived(Base):  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.20">0.0.1-alpha.20</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22ambiguous-protocol-member%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L440" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L442" target="_blank">View source</a>
 </small>
 
 
@@ -272,7 +272,7 @@ class SubProto(BaseProto, Protocol):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.14">0.0.14</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22assert-type-unspellable-subtype%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1304" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1306" target="_blank">View source</a>
 </small>
 
 
@@ -348,6 +348,3208 @@ Use instead:
 value = unknown  # ty: ignore[unresolved-reference]
 ```
 
+## `blender-assumed-added-object`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.103">0.0.103</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-added-object%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L380" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of `context.object` and `context.active_object` on a `bpy.types.Context` after a
+call of an operator that adds an object (`bpy.ops.object.add()` or any `bpy.ops.<category>.*_add()`,
+such as `bpy.ops.mesh.primitive_cube_add()`) earlier in the same function, or earlier in a
+module-level script.
+
+The read is typed without `None`, and as the Type tag view of the object the operator adds where
+the call shows its type and the stubs have the view: `_Object_MESH` after
+`bpy.ops.mesh.primitive_cube_add()`, `_Object_LATTICE` after `bpy.ops.object.add(type='LATTICE')`,
+so its `data` is a `Mesh` or a `Lattice`. The view comes from the last such call before the read,
+and only when that call is in a block that holds the read (not in a branch the read is not in);
+otherwise the read is an `Object`. A read that the code only tests for truth or `None` is not
+reported.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+An operator that adds an object selects the new object and makes it the active one, so code reads
+it back from the context right after the call. Whether the call succeeded is not visible: an
+operator whose poll fails raises, or returns `{'CANCELLED'}` when it cannot add the object, and
+then the active object is whatever it was before, possibly `None`.
+
+**Examples**
+
+
+```py
+import bpy
+
+
+def add_cube(context: bpy.types.Context) -> str:
+    bpy.ops.mesh.primitive_cube_add()
+    return context.object.name  # error: [blender-assumed-added-object]
+```
+
+Check the result of the call, or the object, before using it.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import ops as ops
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/ops/__init__.pyi`:
+
+```pyi
+from . import mesh as mesh
+```
+
+`/.venv/<path-to-site-packages>/bpy/ops/mesh.pyi`:
+
+```pyi
+def primitive_cube_add() -> set[str]: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Object(bpy_struct):
+    name: str
+
+class Context(bpy_struct):
+    object: Object | None
+```
+
+## `blender-assumed-complete-registration`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-complete-registration%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L326" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Reports, once per add-on, where `register()` registers a value the typechecker cannot follow: a
+class found at run time (`getattr`, `importlib.import_module`, an `auto_load` module), or a call it
+cannot resolve. From there on every class and Registered property in the add-on's files counts as
+registered, and the checks for classes that `register()` misses ([`blender-unregistered-class`](#blender-unregistered-class),
+[`blender-unreachable-registration`](#blender-unreachable-registration), ...) are off.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+A class or property the add-on defines but never registers is then typed as present, and nothing
+reports it: silence here does not mean the add-on registers everything it uses.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import sys
+
+import bpy
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+CLASS_NAMES = ("MY_OT_run",)
+
+
+class MY_OT_run(Operator):
+    bl_idname = "my.run"
+
+
+def register():
+    module = sys.modules[__name__]
+    for name in CLASS_NAMES:
+        bpy.utils.register_class(getattr(module, name))  # error: [blender-assumed-complete-registration]
+
+
+def unregister():
+    bpy.utils.unregister_class(MY_OT_run)
+```
+
+List the classes in `register()` (or in a tuple it registers) to have them checked.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-assumed-context-member`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-context-member%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L299" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of `scene`, `view_layer` and `tool_settings` on a `bpy.types.Context` where
+Blender does not guarantee them: outside a Blender callback (at module level, in a helper function,
+a method of a class that is no Blender class, a nested function, an app handler or a timer), and
+`scene` and `tool_settings` in a callback of an operator that a `FileHandler` of the same add-on
+names as its `bl_import_operator`.
+
+The read is typed without `None`. A read that the code only tests for truth or `None`
+(`if bpy.context.scene:`) is not reported. Inside other Blender callbacks the members are always
+set and the read is narrowed silently.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+Blender fills these members whenever it calls a callback. Elsewhere they hold the window's or the
+loaded file's scene in ordinary use (a timer, a handler, a script, a test), but nothing promises
+it: `context.temp_override(scene=None)` empties them, and the collection importer runs a file
+handler's import operator with no scene. While an add-on is imported or registered, `bpy.context`
+has no `scene` at all.
+
+**Examples**
+
+
+```py
+import bpy
+
+
+def current_frame() -> int:
+    return bpy.context.scene.frame_current  # error: [blender-assumed-context-member]
+```
+
+Take the context as a callback's parameter, or check the scene before using it.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+from .types import Context
+
+context: Context
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Scene(bpy_struct):
+    frame_current: int
+
+class Context(bpy_struct):
+    scene: Scene | None
+```
+
+## `blender-assumed-default-addon`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.103">0.0.103</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-default-addon%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L344" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of a property that an add-on Blender enables by default registers, such as
+`scene.cycles`, which Cycles adds to every scene. The read is typed by that add-on's registration
+when the add-on's own code, a declared dependency (`[tool.blender] uses = ["cycles"]` in
+`blender_manifest.toml`) and the startup packages do not give the attribute. The add-on is found
+the way the file imports it, so its source must be on a search path.
+
+The default add-ons are those of Blender's factory settings: `cycles`, `io_anim_bvh`,
+`io_curve_svg`, `io_mesh_uv_layout`, `io_scene_fbx`, `io_scene_gltf2`, `pose_library` and
+`bl_pkg`.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+A user can disable a default add-on. Its properties are then gone, and reading one raises
+`AttributeError`. An add-on that needs the other add-on can declare it in its manifest, which
+silences the rule, or check first (`hasattr(scene, "cycles")`).
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+from bpy.types import Scene
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+def samples(scene: Scene) -> int:
+    return scene.cycles.samples  # error: [blender-assumed-default-addon]
+
+
+def register(): ...
+def unregister(): ...
+```
+
+`/.venv/<path-to-site-packages>/cycles/__init__.py`:
+
+```py
+import bpy
+from bpy.props import IntProperty, PointerProperty
+from bpy.types import PropertyGroup
+
+bl_info = {"name": "Cycles", "blender": (4, 2, 0)}
+
+
+class CyclesRenderSettings(PropertyGroup):
+    samples: IntProperty()
+
+
+def register():
+    bpy.utils.register_class(CyclesRenderSettings)
+    bpy.types.Scene.cycles = PointerProperty(type=CyclesRenderSettings)
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class ID(bpy_struct): ...
+class Scene(ID): ...
+class PropertyGroup(bpy_struct): ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+def PointerProperty(**kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+```
+
+## `blender-assumed-editor-member`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.103">0.0.103</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-editor-member%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L362" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of `area`, `region` and `space_data` on a `bpy.types.Context` in code Blender calls
+while it draws an editor, where the class names no editor of its own: the `poll` of a `Panel`,
+`Menu` or `AssetShelf`, a tool's `draw_settings`, `RenderEngine.view_update` / `view_draw`, a
+module-level function given to `SpaceX.draw_handler_add` (by name, in any file of the add-on) and a
+module-level helper that only such functions call. A `Panel` with a `bl_space_type` and a menu whose
+idname prefix names an editor are narrowed by the context member and
+[`blender-narrowed-by-menu-prefix`](#blender-narrowed-by-menu-prefix) rules instead.
+
+The read is typed without `None`, and `space_data` in a draw handler as the `Space` subclass whose
+`draw_handler_add` registers it. A read that the code only tests for truth or `None`
+(`if context.region is None:`) is not reported.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+Blender polls a panel or a menu while drawing a region of an editor, draws a tool's settings in the
+tool header or the tool settings of an editor, and calls `view_update` and `view_draw` for the 3D
+viewport that shows the render, so these members are set there in ordinary use. Blender runs a draw
+handler while it draws a region of its editor, with the context's area and region set. A script,
+`wm.call_menu` or `wm.call_panel` can poll a menu or a panel with no editor, where they are `None`,
+and a draw handler or its helper can be called another way.
+
+**Examples**
+
+
+```py
+from bpy.types import Menu
+
+
+class MY_MT_menu(Menu):
+    bl_label = "Menu"
+
+    @classmethod
+    def poll(cls, context):
+        space = context.space_data  # error: [blender-assumed-editor-member]
+        return space.type == "VIEW_3D"
+```
+
+Check the member before reading through it.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Space(bpy_struct):
+    type: str
+
+class Context(bpy_struct):
+    space_data: Space | None
+
+class Menu(bpy_struct):
+    bl_label: str
+    @classmethod
+    def poll(cls, context: Context) -> bool: ...
+    def draw(self, context: Context) -> None: ...
+```
+
+## `blender-assumed-internal-operator`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.103">0.0.103</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-internal-operator%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L353" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of a member of `bpy.types.Context` (`context.object`, `context.screen`, ...) in a
+callback of an operator whose `bl_options` has `'INTERNAL'`, its own or a base class's. The
+operator's `poll` is left out, and so is a member its `poll` checked, which
+[`blender-narrowed-by-poll`](#blender-narrowed-by-poll) reports.
+
+The read is typed without `None`. A read that the code only tests for truth or `None`
+(`if context.object is None:`) is not reported.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+`'INTERNAL'` hides an operator from the operator search. In ordinary use only the button, menu
+entry or key of its own add-on calls it, from the editor and with the data it needs, so the code
+reads them without a check. Nothing stops a script or a user key map from calling it anywhere
+else, where the member can be `None`.
+
+**Examples**
+
+
+```py
+from bpy.types import Operator
+
+
+class MY_OT_show(Operator):
+    bl_idname = "my.show"
+    bl_label = "Show"
+    bl_options = {'INTERNAL'}
+
+    def execute(self, context):
+        print(context.object.name)  # error: [blender-assumed-internal-operator]
+        return {'FINISHED'}
+```
+
+Check the member, or give the operator a `poll` that checks it.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Object(bpy_struct):
+    name: str
+
+class Context(bpy_struct):
+    object: Object | None
+
+class Operator(bpy_struct):
+    bl_idname: str
+    bl_label: str
+    bl_options: set[str]
+    @classmethod
+    def poll(cls, context: Context) -> bool: ...
+    def execute(self, context: Context) -> set[str]: ...
+```
+
+## `blender-assumed-list-item`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-list-item%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L308" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of the `item` parameter of a `UIList.draw_item` override that leaves it
+unannotated. The parameter is typed without `None`; a read that the method only tests for truth
+or `None` (`if item is None: return`) is not reported, nor are the reads it narrows itself.
+
+Where the add-on draws the list with `layout.template_list("MY_UL_items", "", data, "propname")`,
+in any of its modules, `item` has the element type of the collection `data.propname`, the union of
+them when the list shows several collections. Otherwise it keeps the type of `UIList.draw_item`.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+Blender passes `None` as the item only for an empty slot of an array of ID pointers. A list of an
+add-on's own collection never has one, so the read is safe there, but the stubs cannot tell which
+list the class draws.
+
+**Examples**
+
+
+```py
+from bpy.types import UIList
+
+
+class MY_UL_items(UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_property):
+        layout.prop(item, "name")  # error: [blender-assumed-list-item]
+```
+
+Check `item` for `None` first when the list may show empty slots.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class Context(bpy_struct): ...
+
+class UILayout(bpy_struct):
+    def prop(self, data: bpy_struct, property: str) -> None: ...
+
+class UIList(bpy_struct):
+    def draw_item(
+        self,
+        context: Context,
+        layout: UILayout,
+        data: bpy_struct,
+        item: bpy_struct | None,
+        icon: int,
+        active_data: bpy_struct | None,
+        active_property: str,
+    ) -> None: ...
+```
+
+## `blender-assumed-preferences`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-preferences%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L335" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of the add-on's own preferences, `preferences.addons[KEY].preferences`, that run
+while its `AddonPreferences` class is not registered: in `register()` (or a function it calls)
+before `register_class` of the class, and in `unregister()` after `unregister_class`. The read is
+still typed as the add-on's preferences class. A read in a callback, or after the class is
+registered, is not reported.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+Blender adds the add-on's entry before it calls `register()`, but its `preferences` is `None` until
+the preferences class is registered, and `None` again once it is unregistered. Reading a setting
+there raises `AttributeError`.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import AddonPreferences
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class MyPreferences(AddonPreferences):
+    bl_idname = __package__
+
+
+def register():
+    prefs = bpy.context.preferences.addons[__package__].preferences  # error: [blender-assumed-preferences]
+    bpy.utils.register_class(MyPreferences)
+
+
+def unregister():
+    bpy.utils.unregister_class(MyPreferences)
+```
+
+Register the preferences class first.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+from .types import Context
+
+context: Context
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class AddonPreferences(bpy_struct):
+    bl_idname: str
+
+class Addon(bpy_struct):
+    preferences: AddonPreferences | None
+
+class Addons(bpy_struct):
+    def __getitem__(self, key: str) -> Addon: ...
+
+class Preferences(bpy_struct):
+    addons: Addons
+
+class Context(bpy_struct):
+    preferences: Preferences
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-assumed-preset-context`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.103">0.0.103</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-preset-context%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L371" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the module-level reads of a member of `bpy.context` in a preset, a Python file in a folder
+named `presets` (`bpy.context.camera` in `presets/camera/1_inch.py`). `scene`, `view_layer`,
+`tool_settings` and `collection` are reported by [`blender-assumed-context-member`](#blender-assumed-context-member) instead, and a
+read in a function of the file is not checked.
+
+The read is typed without `None`. Where the panel that applies a preset folder shows only for one
+struct, the member is read as that struct (`active_strip` as a `TextStrip` in the sequencer's
+text-style presets, `fluid` as a domain in the fluid presets), and a pointer the panel requires is
+read as set and reported too (`material.grease_pencil` in a Grease Pencil material preset). A read
+that the code only tests for truth or `None` is not reported.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+Blender runs a preset with the context of the panel or menu that applies it
+(`script.execute_preset`): a camera preset applied from the camera tab finds that camera in
+`bpy.context.camera`. Nothing in the file says which panel runs it, and a preset run from a script
+or another panel can find the member `None`.
+
+**Examples**
+
+
+`presets/camera/small_sensor.py`:
+
+```py
+import bpy
+
+bpy.context.camera.sensor_width = 13.2  # error: [blender-assumed-preset-context]
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+from .types import Context
+
+context: Context
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Camera(bpy_struct):
+    sensor_width: float
+
+class Context(bpy_struct):
+    camera: Camera | None
+```
+
+## `blender-assumed-registration`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-registration%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L317" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the uses of a class or a Registered property that `register()` registers only on a branch:
+in an arm of an `if` or `match`, in an `except` handler, in a function Blender calls later (a timer
+or a handler), or from a list extended at run time. The uses are an operator call
+`bpy.ops.<category>.<name>`, a read of the Registered property and a read of the add-on's
+`preferences`. The class or property is taken as registered.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+The class or property exists only when the condition held. Usually the code that uses it runs under
+the same condition, but the typechecker cannot see that: on a Blender version or a build where the
+branch did not run, the operator call fails and the property read raises `AttributeError`.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import os
+
+import bpy
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class MY_OT_new(Operator):
+    bl_idname = "my.new"
+
+
+class MY_OT_run(Operator):
+    bl_idname = "my.run"
+
+    def execute(self, context):
+        bpy.ops.my.new()  # error: [blender-assumed-registration]
+        return {"FINISHED"}
+
+
+def register():
+    bpy.utils.register_class(MY_OT_run)
+    if os.environ.get("MY_ADDON_NEW") is not None:
+        bpy.utils.register_class(MY_OT_new)
+
+
+def unregister():
+    if MY_OT_new.is_registered:
+        bpy.utils.unregister_class(MY_OT_new)
+    bpy.utils.unregister_class(MY_OT_run)
+```
+
+Check the same condition where the class is used.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import ops as ops, types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/ops/__init__.pyi`:
+
+```pyi
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct:
+    is_registered: bool
+
+class Context(bpy_struct): ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+    def execute(self, context: Context) -> set[str]: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-assumed-subclass-member`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.103">0.0.103</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-assumed-subclass-member%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L389" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of a member that a refined base of `bpy.types` (a class with a Type tag, such as
+`Constraint`, `Modifier`, `Light`, `Node` or `NodeSocket`) lacks, but some of the subclasses its
+tag names declare: `ob.constraints[0].target`, `bpy.data.lights["Key"].spot_size`,
+`node.inputs["Color"].default_value`.
+
+The read is typed as the union of those subclasses' declarations of the member. A member no
+subclass declares is still an error, and so is a member read on `bpy_struct`, `ID` or a class
+without a Type tag.
+
+The rule belongs to the category `blender-assumptions`.
+
+**Why is this bad?**
+
+
+Blender always hands out a struct of a refined base as the subclass its Type tag names, so the
+member is there when the struct is one of the subclasses that declare it. A lookup by index or by
+name does not say which one it is: the code takes for granted that the first constraint has a
+target, or that the light called "Key" is a spot light.
+
+**Examples**
+
+
+```py
+import bpy
+
+
+def first_target(ob: bpy.types.Object) -> bpy.types.Object | None:
+    return ob.constraints[0].target  # error: [blender-assumed-subclass-member]
+
+
+def copied_target(ob: bpy.types.Object) -> bpy.types.Object | None:
+    con = ob.constraints[0]
+    if con.type == 'COPY_LOCATION':
+        return con.target  # ok: narrowed by the Type tag
+    return None
+```
+
+Test the tag first, as `copied_target` does, so that the struct is narrowed to the subclass.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+from typing import Literal
+
+class bpy_struct: ...
+
+class Constraint(bpy_struct):
+    type: Literal['COPY_LOCATION', 'LIMIT_SCALE']
+
+class CopyLocationConstraint(Constraint):
+    type: Literal['COPY_LOCATION']
+    target: Object | None
+
+class LimitScaleConstraint(Constraint):
+    type: Literal['LIMIT_SCALE']
+
+class ObjectConstraints(bpy_struct):
+    def __getitem__(self, key: int | str) -> Constraint: ...
+
+class Object(bpy_struct):
+    constraints: ObjectConstraints
+```
+
+## `blender-duplicate-registration`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-duplicate-registration%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L128" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for a class that `register()` registers while it is still registered, and for two classes of
+one kind (operators and macros; panels; menus; headers; UI lists) that register under the same
+idname. A panel, menu, header or UI list without a `bl_idname` registers under its class name, and a
+subclass that sets none inherits its parent's.
+
+Registrations in different branches of an `if`, and registrations that Blender runs later (timers,
+handlers), are not compared.
+
+**Why is this bad?**
+
+
+Registering a class twice raises `ValueError`, so the add-on fails to enable. A second class with
+the same idname silently replaces the first: the first operator or panel is gone, and unregistering
+it later fails.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class SimpleOperator(Operator):
+    bl_idname = "object.simple"
+
+
+def register():
+    bpy.utils.register_class(SimpleOperator)
+    bpy.utils.register_class(SimpleOperator)  # error: [blender-duplicate-registration]
+
+
+def unregister():
+    bpy.utils.unregister_class(SimpleOperator)
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-imprecise-callback-parameter`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-imprecise-callback-parameter%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L254" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the parameters of a Blender callback override (`UIList.draw_item`, `Operator.description`,
+...) for an annotation narrower than the parent's parameter type: a subtype of it, without `None`,
+such as the add-on's own `PropertyGroup` for `draw_item`'s `item` or `Armature` for its `data`.
+
+The override is accepted, and its body sees the annotated type. An annotation that is no subtype of
+the parent's type is still ty's [`incompatible-method-override`](#incompatible-method-override).
+
+The rule belongs to the category `blender-imprecise-annotations`.
+
+**Why is this bad?**
+
+
+A narrower parameter type breaks the override for callers that go through the parent's type. Only
+Blender calls a callback, and it passes what the add-on gave it (`template_list(data, ...)`), so the
+annotation is right as long as the add-on passes that type: the typechecker cannot check that.
+
+**Examples**
+
+
+```py
+from bpy.types import Armature, UIList
+
+
+class MY_UL_layers(UIList):
+    def draw_item(self, context, layout, data: Armature, item, icon, active_data, active_property):  # error: [blender-imprecise-callback-parameter]
+        layout.label(text=data.name)
+```
+
+Leave the parameter unannotated (it has the parent's type) and check its type where it matters.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct:
+    name: str
+
+class Context(bpy_struct): ...
+class Armature(bpy_struct): ...
+
+class UILayout(bpy_struct):
+    def label(self, *, text: str = "") -> None: ...
+
+class UIList(bpy_struct):
+    def draw_item(
+        self,
+        context: Context,
+        layout: UILayout,
+        data: bpy_struct,
+        item: bpy_struct | None,
+        icon: int,
+        active_data: bpy_struct | None,
+        active_property: str,
+    ) -> None: ...
+```
+
+## `blender-imprecise-enum-value`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-imprecise-enum-value%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L245" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the values passed where Blender takes an enum item, for a value typed `str` (or `set[str]`
+for an enum flag set): an argument of a function, method or operator of Blender's API, or the value
+assigned to an enum property of a Blender object, whose stubs spell the enum as a `Literal`.
+
+The value is accepted as the enum. A string literal is precise: one that is not an item is still
+an error, alone (`mode="OBJCT"`) or in a set display (`{"VERT", "EDGEE"}`), and an add-on's own
+`Literal` parameter keeps ty's check.
+
+The rule belongs to the category `blender-imprecise-annotations`.
+
+**Why is this bad?**
+
+
+Blender checks the name itself and raises for one that is not an item (`TypeError: enum "OBJCT"
+not found in (...)`). A value computed at runtime hides a wrong name from the typechecker.
+
+**Examples**
+
+
+```py
+from bpy.types import Light, LightCollection
+
+
+def add_light(lights: LightCollection, light_type: str) -> None:
+    lights.new("Light", light_type)  # error: [blender-imprecise-enum-value]
+    lights.new("Light", "SUN")
+
+
+def set_type(light: Light, light_type: str) -> None:
+    light.type = light_type  # error: [blender-imprecise-enum-value]
+    light.type = "SUNN"  # error: [invalid-assignment]
+```
+
+Annotate the value with the enum's `Literal` type where it is computed.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+from typing import Literal
+
+class bpy_struct: ...
+
+class Light(bpy_struct):
+    type: Literal["POINT", "SUN", "SPOT", "AREA"]
+
+class LightCollection(bpy_struct):
+    def new(self, name: str, type: Literal["POINT", "SUN", "SPOT", "AREA"]) -> Light: ...
+```
+
+## `blender-imprecise-operator-return`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-imprecise-operator-return%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L236" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the result of an operator's `execute`, `invoke` and `modal` (and of any other Blender
+callback whose result is a set of names) for a type less precise than the set of names Blender
+accepts:
+
+- a return annotation that is the parent's result with the names widened to `str`: `-> set[str]` or
+  `-> typing.Set[str]` where the stubs say `set[Literal["RUNNING_MODAL", "CANCELLED", ...]]`. This
+  also covers a mixin's method that a Blender class gets the callback from;
+- a returned `set[str]` that is no set display, such as a set held in a variable
+  (`ret = {"CANCELLED"}` ... `return ret`).
+
+The code is accepted, and typed as the precise form: a method annotated `-> set[str]` has the
+parent's result type for its callers, and its `return` statements are checked against it, so a
+name that is not a result (`return {"FINSHED"}`) is still an [`invalid-explicit-return`](#invalid-explicit-return) error.
+
+The rule belongs to the category `blender-imprecise-annotations`.
+
+**Why is this bad?**
+
+
+The names are `Literal` types only in the stubs; Blender checks each name itself when the method
+returns and raises for one that is not a result. A `set[str]` hides a misspelt name from the
+typechecker until Blender runs the operator.
+
+**Examples**
+
+
+```py
+from typing import Literal
+
+from bpy.types import Operator
+
+
+class MY_OT_run(Operator):
+    bl_idname = "my.run"
+    bl_label = "Run"
+
+    def execute(self, context) -> set[str]:  # error: [blender-imprecise-operator-return]
+        return {"FINSHED"}  # error: [invalid-explicit-return]
+
+    def invoke(self, context, event):
+        result = {"CANCELLED"}
+        return result  # error: [blender-imprecise-operator-return]
+```
+
+Annotate the method with the precise result type, or leave the annotation out: an unannotated
+override has its parent's result type.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+from typing import Literal
+
+class bpy_struct: ...
+class Context(bpy_struct): ...
+class Event(bpy_struct): ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+    bl_label: str
+    def execute(self, context: Context) -> set[Literal["FINISHED", "CANCELLED"]]: ...
+    def invoke(self, context: Context, event: Event) -> set[Literal["FINISHED", "CANCELLED"]]: ...
+```
+
+## `blender-invalid-addon-metadata`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-addon-metadata%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L65" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the metadata Blender reads before it loads an add-on: the `bl_info` dict of a legacy add-on, and the
+`blender_manifest.toml` of an extension.
+
+- `bl_info` must be a dict display with a `"name"` entry, and its `"blender"` entry must be a tuple of three
+  ints.
+- `blender_manifest.toml` must be valid TOML with the keys `schema_version`, `id`, `version`, `name`,
+  `tagline`, `maintainer`, `type`, `blender_version_min` and `license`, and `type` must be `"add-on"` or
+  `"theme"`. Each add-on its `[tool.blender] uses` declares (a table Blender ignores, read by the checker for
+  the add-ons whose registrations the add-on reads) must be a module the add-on can import.
+
+**Why is this bad?**
+
+
+Blender refuses to list or install an add-on whose metadata is missing or malformed, so the mistake only shows
+when someone tries to enable it.
+
+Problems in `bl_info` are reported on the name `bl_info` or on the entry. Problems in
+`blender_manifest.toml` are reported at the start of the add-on's `__init__.py`, because a TOML file
+cannot carry a `# ty: ignore` comment.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+bl_info = {  # error: [blender-invalid-addon-metadata] "has no"
+    "version": (1, 0, 0),
+    "blender": (4, 2),  # error: [blender-invalid-addon-metadata] "three ints"
+}
+
+def register(): ...
+def unregister(): ...
+```
+
+## `blender-invalid-base`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-base%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L209" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for a class with two Blender bases where neither derives from the other, such as an
+`Operator` that is also a `Panel`.
+
+ty's own checks of the conflicts between the two bases ([`incompatible-attribute-override`](#incompatible-attribute-override),
+[`incompatible-method-override`](#incompatible-method-override)) are left out on such a class, since they all come from this one mistake.
+
+**Why is this bad?**
+
+
+Blender registers the class as its first Blender base only, so the class is never what it was
+meant to be: an `Operator` and `Panel` is registered as an operator, and never drawn as a panel.
+
+**Examples**
+
+
+```py
+from bpy.types import Operator, Panel
+
+
+class MY_OT_run(Operator, Panel):  # error: [blender-invalid-base]
+    bl_idname = "my.run"
+    bl_label = "Run"
+```
+
+Split it into two classes, one per Blender base.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+    bl_label: str
+
+class Panel(bpy_struct):
+    bl_idname: str
+    bl_label: str
+```
+
+## `blender-invalid-idname`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-idname%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L137" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the `bl_idname` of the classes the add-on registers. An operator or macro idname is
+`category.name`: lower-case letters, digits and `_`, with exactly one `.` that is neither first nor
+last, and at most 60 characters. A panel, menu, header or UI list idname is an upper-case prefix,
+`_PT_`, `_MT_`, `_HT_` or `_UL_`, then a suffix (`MYADDON_PT_settings`); without a `bl_idname`, the
+class name is the idname.
+
+An idname that is not a string literal is not checked.
+
+**Why is this bad?**
+
+
+Blender refuses an invalid operator idname, and an operator without one, with `RuntimeError`, so the
+add-on fails to enable. For panels, menus, headers and UI lists it prints a warning, and code that
+looks the class up by the conventional name does not find it.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class SimpleOperator(Operator):
+    bl_idname = "OBJECT_OT_simple"  # error: [blender-invalid-idname]
+
+
+def register():
+    bpy.utils.register_class(SimpleOperator)
+
+
+def unregister():
+    bpy.utils.unregister_class(SimpleOperator)
+```
+
+Use `bl_idname = "object.simple"` instead.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-invalid-operator-property`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-operator-property%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L83" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the properties of an operator or a macro for one that Blender refuses: a pointer to a
+data-block (`PointerProperty(type=Object)`), or a pointer or collection to a `PropertyGroup` that
+holds one, at any depth. It is reported on the property's name, or on the operator's class name when
+the property comes from a mixin that is not an operator.
+
+It also checks where an operator's properties are named by a string: the `property` argument of
+`layout.operator_enum(...)` and `layout.operator_menu_enum(...)` must be an enum property of the
+operator, and the `("name", value)` pairs of a tool's `bl_keymap` items must name a property of the
+operator and give it a value it accepts. Blender only prints a warning for those, and the menu or
+the key-map item does not do what was meant.
+
+**Why is this bad?**
+
+
+An operator's properties cannot point to data-blocks. Blender prints a `ValueError` when it
+registers the operator, and registers it without that property **and every property after it**:
+`bpy.ops.my_addon.run(after=1)` then raises `TypeError`, and the properties are missing from
+`self.properties` and the operator's panel.
+
+Store the name of the data-block instead (`StringProperty()`), and look it up in `bpy.data` when the
+operator runs.
+
+**Examples**
+
+
+```py
+from bpy.props import IntProperty, PointerProperty
+from bpy.types import Object, Operator
+
+
+class MY_OT_run(Operator):
+    bl_idname = "my.run"
+    bl_label = "Run"
+
+    before: IntProperty()
+    target: PointerProperty(type=Object)  # error: [blender-invalid-operator-property]
+    after: IntProperty()
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+def PointerProperty(*, type: type, **kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class ID(bpy_struct): ...
+class Object(ID): ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+    bl_label: str
+```
+
+## `blender-invalid-override`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-override%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L191" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the methods of a class deriving from a Blender class that `register_class` accepts
+(`Operator`, `Panel`, `UIList`, `Node`, ...) that Blender calls: `execute`, `invoke`, `poll`,
+`draw`, `draw_item` and the other callbacks of that class. Blender refuses such a method when:
+
+- it has the wrong number of positional parameters, counting `self` or `cls` and parameters with
+  defaults, but not `*args`, keyword-only parameters or `**kwargs`. `UIList.draw_item` accepts 7 to
+  10;
+- it is a plain method where Blender needs a classmethod (`poll`, `description`, ...), or a
+  classmethod where Blender needs a plain method (`execute`, `draw`, ...). A `staticmethod` passes
+  where a plain method is needed.
+
+Every class deriving from a Blender class is checked, registered or not, since a registered
+subclass inherits the method.
+
+Blender passes a callback's arguments by position, as many as it has parameters, so a renamed
+parameter (`def execute(self, ctx)`) or a short `draw_item` is fine. ty's [`incompatible-method-override`](#incompatible-method-override)
+accepts them too, and leaves a method that this rule reports to it.
+
+**Why is this bad?**
+
+
+Blender raises `ValueError` when it registers the class (`expected Operator, MY_OT_run class
+"invoke" function to have 3 args, found 2`), so the add-on fails to enable.
+
+**Examples**
+
+
+```py
+from bpy.types import Operator
+
+
+class MY_OT_run(Operator):
+    bl_idname = "my.run"
+    bl_label = "Run"
+
+    def execute(self, ctx):  # ok: Blender passes the context by position
+        return {"FINISHED"}
+
+    def invoke(self, context):  # error: [blender-invalid-override]
+        return self.execute(context)
+```
+
+Blender calls `invoke` with the context and the event: use `def invoke(self, context, event)`.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class Context(bpy_struct): ...
+class Event(bpy_struct): ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+    bl_label: str
+    def execute(self, context: Context) -> set[str]: ...
+    def invoke(self, context: Context, event: Event) -> set[str]: ...
+```
+
+## `blender-invalid-property`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-property%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L74" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the `bpy.props` calls of a Blender add-on (`IntProperty(...)`, `EnumProperty(...)`, ...) for arguments
+that Blender rejects when it registers the property:
+
+- an enum default that is not one of the static items, by identifier or by number;
+- with `options={"ENUM_FLAG"}`, a default that is not a set of item identifiers, or more than 32 items;
+- a set default without `ENUM_FLAG`;
+- a `str` default with function `items=`;
+- a vector default whose length or nesting differs from `size=` (3 when it is not given);
+- a `size=` outside 1 to 32, or with more than three dimensions;
+- `set=` without `get=`;
+- a property name that starts with `_`;
+- a pointer to a data-block (`PointerProperty(type=Object)`), or to a group that holds one, on a class that
+  cannot hold one, such as `AddonPreferences` (on an operator or a macro, this is [`blender-invalid-operator-property`](#blender-invalid-operator-property)).
+
+**Why is this bad?**
+
+
+Blender reads a declaration only when it registers the property: when `register_class` registers the class that
+annotates it, or at the assignment `bpy.types.Scene.x = IntProperty(...)`. A declaration Blender rejects raises a
+`ValueError` there, so the add-on fails to enable.
+
+A call is checked where it is written, so a shared declaration (`COMMON = IntProperty(...)`) is reported once, at
+its definition. Each problem is reported on the offending argument, or on the name for a name that starts with `_`.
+Arguments the checker cannot read (a name it cannot follow, a `**mapping`) are not reported. Annotations on a class
+whose annotations Blender ignores (a `Panel`) are not checked, as Blender never evaluates them.
+
+Arguments that the stubs already reject, such as `IntProperty(default=1.5)` or a `type=` of the wrong kind, are
+left to [`invalid-argument-type`](#invalid-argument-type). `min` and `max` are not checked: Blender accepts any of them.
+
+**Examples**
+
+
+```py
+from bpy.props import EnumProperty, FloatVectorProperty, IntProperty
+from bpy.types import PropertyGroup
+
+class Settings(PropertyGroup):
+    mode: EnumProperty(items=[("A", "A", ""), ("B", "B", "")], default="C")  # error: [blender-invalid-property]
+    offset: FloatVectorProperty(size=3, default=(1.0, 2.0))  # error: [blender-invalid-property]
+    count: IntProperty(set=lambda self, value: None)  # error: [blender-invalid-property]
+```
+
+The examples use these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def EnumProperty(**kwargs: Any) -> _PropertyDeferred: ...
+def FloatVectorProperty(**kwargs: Any) -> _PropertyDeferred: ...
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class PropertyGroup(bpy_struct): ...
+```
+
+## `blender-invalid-register`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-invalid-register%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L56" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks that a Blender add-on's root module (the package's `__init__.py`, or a single-file add-on) defines
+`register` and `unregister`, and that both can be called with no arguments.
+
+**Why is this bad?**
+
+
+Blender calls `register()` when the add-on is enabled and `unregister()` when it is disabled, with no
+arguments. An add-on without one of them, or with one that requires a parameter, fails to enable or to
+disable.
+
+The functions are found the way Blender finds them: as module-level names of the root module, so an alias
+(`register = _register`), an import from a submodule and `register, unregister =
+bpy.utils.register_classes_factory(classes)` all count. Nothing is reported when the type of the name is unknown.
+
+A missing function is reported at the start of the root module; a function with a wrong signature is reported
+where the name is bound.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}  # error: [blender-invalid-register] "no `unregister`"
+
+def register(context):  # error: [blender-invalid-register] "callable with no arguments"
+    ...
+```
+
+## `blender-legacy-property`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-legacy-property%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L101" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for a property declaration assigned in the body of a class with a Blender base class (`value =
+IntProperty()`), instead of annotated (`value: IntProperty()`).
+
+**Why is this bad?**
+
+
+Before Blender 2.80, properties were declared as class attributes. Since then Blender only reads a class's
+annotations: an assigned declaration stays a plain class attribute, no property is created, and Blender prints no
+warning. Reading `self.value` then gives the declaration object, not the property's value.
+
+Classes without a Blender base are not reported: a plain class may hold declarations on purpose, for example to
+register them later with `setattr(bpy.types.Scene, name, Holder.value)`.
+
+**Examples**
+
+
+```py
+from bpy.props import IntProperty
+from bpy.types import PropertyGroup
+
+class Settings(PropertyGroup):
+    value = IntProperty()  # error: [blender-legacy-property]
+    count: IntProperty()  # what Blender reads
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class PropertyGroup(bpy_struct): ...
+```
+
+## `blender-missing-callback`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-missing-callback%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L227" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the classes that `register()` registers for a callback that Blender requires: `draw` on a
+`Panel`, `Menu`, `Header`, `NodeSocket` or `Gizmo`, `setup` on a `GizmoGroup`, and `poll`,
+`iterator` and `generate` on a `KeyingSetInfo`. The callback may come from any class of the add-on
+or mixin the class derives from.
+
+**Why is this bad?**
+
+
+Blender refuses to register the class, so `register()` raises and the add-on fails to enable.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import Panel
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class MY_PT_panel(Panel):  # error: [blender-missing-callback]
+    bl_label = "My panel"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+
+
+def register():
+    bpy.utils.register_class(MY_PT_panel)
+
+
+def unregister():
+    bpy.utils.unregister_class(MY_PT_panel)
+```
+
+Define `def draw(self, context)` on the panel.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Panel(bpy_struct):
+    bl_label: str
+    bl_space_type: str
+    bl_region_type: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-mixin-order`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-mixin-order%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L200" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the bases of a class deriving from a Blender class for a mixin listed after the Blender base
+that defines a method Blender's own Python base class defines too: `Operator.as_keywords`,
+`Menu.append`, `prepend` and `remove` (also on `Panel`, `Header` and `UIList`), `Menu.draw_preset`,
+`Node.poll`, and a few more.
+
+The callbacks Blender looks up when it registers the class (`execute`, `draw`, `Operator.poll`, ...)
+are not affected: Blender finds them anywhere on the class, so a mixin's `poll` is used in either
+order.
+
+**Why is this bad?**
+
+
+Python looks a method up along the class's method resolution order, so Blender's base class wins
+over a mixin listed after it, and the mixin's method is never called. Nothing reports it at runtime.
+
+**Examples**
+
+
+```py
+from bpy.types import Operator
+
+
+class KeywordsMixin:
+    def as_keywords(self, *, ignore=()):
+        return {}
+
+
+class MY_OT_run(Operator, KeywordsMixin):  # error: [blender-mixin-order]
+    bl_idname = "my.run"
+    bl_label = "Run"
+
+
+class MY_OT_other(KeywordsMixin, Operator):  # ok: the mixin comes first
+    bl_idname = "my.other"
+    bl_label = "Other"
+```
+
+List the mixin before the Blender base.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+    bl_label: str
+```
+
+## `blender-narrowed-by-bl-context`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.103">0.0.103</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-narrowed-by-bl-context%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L290" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of a context member that a Panel's `bl_context` guarantees, where Blender enforces
+it: in the panel's `poll`, in the callbacks the poll gates (`draw`, `draw_header`,
+`draw_header_preset`) and in those of its sub-panels.
+
+Blender checks a top-level panel's `bl_context` against its region's contexts before it polls the
+panel, and draws a sub-panel only inside its parent. Two kinds of region enforce it:
+
+- In the Properties editor's main region (`bl_space_type = "PROPERTIES"`), a panel is drawn only in
+  its tab, and a tab is shown only while its data exists. The `object`, `physics`, `constraint`,
+  `modifier`, `shaderfx` and `bone_constraint` tabs need an object, so `context.object` is typed
+  without `None` there (of the Grease Pencil or armature type for the last two).
+- In the 3D viewport's sidebar and toolbar (`bl_space_type = "VIEW_3D"`, `bl_region_type` `"UI"`
+  or `"TOOLS"`), a panel whose `bl_context` is a mode (`"mesh_edit"`, `"posemode"`,
+  `"sculpt_mode"`, ...) is drawn only in that mode, which gives what `context.mode == 'EDIT_MESH'`
+  gives in a `poll`: the edit object of the mode's type, a paint mode's tool settings, the pose of
+  an armature.
+
+Not narrowed: the `data`, `material` and `particle` tabs, which also show pinned data without an
+object; `"objectmode"`, which needs no object; the display-only contexts that start with a dot
+(`".objectmode"`, `".mesh_edit"`, `".paint_common"`), groups of tool settings that the tool header
+also draws as popovers; a mode in any other editor; and a panel the add-on opens as a popover, where
+no context is checked.
+
+The rule belongs to the category `blender-implied-narrowings`.
+
+**Why is this bad?**
+
+
+The read is safe while Blender draws the panel where its `bl_context` says. It is not when the panel
+is drawn another way, for example as a popover opened from another add-on, or when the code changes
+the context before the read, which the typechecker cannot see.
+
+**Examples**
+
+
+```py
+from bpy.types import Panel
+
+
+class MY_PT_object(Panel):
+    bl_space_type = "PROPERTIES"
+    bl_region_type = "WINDOW"
+    bl_context = "object"
+
+    def draw(self, context):
+        self.layout.label(text=context.object.name)  # error: [blender-narrowed-by-bl-context]
+
+
+class MY_PT_tools(Panel):
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_context = ".objectmode"
+
+    def draw(self, context):
+        self.layout.label(text=context.object.name)  # error: [missing-union-attribute]
+```
+
+Check the pointer in the panel's `poll` or in the callback if the panel may be drawn elsewhere.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Object(bpy_struct):
+    name: str
+
+class Context(bpy_struct):
+    object: Object | None
+
+class UILayout(bpy_struct):
+    def label(self, *, text: str = "") -> None: ...
+
+class Panel(bpy_struct):
+    layout: UILayout | None
+    @classmethod
+    def poll(cls, context: Context) -> bool: ...
+    def draw(self, context: Context) -> None: ...
+```
+
+## `blender-narrowed-by-menu-prefix`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-narrowed-by-menu-prefix%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L272" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of `context.space_data` and `context.area` in a Menu's `draw` and `poll` when the
+menu's idname (its `bl_idname`, or without one its class name) starts with an editor's prefix:
+`CLIP_MT_view` belongs to the clip editor, whose header is `CLIP_HT_header`. The 19 header prefixes
+of Blender's editors, `TIME` (the dope sheet) and `ASSETBROWSER` (the file browser) count.
+
+`space_data` is typed as that editor's `Space` subclass (`SpaceClipEditor`), or `Space` for the top
+bar and the status bar, and `area` without `None`. Another prefix, such as the add-on's own, gives
+nothing.
+
+The rule belongs to the category `blender-implied-narrowings`.
+
+**Why is this bad?**
+
+
+A menu has no `bl_space_type`: Blender draws it in whatever editor `layout.menu(...)`,
+`wm.call_menu` or a key map item opens it from. Blender's own menus follow the naming convention
+and menu search relies on it, but a menu drawn from another editor (a submenu shared between
+editors, a user's key map entry) gets that editor's space.
+
+**Examples**
+
+
+```py
+from bpy.types import Menu
+
+
+class CLIP_MT_my_tools(Menu):
+    def draw(self, context):
+        clip = context.space_data.clip  # error: [blender-narrowed-by-menu-prefix]
+
+
+class MY_MT_tools(Menu):
+    def draw(self, context):
+        clip = context.space_data.clip  # error: [missing-attribute]
+```
+
+Check `context.space_data.type` (or `context.area.type`) in the menu's `poll`.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+from typing import Literal
+
+class bpy_struct: ...
+
+class Space(bpy_struct):
+    type: Literal["EMPTY", "CLIP_EDITOR", "VIEW_3D"]
+
+class MovieClip(bpy_struct): ...
+
+class SpaceClipEditor(Space):
+    type: Literal["CLIP_EDITOR"]
+    clip: MovieClip | None
+
+class Area(bpy_struct): ...
+
+class Context(bpy_struct):
+    area: Area | None
+    space_data: Space | None
+
+class Menu(bpy_struct):
+    @classmethod
+    def poll(cls, context: Context) -> bool: ...
+    def draw(self, context: Context) -> None: ...
+```
+
+## `blender-narrowed-by-poll`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-narrowed-by-poll%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L263" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of a pointer that the class's `poll()` checked, in a callback the poll gates: a
+Panel's `draw`, `draw_header` and `draw_header_preset`, a Menu's `draw`, an Operator's `invoke` and
+`execute`, and a GizmoGroup's `setup`, `refresh`, `draw_prepare` and `invoke_prepare`.
+
+The read is typed without `None`, and a Type tag test in the poll (`ob.type == 'MESH'`) narrows it
+as the same test would in the callback. A mode test (`context.mode == 'EDIT_MESH'`) checks what
+Blender's mode implies: the edit object, of the mode's object type, or a paint mode's tool
+settings. A pointer Blender keeps in step with a checked one (`space_data.edit_tree` with
+`space_data.node_tree`) is narrowed too, without a report. The poll's checks are read from its code: the conjuncts of
+its `return`, attribute reads always evaluated while it computes the result (a poll that raises
+counts as `False`), early `return False` guards, local aliases, `super().poll(context)`, an
+inherited poll and helper functions taking the context. A check is about one path from the context
+(`context.object.active_material`), so a pointer the poll did not check is still an error. A read
+the callback only tests for truth or `None` is not reported.
+
+The rule belongs to the category `blender-implied-narrowings`.
+
+**Why is this bad?**
+
+
+Blender calls these callbacks only right after `poll()` returned `True`, with the same context, so
+the read is safe while the callback runs that way. It is not when the callback is called another
+way (`self.execute(context)` from `modal`, which Blender calls without a new poll) or when it
+changes the context before the read, which the typechecker cannot see.
+
+**Examples**
+
+
+```py
+from bpy.types import Panel
+
+
+class MY_PT_material(Panel):
+    @classmethod
+    def poll(cls, context):
+        return context.object is not None
+
+    def draw(self, context):
+        self.layout.label(text=context.object.name)  # error: [blender-narrowed-by-poll]
+        self.layout.label(text=context.material.name)  # error: [missing-union-attribute]
+```
+
+Check the pointer in the callback too, or read it once into a checked local.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Object(bpy_struct):
+    name: str
+
+class Material(bpy_struct):
+    name: str
+
+class Context(bpy_struct):
+    object: Object | None
+    material: Material | None
+
+class UILayout(bpy_struct):
+    def label(self, *, text: str = "") -> None: ...
+
+class Panel(bpy_struct):
+    layout: UILayout | None
+    @classmethod
+    def poll(cls, context: Context) -> bool: ...
+    def draw(self, context: Context) -> None: ...
+```
+
+## `blender-narrowed-by-popover`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-narrowed-by-popover%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L281" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the reads of `context.space_data` in a Panel that the same add-on opens as a popover, with
+`layout.popover(...)` or `wm.call_panel`: its `space_data` is typed as the `Space` subclass of the
+panel's `bl_space_type`, as in any panel, and reported. A panel the add-on never opens as a popover
+gets the same type without a report.
+
+In a panel of the `'HEADER'` region type, which Blender draws only as a popover, it also checks the
+reads of a pointer that every function opening the panel checked before the call, by its own control
+flow (`if context.space_data.node_tree: layout.popover(...)`, an early `return`): the read is typed
+without `None`, or as the subclass a Type tag test names, in the panel's `draw` and the other
+callbacks a poll would gate, and reported. The checks are read as in a `poll()`
+([`blender-narrowed-by-poll`](#blender-narrowed-by-poll)).
+
+The rule belongs to the category `blender-implied-narrowings`.
+
+**Why is this bad?**
+
+
+Blender draws a panel in an editor of its `bl_space_type`, but a popover is drawn with the area of
+whatever editor opened it, whatever `bl_space_type` says. Blender's own popover-only panels often
+give a dummy `bl_space_type`. The panel's `space_data` is that editor's only when every place that
+opens it is in that editor. Likewise, the popover is drawn with the context of the editor that
+opened it, so what the opener checked still holds, unless the user changes it while the popover is
+open.
+
+**Examples**
+
+
+```py
+from bpy.types import Panel
+
+
+class MY_PT_settings(Panel):
+    bl_space_type = "VIEW_3D"
+
+    def draw(self, context):
+        lens = context.space_data.lens  # error: [blender-narrowed-by-popover]
+
+
+class MY_PT_tools(Panel):
+    bl_space_type = "VIEW_3D"
+
+    def draw(self, context):
+        lens = context.space_data.lens
+        self.layout.popover("MY_PT_settings")
+```
+
+Check `context.space_data.type` before reading what only one editor's space has.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+from typing import Literal
+
+class bpy_struct: ...
+
+class Space(bpy_struct):
+    type: Literal["EMPTY", "VIEW_3D"]
+
+class SpaceView3D(Space):
+    type: Literal["VIEW_3D"]
+    lens: float
+
+class Context(bpy_struct):
+    space_data: Space | None
+
+class UILayout(bpy_struct):
+    def popover(self, panel: str) -> None: ...
+
+class Panel(bpy_struct):
+    layout: UILayout | None
+    bl_space_type: str
+    def draw(self, context: Context) -> None: ...
+```
+
+## `blender-preferences-idname`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-preferences-idname%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L182" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the `bl_idname` of the add-on's `AddonPreferences` classes. Blender finds an add-on's
+preferences by the add-on's module name, so `bl_idname` must be the root package's name: `__package__`
+in the root `__init__.py` or a direct submodule, `__name__` in the root `__init__.py`, or a legacy
+add-on's folder name as a string. Reported are:
+
+- a `bl_idname` that names something else, such as `__name__` in a submodule or another string;
+- a preferences class without a `bl_idname`;
+- a second registered preferences class with the add-on's `bl_idname`.
+
+A `bl_idname` the checker cannot read (a parameter, a call) is not checked. The second class is only
+reported when the checker can follow `register()` to its end, since that needs the order.
+
+**Why is this bad?**
+
+
+Such a class registers without an error, but it is never the add-on's preferences:
+`preferences.addons[__package__].preferences` is `None`, and the preferences are not drawn. A second
+class with the add-on's `bl_idname` silently replaces the first, and unregistering the first then
+fails.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import AddonPreferences
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class MyPreferences(AddonPreferences):
+    bl_idname = "my_preferences"  # error: [blender-preferences-idname]
+
+
+def register():
+    bpy.utils.register_class(MyPreferences)
+
+
+def unregister():
+    bpy.utils.unregister_class(MyPreferences)
+```
+
+Use `bl_idname = __package__` (or `__name__` in `__init__.py`) instead.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class AddonPreferences(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-register-order`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-register-order%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L119" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the order in which `register()` registers classes and adds properties. A class with a
+`PointerProperty` or `CollectionProperty` to a `PropertyGroup` of the add-on, and a property
+assigned to a Blender class with such a `type=`, need that `PropertyGroup` registered first. A
+subpanel (`bl_parent_id`) needs its parent panel registered first.
+
+The check follows `register()` through the functions it calls, the modules it imports, loops over
+class lists and `bpy.utils.register_classes_factory`. Registrations that Blender runs later (timers,
+handlers) have no known order and are not checked.
+
+**Why is this bad?**
+
+
+Blender refuses the registration: a pointer to a `PropertyGroup` that is not registered yet raises
+`ValueError`, and a subpanel before its parent raises `RuntimeError`, so the add-on fails to enable.
+Unregistering in the wrong order works, so it is not reported.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.props import PointerProperty
+from bpy.types import PropertyGroup
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class Leaf(PropertyGroup): ...
+
+
+class Settings(PropertyGroup):
+    leaf: PointerProperty(type=Leaf)
+
+
+def register():
+    bpy.utils.register_class(Settings)  # error: [blender-register-order]
+    bpy.utils.register_class(Leaf)
+
+
+def unregister():
+    bpy.utils.unregister_class(Leaf)
+    bpy.utils.unregister_class(Settings)
+```
+
+Register `Leaf` before `Settings` instead.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def PointerProperty(type: type, **kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class PropertyGroup(bpy_struct): ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-registered-base`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-registered-base%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L218" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for a class that `register()` registers while it also registers a class the first one
+derives from, in either order. A `PropertyGroup` deriving from another registered `PropertyGroup` is
+fine, and registrations in different branches of an `if` are not compared.
+
+**Why is this bad?**
+
+
+When Blender registers a subclass of a registered class, it detaches the base from its Python
+class. The base stays registered but its callbacks are no longer called: an operator returns
+`{'FINISHED'}` without running `execute`, a panel or menu draws nothing, a node can no longer be
+added. Blender only logs that it is "unable to get Python class". Registered the other way round,
+both work, but only because of the order; Blender's `--debug-python` check warns about either order.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class MY_OT_base(Operator):
+    bl_idname = "my.base"
+
+
+class MY_OT_child(MY_OT_base):  # error: [blender-registered-base]
+    bl_idname = "my.child"
+
+
+def register():
+    bpy.utils.register_class(MY_OT_base)
+    bpy.utils.register_class(MY_OT_child)
+
+
+def unregister():
+    bpy.utils.unregister_class(MY_OT_child)
+    bpy.utils.unregister_class(MY_OT_base)
+```
+
+Share the code through a base class that is not registered, or through a mixin.
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-unknown-operator`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unknown-operator%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L173" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks the operator idnames given as strings to Blender's functions that take one
+(`layout.operator(...)`, `operator_menu_hold`, `operator_menu_enum`, `operator_enum`,
+`template_popup_confirm`, `keymap_items.new(...)`, `operator_properties_last`,
+`Gizmo.target_set_operator`, `WorkSpaceTool.operator_properties`, `Macro.define`) and in the
+`bl_keymap` of a tool, for an idname that names neither an operator the add-on registers nor one of
+Blender's own. Both forms are looked up as Blender does: `"object.select_all"` and
+`"OBJECT_OT_select_all"`. A conditional idname (`"a" if c else "b"`) is checked for each operator.
+
+Another add-on's operator counts as unknown. When `register()` does something the checker cannot
+follow, or the file belongs to no add-on, nothing is reported: the operator may be registered where
+the checker cannot see it.
+
+**Why is this bad?**
+
+
+Blender only prints a warning for an unknown operator: the button or menu entry is missing,
+`layout.operator(...)` returns `None` (so setting one of its properties raises `AttributeError`),
+and a key-map item does nothing. Often the idname has a typo, or the operator is not registered.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import Operator, UILayout
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class MY_OT_run(Operator):
+    bl_idname = "my.run"
+
+
+def draw(layout: UILayout) -> None:
+    layout.operator("my.run")
+    layout.operator("my.rnu")  # error: [blender-unknown-operator]
+
+
+def register():
+    bpy.utils.register_class(MY_OT_run)
+
+
+def unregister():
+    bpy.utils.unregister_class(MY_OT_run)
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class OperatorProperties(bpy_struct): ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+
+class UILayout(bpy_struct):
+    def operator(self, operator: str) -> OperatorProperties | None: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-unreachable-registration`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unreachable-registration%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L155" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for a function of the add-on that registers classes (it calls `bpy.utils.register_class`, or
+the register function of `bpy.utils.register_classes_factory`) but that `register()` never calls,
+directly or through other functions. A function that `register()` hands to Blender, such as a timer,
+counts as called.
+
+When `register()` does something the checker cannot follow, nothing is reported. The classes such a
+function registers are not also reported as [`blender-unregistered-class`](#blender-unregistered-class).
+
+**Why is this bad?**
+
+
+Blender only runs `register()`, so the classes the function registers are never registered. Often a
+submodule's `register()` is not called from the add-on's.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class SimpleOperator(Operator):
+    bl_idname = "object.simple"
+
+
+def register_simple():  # error: [blender-unreachable-registration]
+    bpy.utils.register_class(SimpleOperator)
+
+
+def register():
+    pass
+
+
+def unregister():
+    pass
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-unregister-mismatch`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unregister-mismatch%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L164" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Compares `unregister()` with `register()`. It reports a class that `register()` registers and
+`unregister()` never unregisters, a property `register()` adds to a Blender class and `unregister()`
+never deletes, a handler or menu function `register()` appends and `unregister()` never removes, and
+a class `unregister()` unregisters that `register()` never registers.
+
+When either function does something the checker cannot follow, what depends on it is not reported.
+Deleting or removing something that was never added is not reported either.
+
+**Why is this bad?**
+
+
+Whatever `unregister()` leaves behind stays in Blender after the add-on is disabled: its operators
+and panels, its properties, and its handlers, which keep running. Enabling the add-on again then
+registers the classes twice. Unregistering a class that is not registered raises `RuntimeError`, so
+disabling the add-on fails.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.props import IntProperty
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class SimpleOperator(Operator):
+    bl_idname = "object.simple"
+
+
+def register():
+    bpy.utils.register_class(SimpleOperator)
+    bpy.types.Scene.count = IntProperty()  # error: [blender-unregister-mismatch]
+
+
+def unregister():
+    bpy.utils.unregister_class(SimpleOperator)
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class ID(bpy_struct): ...
+class Scene(ID): ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-unregistered-class`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unregistered-class%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L146" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for a class of the add-on that `bpy.utils.register_class` accepts (an operator, panel, menu,
+UI list, `PropertyGroup`, `AddonPreferences`, ...) but that `register()` never registers, in any
+module of the add-on, imported or not.
+
+A class that another class of the add-on derives from is a base and needs no registration, and a
+mixin derives from no Blender class. When `register()` does something the checker cannot follow (a
+class list built at run time, or a call it cannot resolve), nothing is reported.
+
+**Why is this bad?**
+
+
+Blender only knows the classes that are registered: an unregistered operator is not in `bpy.ops`, an
+unregistered panel is never drawn, and unregistered add-on preferences are not the add-on's
+preferences. Often the class was left out of the class list.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.types import Operator
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+
+class SimpleOperator(Operator):
+    bl_idname = "object.simple"
+
+
+class OtherOperator(Operator):  # error: [blender-unregistered-class]
+    bl_idname = "object.other"
+
+
+def register():
+    bpy.utils.register_class(SimpleOperator)
+
+
+def unregister():
+    bpy.utils.unregister_class(SimpleOperator)
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import types as types, utils as utils
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+
+class Operator(bpy_struct):
+    bl_idname: str
+```
+
+`/.venv/<path-to-site-packages>/bpy/utils.pyi`:
+
+```pyi
+def register_class(cls: type) -> None: ...
+def unregister_class(cls: type) -> None: ...
+```
+
+## `blender-unsupported-property-host`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unsupported-property-host%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L92" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for property annotations (`value: IntProperty()`) in the body of a Blender class whose annotations Blender
+ignores: a `Panel`, `Menu`, `Header`, `KeyingSetInfo`, `RenderEngine`, `FileHandler`, `AssetShelf` and the
+like. Only `PropertyGroup`, `Operator`, `Macro`, `AddonPreferences`, `UIList`, `Node`, `NodeSocket`, `NodeTree`,
+`NodeTreeInterfaceSocket`, `KeyConfigPreferences` and `Gizmo` turn their annotations into properties.
+
+**Why is this bad?**
+
+
+Blender registers such a class without an error, but creates no property from the annotation, so reading
+`self.value` raises `AttributeError`. To store a setting for a panel, declare it on a `PropertyGroup` (or as a
+Registered property of the scene) and draw that.
+
+A plain class that is used as a mixin is not reported: its annotations become properties of the hosts that
+inherit them.
+
+**Examples**
+
+
+```py
+from bpy.props import IntProperty
+from bpy.types import Panel
+
+class VIEW3D_PT_settings(Panel):
+    bl_label = "Settings"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+
+    value: IntProperty()  # error: [blender-unsupported-property-host]
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class Panel(bpy_struct): ...
+```
+
+## `blender-unsupported-property-target`
+
+<small>
+Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
+Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.97">0.0.97</a> ·
+<a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22blender-unsupported-property-target%22" target="_blank">Related issues</a> ·
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdedicated%2Fblender%2Flints.rs#L110" target="_blank">View source</a>
+</small>
+
+
+**What it does**
+
+
+Checks for a property declaration assigned to a Blender class that does not accept Registered properties
+(`bpy.types.Area.value = IntProperty()`).
+
+Every ID type (`Scene`, `Object`, `Material`, ...) accepts them, and so do `PropertyGroup`, nodes and sockets,
+bones, `BoneCollection`, `ViewLayer`, strips, `TimelineMarker`, `View3DShading` and a few structs that hold
+operator, gizmo and modifier settings. Other classes, such as `Area`, `Modifier`, `Window`, `Preferences`,
+`Context`, `Operator` and `Panel`, do not.
+
+**Why is this bad?**
+
+
+Blender turns an assignment to an accepting class into a property of every instance. On any other class the
+assignment silently stores the declaration as a plain class attribute: no property is created, no error is raised,
+and `area.value` raises `AttributeError` on an instance.
+
+**Examples**
+
+
+`my_addon/__init__.py`:
+
+```py
+import bpy
+from bpy.props import IntProperty
+
+bl_info = {"name": "My add-on", "blender": (4, 2, 0)}
+
+def register():
+    bpy.types.Scene.value = IntProperty()
+    bpy.types.Area.value = IntProperty()  # error: [blender-unsupported-property-target]
+
+def unregister():
+    del bpy.types.Scene.value
+```
+
+The example uses these minimal Blender stubs:
+
+```toml
+[environment]
+python = "/.venv"
+```
+
+`/.venv/<path-to-site-packages>/bpy/__init__.pyi`:
+
+```pyi
+from . import props as props, types as types
+```
+
+`/.venv/<path-to-site-packages>/bpy/props.pyi`:
+
+```pyi
+from typing import Any
+
+class _PropertyDeferred: ...
+
+def IntProperty(**kwargs: Any) -> _PropertyDeferred: ...
+```
+
+`/.venv/<path-to-site-packages>/bpy/types.pyi`:
+
+```pyi
+class bpy_struct: ...
+class ID(bpy_struct): ...
+class Scene(ID): ...
+class Area(bpy_struct): ...
+```
+
 <a id="call-top-callable"></a>
 
 ## `call-to-function-with-unknown-signature`
@@ -356,7 +3558,7 @@ value = unknown  # ty: ignore[unresolved-reference]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.7">0.0.7</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22call-to-function-with-unknown-signature%22+OR+%22call-top-callable%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L295" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L297" target="_blank">View source</a>
 </small>
 
 
@@ -407,7 +3609,7 @@ def f(x: object):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22conflicting-declarations%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L313" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L315" target="_blank">View source</a>
 </small>
 
 
@@ -440,7 +3642,7 @@ a = 1  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22conflicting-metaclass%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L322" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L324" target="_blank">View source</a>
 </small>
 
 
@@ -474,7 +3676,7 @@ class C(A, B): ...  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22cyclic-class-definition%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L331" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L333" target="_blank">View source</a>
 </small>
 
 
@@ -508,7 +3710,7 @@ class B(A): ...  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.29">0.0.1-alpha.29</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22cyclic-type-alias-definition%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L340" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L342" target="_blank">View source</a>
 </small>
 
 
@@ -559,7 +3761,7 @@ type Tree = int | list[Tree]  # valid recursive alias
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.16">0.0.1-alpha.16</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22deprecated%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L358" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L360" target="_blank">View source</a>
 </small>
 
 
@@ -598,7 +3800,7 @@ old_func()  # error: [deprecated]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.78">0.0.78</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22disjoint-cast%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1483" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1485" target="_blank">View source</a>
 </small>
 
 
@@ -770,7 +3972,7 @@ soundness checks from their type checker, and it may have false positives in som
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.106">0.0.106</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22disjoint-type-is-narrowing%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L961" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L963" target="_blank">View source</a>
 </small>
 
 
@@ -832,7 +4034,7 @@ two types are not disjoint, but where the narrowed type is [not assignable to] t
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22division-by-zero%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L349" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L351" target="_blank">View source</a>
 </small>
 
 
@@ -864,7 +4066,7 @@ This rule is currently disabled by default because of the number of false positi
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22duplicate-base%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L367" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L369" target="_blank">View source</a>
 </small>
 
 
@@ -895,7 +4097,7 @@ class B(A, A): ...  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.12">0.0.1-alpha.12</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22duplicate-kw-only%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L376" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L378" target="_blank">View source</a>
 </small>
 
 
@@ -935,7 +4137,7 @@ class A:  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.73">0.0.73</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22dynamic-function-decorator-return%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L548" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L550" target="_blank">View source</a>
 </small>
 
 
@@ -1064,7 +4266,7 @@ def foo() -> "intt\b": ...  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.50">0.0.50</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22experimental-syntax%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L277" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L279" target="_blank">View source</a>
 </small>
 
 
@@ -1113,7 +4315,7 @@ def g(value: ~A) -> None: ...  # error: [experimental-syntax]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.20">0.0.20</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22final-on-non-method%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1223" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1225" target="_blank">View source</a>
 </small>
 
 
@@ -1147,7 +4349,7 @@ def my_function() -> int:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.15">0.0.15</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22final-without-value%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1232" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1234" target="_blank">View source</a>
 </small>
 
 
@@ -1259,7 +4461,7 @@ total: Annotated[int, "item " "count"]  # ok
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22import-not-found%22+OR+%22unresolved-import%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1398" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1400" target="_blank">View source</a>
 </small>
 
 
@@ -1303,7 +4505,7 @@ import mathh  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.33">0.0.33</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22incompatible-attribute-override%22+OR+%22invalid-attribute-override%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1564" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1566" target="_blank">View source</a>
 </small>
 
 
@@ -1365,7 +4567,7 @@ assign to `count`; making it final in the subclass removes that operation.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.20">0.0.1-alpha.20</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22incompatible-method-override%22+OR+%22invalid-method-override%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1591" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1593" target="_blank">View source</a>
 </small>
 
 
@@ -1484,7 +4686,7 @@ Correct use of `@override` is enforced by ty's [`invalid-explicit-override`](#in
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.81">0.0.81</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22incompatible-mutable-override%22+OR+%22invalid-mutable-override%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1582" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1584" target="_blank">View source</a>
 </small>
 
 
@@ -1536,7 +4738,7 @@ write the attribute.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.81">0.0.81</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22incompatible-property-override%22+OR+%22invalid-property-type-override%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1573" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1575" target="_blank">View source</a>
 </small>
 
 
@@ -1584,7 +4786,7 @@ An override returning `bool` would be valid because `bool` is a subtype of `int`
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22inconsistent-mro%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L467" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L469" target="_blank">View source</a>
 </small>
 
 
@@ -1620,7 +4822,7 @@ class C(A, B): ...  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.100">0.0.100</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22inconsistent-overload-decorator%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1726" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1728" target="_blank">View source</a>
 </small>
 
 
@@ -1666,7 +4868,7 @@ overloads then account for the implicit `self` in `reader.read()` and `reader.re
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.100">0.0.100</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22inconsistent-overload-implementation%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1717" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1719" target="_blank">View source</a>
 </small>
 
 
@@ -1759,7 +4961,7 @@ def greet(name: str = "world") -> str:  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22index-out-of-bounds%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L476" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L478" target="_blank">View source</a>
 </small>
 
 
@@ -1788,7 +4990,7 @@ t[3]  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.33">0.0.1-alpha.33</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22ineffective-final%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1214" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1216" target="_blank">View source</a>
 </small>
 
 
@@ -1825,7 +5027,7 @@ class MyClass: ...
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.12">0.0.1-alpha.12</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22instance-layout-conflict%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L421" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L423" target="_blank">View source</a>
 </small>
 
 
@@ -1920,7 +5122,7 @@ will produce instances with an atypical memory layout.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-argument-type%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L512" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L514" target="_blank">View source</a>
 </small>
 
 
@@ -1952,7 +5154,7 @@ func("foo")  # error: [invalid-argument-type]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-assignment%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L593" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L595" target="_blank">View source</a>
 </small>
 
 
@@ -1982,7 +5184,7 @@ a: int = ""  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-attribute-access%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1474" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1476" target="_blank">View source</a>
 </small>
 
 
@@ -2063,7 +5265,7 @@ box.value = 1  # okay
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.19">0.0.1-alpha.19</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-await%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L611" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L613" target="_blank">View source</a>
 </small>
 
 
@@ -2105,7 +5307,7 @@ asyncio.run(main())
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-base%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L620" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L622" target="_blank">View source</a>
 </small>
 
 
@@ -2132,7 +5334,7 @@ class A(42): ...  # error: [invalid-base]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-context-manager%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L647" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L649" target="_blank">View source</a>
 </small>
 
 
@@ -2161,7 +5363,7 @@ with 1:  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.12">0.0.12</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-dataclass%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L403" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L405" target="_blank">View source</a>
 </small>
 
 
@@ -2221,7 +5423,7 @@ See: <https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass>
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.15">0.0.15</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22invalid-dataclass-field-order%22+OR+%22dataclass-field-order%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L385" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L387" target="_blank">View source</a>
 </small>
 
 
@@ -2264,7 +5466,7 @@ class Example:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.13">0.0.13</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-dataclass-override%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L394" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L396" target="_blank">View source</a>
 </small>
 
 
@@ -2300,7 +5502,7 @@ class A:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.105">0.0.105</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-dataclass-post-init%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L412" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L414" target="_blank">View source</a>
 </small>
 
 
@@ -2346,7 +5548,7 @@ class Sample:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-declaration%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L656" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L658" target="_blank">View source</a>
 </small>
 
 
@@ -2378,7 +5580,7 @@ a: str  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.20">0.0.20</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-enum-member-annotation%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L674" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L676" target="_blank">View source</a>
 </small>
 
 
@@ -2434,7 +5636,7 @@ class Pet(Enum):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-exception-caught%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L665" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L667" target="_blank">View source</a>
 </small>
 
 
@@ -2499,7 +5701,7 @@ This rule corresponds to Ruff's
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.28">0.0.1-alpha.28</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-explicit-override%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1277" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1279" target="_blank">View source</a>
 </small>
 
 
@@ -2555,7 +5757,7 @@ class D(A):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22invalid-explicit-return%22+OR+%22invalid-return-type%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L530" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L532" target="_blank">View source</a>
 </small>
 
 
@@ -2654,7 +5856,7 @@ def gen_func(coinflip: bool) -> Generator[int, None, str]:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.35">0.0.1-alpha.35</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-frozen-dataclass-subclass%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1609" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1611" target="_blank">View source</a>
 </small>
 
 
@@ -2704,7 +5906,7 @@ class NonFrozenChild(FrozenBase):  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.102">0.0.102</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-generator-return-type%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L521" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L523" target="_blank">View source</a>
 </small>
 
 
@@ -2781,7 +5983,7 @@ async def numbers() -> AsyncGenerator[int]:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-generic-class%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L692" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L694" target="_blank">View source</a>
 </small>
 
 
@@ -2830,7 +6032,7 @@ class D(Generic[U, T]): ...  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.12">0.0.12</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-generic-enum%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L683" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L685" target="_blank">View source</a>
 </small>
 
 
@@ -2925,7 +6127,7 @@ a = 20 / 0  # type: ignore
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.102">0.0.102</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-implicit-return%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L539" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L541" target="_blank">View source</a>
 </small>
 
 
@@ -3049,7 +6251,7 @@ def read_chunks(source: BinaryIO) -> Generator[bytes, None, str]:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.14">0.0.14</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22invalid-implicit-return-in-function-with-stub-body%22+OR+%22empty-body%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L584" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L586" target="_blank">View source</a>
 </small>
 
 
@@ -3110,7 +6312,7 @@ def bar() -> str:  # error: [invalid-implicit-return-in-function-with-stub-body]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.83">0.0.83</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-init-type-variable%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L913" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L915" target="_blank">View source</a>
 </small>
 
 
@@ -3181,7 +6383,7 @@ class LegacyContainer(Generic[T]):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.15">0.0.15</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-legacy-positional-parameter%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1627" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1629" target="_blank">View source</a>
 </small>
 
 
@@ -3246,7 +6448,7 @@ def f(x, y, /):  # Python 3.8+ syntax
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-legacy-type-variable%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L719" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L721" target="_blank">View source</a>
 </small>
 
 
@@ -3293,7 +6495,7 @@ def f(t: TypeVar("U")): ...  # ty: ignore[invalid-type-form]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.18">0.0.18</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-match-pattern%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L931" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L933" target="_blank">View source</a>
 </small>
 
 
@@ -3343,7 +6545,7 @@ match object():
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-metaclass%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L850" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L852" target="_blank">View source</a>
 </small>
 
 
@@ -3377,7 +6579,7 @@ class B(metaclass=42): ...  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.72">0.0.72</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-module-getattr-call%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L701" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L703" target="_blank">View source</a>
 </small>
 
 
@@ -3415,7 +6617,7 @@ from module import missing  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.19">0.0.1-alpha.19</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-named-tuple%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L449" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L451" target="_blank">View source</a>
 </small>
 
 
@@ -3506,7 +6708,7 @@ TypeError: typing.ClassVar[int] is not valid as type argument
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.31">0.0.31</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-named-tuple-override%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L458" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L460" target="_blank">View source</a>
 </small>
 
 
@@ -3552,7 +6754,7 @@ admin[0]  # "Alice"
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.27">0.0.1-alpha.27</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-newtype%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L746" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L748" target="_blank">View source</a>
 </small>
 
 
@@ -3585,7 +6787,7 @@ Baz = NewType("Baz", int | str)  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-parameter-default%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L877" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L879" target="_blank">View source</a>
 </small>
 
 
@@ -3613,7 +6815,7 @@ def f(a: int = ""): ...  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-paramspec%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L728" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L730" target="_blank">View source</a>
 </small>
 
 
@@ -3649,7 +6851,7 @@ P2 = ParamSpec()  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-protocol%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L430" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L432" target="_blank">View source</a>
 </small>
 
 
@@ -3701,7 +6903,7 @@ Declare the type variable with `TypeVar("T", covariant=True)` instead.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-raise%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L886" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L888" target="_blank">View source</a>
 </small>
 
 
@@ -3772,7 +6974,7 @@ def g():
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-super-argument%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L895" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L897" target="_blank">View source</a>
 </small>
 
 
@@ -3880,7 +7082,7 @@ class C: ...
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.10">0.0.10</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-total-ordering%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1618" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1620" target="_blank">View source</a>
 </small>
 
 
@@ -3931,7 +7133,7 @@ class MyClass:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.6">0.0.1-alpha.6</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-type-alias-type%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L737" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L739" target="_blank">View source</a>
 </small>
 
 
@@ -3972,7 +7174,7 @@ InvalidAlias = TypeAliasType("InvalidAlias", list[T], type_params=(list[T],))  #
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.29">0.0.1-alpha.29</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-type-arguments%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1106" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1108" target="_blank">View source</a>
 </small>
 
 
@@ -4038,7 +7240,7 @@ Bar[int]  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-type-checking-constant%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L904" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L906" target="_blank">View source</a>
 </small>
 
 
@@ -4071,7 +7273,7 @@ TYPE_CHECKING = ""  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-type-form%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L922" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L924" target="_blank">View source</a>
 </small>
 
 
@@ -4106,7 +7308,7 @@ b: Annotated[int]  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.11">0.0.1-alpha.11</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-type-guard-definition%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L940" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L942" target="_blank">View source</a>
 </small>
 
 
@@ -4169,7 +7371,7 @@ class C:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.15">0.0.15</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-type-variable-bound%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L988" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L990" target="_blank">View source</a>
 </small>
 
 
@@ -4213,7 +7415,7 @@ def g[U, T: U](): ...  # error: [invalid-type-variable-bound]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-type-variable-constraints%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L979" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L981" target="_blank">View source</a>
 </small>
 
 
@@ -4279,7 +7481,7 @@ V = TypeVar("V", list[int], int)  # valid constrained Type
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.16">0.0.16</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-type-variable-default%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L997" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L999" target="_blank">View source</a>
 </small>
 
 
@@ -4321,7 +7523,7 @@ U = TypeVar("U", int, str, default=bytes)  # error: [invalid-type-variable-defau
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.28">0.0.28</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-typed-dict-field%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1546" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1548" target="_blank">View source</a>
 </small>
 
 
@@ -4357,7 +7559,7 @@ class Child(Base):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.14">0.0.14</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-typed-dict-header%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1555" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1557" target="_blank">View source</a>
 </small>
 
 
@@ -4400,7 +7602,7 @@ def f(options: dict[str, object]):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.100">0.0.100</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22invalid-typed-dict-key%22+OR+%22invalid-key%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L485" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L487" target="_blank">View source</a>
 </small>
 
 
@@ -4452,7 +7654,7 @@ print(f"The height of Alice is {alice['height']}")  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.9">0.0.9</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-typed-dict-statement%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1537" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1539" target="_blank">View source</a>
 </small>
 
 
@@ -4486,7 +7688,7 @@ class Foo(TypedDict):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.25">0.0.25</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22invalid-yield%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L566" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L568" target="_blank">View source</a>
 </small>
 
 
@@ -4520,7 +7722,7 @@ def gen() -> Iterator[int]:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.14">0.0.14</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22isinstance-against-protocol%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L494" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L496" target="_blank">View source</a>
 </small>
 
 
@@ -4586,7 +7788,7 @@ def h(arg2: type):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.15">0.0.15</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22isinstance-against-typed-dict%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L503" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L505" target="_blank">View source</a>
 </small>
 
 
@@ -4635,7 +7837,7 @@ def g(arg: object):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.100">0.0.100</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22lost-keyword-for-regular-parameter%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1600" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1602" target="_blank">View source</a>
 </small>
 
 
@@ -4694,7 +7896,7 @@ modifier `/` in `Wrong2.scale`.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.108">0.0.108</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22mismatched-enum-name%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L769" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L771" target="_blank">View source</a>
 </small>
 
 
@@ -4740,7 +7942,7 @@ Color = Enum("Colour", "RED BLUE")
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.108">0.0.108</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22mismatched-namedtuple-name%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L778" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L780" target="_blank">View source</a>
 </small>
 
 
@@ -4795,7 +7997,7 @@ at runtime, due to a `typename` that is either an invalid identifier or a keywor
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.108">0.0.108</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22mismatched-newtype-name%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L787" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L789" target="_blank">View source</a>
 </small>
 
 
@@ -4837,7 +8039,7 @@ def f(x: str):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.108">0.0.108</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22mismatched-paramspec-name%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L796" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L798" target="_blank">View source</a>
 </small>
 
 
@@ -4879,7 +8081,7 @@ def f(x: str):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.87">0.0.87</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22mismatched-sentinel-name%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L841" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L843" target="_blank">View source</a>
 </small>
 
 
@@ -4931,7 +8133,7 @@ class Container:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.108">0.0.108</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22mismatched-type-alias-name%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L805" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L807" target="_blank">View source</a>
 </small>
 
 
@@ -4972,7 +8174,7 @@ def f(x: str):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.108">0.0.108</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22mismatched-typeddict-name%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L814" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L816" target="_blank">View source</a>
 </small>
 
 
@@ -5013,7 +8215,7 @@ def f(x: str):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.108">0.0.108</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22mismatched-typevar-name%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L823" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L825" target="_blank">View source</a>
 </small>
 
 
@@ -5054,7 +8256,7 @@ def f(x: str):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.108">0.0.108</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22mismatched-typevartuple-name%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L832" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L834" target="_blank">View source</a>
 </small>
 
 
@@ -5095,7 +8297,7 @@ def f(x: str):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.100">0.0.100</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22misplaced-overload-decorator%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1735" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1737" target="_blank">View source</a>
 </small>
 
 
@@ -5142,7 +8344,7 @@ Move `@override` to the first overload of `BatchDecoder.decode`.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22missing-argument%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1015" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1017" target="_blank">View source</a>
 </small>
 
 
@@ -5175,7 +8377,7 @@ func()  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22missing-attribute%22+OR+%22unresolved-attribute%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1380" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1382" target="_blank">View source</a>
 </small>
 
 
@@ -5220,7 +8422,7 @@ A().foo  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Preview (since <a href="https://github.com/astral-sh/ty/releases/tag/0.0.76">0.0.76</a>) ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22missing-direct-dependency%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1416" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1418" target="_blank">View source</a>
 </small>
 
 
@@ -5306,7 +8508,7 @@ Add `urllib3` to `project.dependencies` if your code imports it directly.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.105">0.0.105</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22missing-module-member%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1407" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1409" target="_blank">View source</a>
 </small>
 
 
@@ -5346,7 +8548,7 @@ from math import sin
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.100">0.0.100</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22missing-overload-implementation%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1708" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1710" target="_blank">View source</a>
 </small>
 
 
@@ -5393,7 +8595,7 @@ def foo(x: int) -> int: ...
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.41">0.0.41</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22missing-override-decorator%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1286" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1288" target="_blank">View source</a>
 </small>
 
 
@@ -5454,7 +8656,7 @@ class ExplicitChild(Parent):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.75">0.0.75</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22missing-slot%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1389" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1391" target="_blank">View source</a>
 </small>
 
 
@@ -5541,7 +8743,7 @@ class Item:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.45">0.0.45</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22missing-type-argument%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1024" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1026" target="_blank">View source</a>
 </small>
 
 
@@ -5579,7 +8781,7 @@ def handle(m: re.Match[str]) -> str:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.20">0.0.1-alpha.20</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22missing-typed-dict-key%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1528" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1530" target="_blank">View source</a>
 </small>
 
 
@@ -5618,7 +8820,7 @@ alice["age"]  # KeyError
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.100">0.0.100</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22missing-union-attribute%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1681" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1683" target="_blank">View source</a>
 </small>
 
 
@@ -5662,7 +8864,7 @@ def normalize(value: str | bytes) -> str:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22no-matching-overload%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1088" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1090" target="_blank">View source</a>
 </small>
 
 
@@ -5700,7 +8902,7 @@ func("string")  # error: [no-matching-overload]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.30">0.0.30</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22non-callable-init-subclass%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L710" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L712" target="_blank">View source</a>
 </small>
 
 
@@ -5737,7 +8939,7 @@ class Sub(Super): ...  # error: [non-callable-init-subclass]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.100">0.0.100</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22non-literal-typed-dict-key%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1690" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1692" target="_blank">View source</a>
 </small>
 
 
@@ -5793,7 +8995,7 @@ def get_known_field(movie: Movie, key: Literal["title", "year"]) -> str | int:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22not-callable%22+OR+%22call-non-callable%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L286" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L288" target="_blank">View source</a>
 </small>
 
 
@@ -5832,7 +9034,7 @@ Calling a non-callable object will raise a `TypeError` at runtime.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22not-iterable%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1115" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1117" target="_blank">View source</a>
 </small>
 
 
@@ -5923,7 +9125,7 @@ iterating: `async for value in await values(): ...`.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22not-subscriptable%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1097" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1099" target="_blank">View source</a>
 </small>
 
 
@@ -5951,7 +9153,7 @@ Subscripting an object that does not support it will raise a `TypeError` at runt
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.29">0.0.1-alpha.29</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22override-of-final-method%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1196" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1198" target="_blank">View source</a>
 </small>
 
 
@@ -5988,7 +9190,7 @@ class B(A):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.16">0.0.16</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22override-of-final-variable%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1205" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1207" target="_blank">View source</a>
 </small>
 
 
@@ -6025,7 +9227,7 @@ class B(A):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22parameter-already-assigned%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1133" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1135" target="_blank">View source</a>
 </small>
 
 
@@ -6056,7 +9258,7 @@ f(1, x=2)  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.22">0.0.1-alpha.22</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22positional-only-parameter-as-kwarg%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1371" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1373" target="_blank">View source</a>
 </small>
 
 
@@ -6087,7 +9289,7 @@ f(x=1)  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.22">0.0.1-alpha.22</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22possibly-missing-attribute%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1142" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1144" target="_blank">View source</a>
 </small>
 
 
@@ -6125,7 +9327,7 @@ A.c  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.22">0.0.1-alpha.22</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22possibly-missing-implicit-call%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L304" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L306" target="_blank">View source</a>
 </small>
 
 
@@ -6163,7 +9365,7 @@ A()[0]  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.22">0.0.1-alpha.22</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22possibly-missing-import%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1160" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1162" target="_blank">View source</a>
 </small>
 
 
@@ -6207,7 +9409,7 @@ from module import a  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.23">0.0.23</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22possibly-missing-submodule%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1151" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1153" target="_blank">View source</a>
 </small>
 
 
@@ -6239,7 +9441,7 @@ html.parser  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22possibly-unresolved-reference%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1169" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1171" target="_blank">View source</a>
 </small>
 
 
@@ -6275,7 +9477,7 @@ print(x)  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.60">0.0.60</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22pydantic-discarded-extra-argument%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1358" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1360" target="_blank">View source</a>
 </small>
 
 
@@ -6350,7 +9552,7 @@ def test() -> "int":
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22redundant-cast%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1492" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1494" target="_blank">View source</a>
 </small>
 
 
@@ -6385,7 +9587,7 @@ cast(int, f())  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.79">0.0.79</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22redundant-condition%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1645" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1647" target="_blank">View source</a>
 </small>
 
 
@@ -6578,7 +9780,7 @@ def find_duplicate_coordinates(coordinates: list[tuple[int, int]]):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.79">0.0.79</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22redundant-condition-strict%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1654" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1656" target="_blank">View source</a>
 </small>
 
 
@@ -6983,7 +10185,7 @@ if DEBUGGING:  # error: [redundant-condition-strict]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.18">0.0.18</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22redundant-final-classvar%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1501" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1503" target="_blank">View source</a>
 </small>
 
 
@@ -7048,7 +10250,7 @@ If ty renames `old-rule-name` to `new-rule-name`, the automatic fix changes
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.20">0.0.20</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22shadowed-type-variable%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1510" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1512" target="_blank">View source</a>
 </small>
 
 
@@ -7092,7 +10294,7 @@ class Outer[T]:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.100">0.0.100</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22single-overload%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L859" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L861" target="_blank">View source</a>
 </small>
 
 
@@ -7146,7 +10348,7 @@ def foo(x: int) -> int:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22static-assert-error%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1465" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1467" target="_blank">View source</a>
 </small>
 
 
@@ -7183,7 +10385,7 @@ Note that running this example would require the
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.39">0.0.39</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22subclass-of-dataclass-with-order%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1187" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1189" target="_blank">View source</a>
 </small>
 
 
@@ -7235,7 +10437,7 @@ limitation.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22subclass-of-final-class%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1178" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1180" target="_blank">View source</a>
 </small>
 
 
@@ -7269,7 +10471,7 @@ class B(A): ...  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.30">0.0.1-alpha.30</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22super-call-in-named-tuple-method%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1331" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1333" target="_blank">View source</a>
 </small>
 
 
@@ -7309,7 +10511,7 @@ class F(NamedTuple):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.106">0.0.106</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22suspicious-type-is-narrowing%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L970" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L972" target="_blank">View source</a>
 </small>
 
 
@@ -7459,7 +10661,7 @@ def is_bar(value: Foo) -> TypeIs[Bar]:  # error: "`Bar` is not assignable to the
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22too-many-positional-arguments%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1313" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1315" target="_blank">View source</a>
 </small>
 
 
@@ -7489,7 +10691,7 @@ f("foo")  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.83">0.0.83</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22truthiness-test-of-callable%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1663" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1665" target="_blank">View source</a>
 </small>
 
 
@@ -7540,7 +10742,7 @@ def announce_if_ready_fixed(is_ready: Callable[[], bool]):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.83">0.0.83</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22truthiness-test-of-iterable%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1672" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1674" target="_blank">View source</a>
 </small>
 
 
@@ -7627,7 +10829,7 @@ process(x for x in range(42) if x > 43)
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.84">0.0.84</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22truthiness-test-of-none-union%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1636" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1638" target="_blank">View source</a>
 </small>
 
 
@@ -7711,7 +10913,7 @@ true or always false.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22type-assertion-failure%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1295" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1297" target="_blank">View source</a>
 </small>
 
 
@@ -7750,7 +10952,7 @@ def _(x: int):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unavailable-implicit-super-arguments%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1322" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1324" target="_blank">View source</a>
 </small>
 
 
@@ -7809,7 +11011,7 @@ class A:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.20">0.0.20</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unbound-type-variable%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1006" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1008" target="_blank">View source</a>
 </small>
 
 
@@ -7853,7 +11055,7 @@ class C(Generic[T]):
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22undefined-reveal%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1340" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1342" target="_blank">View source</a>
 </small>
 
 
@@ -7882,7 +11084,7 @@ reveal_type(1)  # revealed: Literal[1]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unknown-argument%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1349" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1351" target="_blank">View source</a>
 </small>
 
 
@@ -7958,7 +11160,7 @@ a = 20 / 0  # ty: ignore[division-by-zero]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.100">0.0.100</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unknown-typed-dict-constructor-key%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1699" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1701" target="_blank">View source</a>
 </small>
 
 
@@ -8018,7 +11220,7 @@ def encode_patch(channel: str, enabled: bool) -> str:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.15">0.0.1-alpha.15</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unresolved-global%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1519" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1521" target="_blank">View source</a>
 </small>
 
 
@@ -8093,7 +11295,7 @@ def g():
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unresolved-reference%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1429" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1431" target="_blank">View source</a>
 </small>
 
 
@@ -8121,7 +11323,7 @@ print(x)  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.73">0.0.73</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unsound-assignment%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L602" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L604" target="_blank">View source</a>
 </small>
 
 
@@ -8251,7 +11453,7 @@ Python code.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.70">0.0.70</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%28%22unsound-return%22+OR+%22unsound-return-statement%22%29" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L557" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L559" target="_blank">View source</a>
 </small>
 
 
@@ -8403,7 +11605,7 @@ Python code.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.70">0.0.70</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unsound-yield%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L575" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L577" target="_blank">View source</a>
 </small>
 
 
@@ -8550,7 +11752,7 @@ generator boundaries.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.7">0.0.1-alpha.7</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unsupported-base%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L629" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L631" target="_blank">View source</a>
 </small>
 
 
@@ -8596,7 +11798,7 @@ class D(C): ...  # error: [unsupported-base]
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unsupported-bool-conversion%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1124" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1126" target="_blank">View source</a>
 </small>
 
 
@@ -8645,7 +11847,7 @@ b1 < b2 < b1  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'ignore'."><code>ignore</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.12">0.0.12</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unsupported-dynamic-base%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L638" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L640" target="_blank">View source</a>
 </small>
 
 
@@ -8690,7 +11892,7 @@ def factory(base: type[Base]) -> type:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unsupported-operator%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1438" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1440" target="_blank">View source</a>
 </small>
 
 
@@ -8722,7 +11924,7 @@ A() + A()  # error
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.21">0.0.21</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22unused-awaitable%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1447" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1449" target="_blank">View source</a>
 </small>
 
 
@@ -8836,7 +12038,7 @@ is set to `false`.
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'warn'."><code>warn</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.22">0.0.1-alpha.22</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22useless-overload-body%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L868" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L870" target="_blank">View source</a>
 </small>
 
 
@@ -8915,7 +12117,7 @@ def foo(x: int | str) -> int | str:
 Default level: <a href="../../rules#rule-levels" title="This lint has a default level of 'error'."><code>error</code></a> ·
 Added in <a href="https://github.com/astral-sh/ty/releases/tag/0.0.1-alpha.1">0.0.1-alpha.1</a> ·
 <a href="https://github.com/astral-sh/ty/issues?q=sort%3Aupdated-desc%20is%3Aissue%20is%3Aopen%20%22zero-stepsize-in-slice%22" target="_blank">Related issues</a> ·
-<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1456" target="_blank">View source</a>
+<a href="https://github.com/astral-sh/ruff/blob/main/crates%2Fty_python_semantic%2Fsrc%2Ftypes%2Fdiagnostic.rs#L1458" target="_blank">View source</a>
 </small>
 
 

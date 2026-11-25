@@ -4703,7 +4703,7 @@ dependencies = [
 
 [[package]]
 name = "ty_blender"
-version = "0.0.22"
+version = "0.0.23"
 dependencies = [
  "get-size2",
  "ruff_db",

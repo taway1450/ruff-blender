@@ -22,7 +22,7 @@ use ty_python_core::definition::{Definition, DefinitionState};
 use ty_python_core::scope::{FileScopeId, NodeWithScopeRef, ScopeId};
 use ty_python_core::{place_table, semantic_index, use_def_map};
 
-use crate::place::{Definedness, Place, PlaceAndQualifiers};
+use crate::place::{Definedness, Place, PlaceAndQualifiers, TypeOrigin};
 use crate::types::attribute_write::{
     AttributeWriteRequirement, ClassAttributeWriteMember, ExplicitAttributeWriteRequirement,
     FallbackAttributeWriteRequirement, InstanceAttributeWriteMember, attribute_write_requirement,
@@ -190,7 +190,7 @@ pub(super) fn decorator_properties<'db>(
 /// from the class definition's inference, so that any import of the function is recognised.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn orientation_axis_property<'db>(
@@ -794,7 +794,7 @@ fn is_drawn_layout<'db>(
 /// The callback is found by its name, not by registration: an unregistered base's `draw` is
 /// inherited by the registered subclass that Blender calls it on. Since the hook changes the type
 /// of the expression, `layout = self.layout` is a `UILayout` too.
-#[salsa::tracked(cycle_initial=|_, _, _| false, heap_size=ruff_memory_usage::heap_size)]
+#[salsa::tracked(cycle_initial=|_, _, _, _| false, heap_size=ruff_memory_usage::heap_size)]
 fn is_draw_callback<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> bool {
     let file = function.program_file(db);
     let index = semantic_index(db, file);
@@ -1045,6 +1045,7 @@ pub(in crate::types) fn on_store<'db>(
                 member: InstanceAttributeWriteMember::Explicit {
                     member: ExplicitAttributeWriteRequirement::AssignableTo {
                         ty,
+                        origin: TypeOrigin::Declared,
                         qualifiers: TypeQualifiers::empty(),
                     },
                     fallback: None,
@@ -1088,6 +1089,7 @@ pub(in crate::types) fn on_store<'db>(
                 member: InstanceAttributeWriteMember::Explicit {
                     member: ExplicitAttributeWriteRequirement::AssignableTo {
                         ty,
+                        origin: TypeOrigin::Declared,
                         qualifiers: TypeQualifiers::empty(),
                     },
                     fallback: None,
@@ -1113,6 +1115,7 @@ pub(in crate::types) fn on_store<'db>(
                 member: InstanceAttributeWriteMember::Instance(
                     FallbackAttributeWriteRequirement::AssignableTo {
                         ty,
+                        origin: TypeOrigin::Declared,
                         qualifiers,
                         possibly_missing,
                     },

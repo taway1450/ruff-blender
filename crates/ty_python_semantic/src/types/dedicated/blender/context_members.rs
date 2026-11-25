@@ -246,7 +246,7 @@ enum SpaceSource {
 /// inherited by the registered subclass that Blender calls it on.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn callback_context<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<CallbackContext> {
@@ -459,7 +459,7 @@ impl<'a> Visitor<'a> for PopoverSites<'a> {
 /// and the classes it derives from.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn bl_space_type<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> Option<String> {

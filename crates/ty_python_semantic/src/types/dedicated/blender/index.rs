@@ -175,7 +175,7 @@ pub(super) fn registered_properties<'db>(
 /// cycle starts from no properties, as [`addon_index`] does.
 #[salsa::tracked(
     returns(deref),
-    cycle_initial=|_, _, _| Box::default(),
+    cycle_initial=|_, _, _, _| Box::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 fn own_registered_properties<'db>(
@@ -211,7 +211,7 @@ impl<'db> AddonInProgram<'db> {
 /// names, and that inference may read the index again. Such a cycle starts from an empty index.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| AddonIndex::default(),
+    cycle_initial=|_, _, _, _| AddonIndex::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn addon_index<'db>(db: &'db dyn Db, key: AddonInProgram<'db>) -> AddonIndex<'db> {

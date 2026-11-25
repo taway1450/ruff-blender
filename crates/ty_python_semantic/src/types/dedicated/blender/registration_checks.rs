@@ -62,7 +62,7 @@ pub(super) struct Finding {
 /// The registration mistakes of an add-on, at most one per rule and place.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| Box::default(),
+    cycle_initial=|_, _, _, _| Box::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn registration_findings<'db>(

@@ -228,7 +228,7 @@ impl Walk<'_> {
 /// which reads this walk) starts from an empty walk.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| Walk::default(),
+    cycle_initial=|_, _, _, _| Walk::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn register_walk<'db>(db: &'db dyn Db, key: AddonInProgram<'db>) -> Walk<'db> {
@@ -238,7 +238,7 @@ pub(super) fn register_walk<'db>(db: &'db dyn Db, key: AddonInProgram<'db>) -> W
 /// What `unregister()` does.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| Walk::default(),
+    cycle_initial=|_, _, _, _| Walk::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn unregister_walk<'db>(db: &'db dyn Db, key: AddonInProgram<'db>) -> Walk<'db> {
@@ -526,7 +526,7 @@ impl<'a> Visitor<'a> for PreferencesReads<'a> {
 /// that does not change them (inside a method, or in a check module) does not re-run the walks.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| FileIr::default(),
+    cycle_initial=|_, _, _, _| FileIr::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn registration_ir<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> FileIr<'db> {

@@ -161,7 +161,7 @@ pub(super) fn own_binding<'db>(
 /// Blender does, and the string literals after it are appended.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn folded_idname<'db>(db: &'db dyn Db, definition: Definition<'db>) -> Option<String> {

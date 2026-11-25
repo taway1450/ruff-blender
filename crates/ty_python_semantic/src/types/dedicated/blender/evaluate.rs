@@ -318,7 +318,7 @@ enum ConstantValue<'db> {
 /// The value of the constant `definition` (an assignment to a name), read in its own scope.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn constant_value<'db>(db: &'db dyn Db, definition: Definition<'db>) -> Option<ConstantValue<'db>> {
@@ -398,7 +398,7 @@ struct WrapperTemplate<'db> {
 /// functions and classes) evaluates to a property declaration.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn wrapper_template<'db>(
@@ -642,7 +642,7 @@ pub(crate) fn is_property_container<'db>(
 /// asks this query again; such a cycle settles on "not a declaration".
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn property_value<'db>(

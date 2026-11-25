@@ -56,7 +56,7 @@ fn is_preferences_class<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) ->
 /// is complete. An idname the evaluator can't read is not checked.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| AddonPreferences::default(),
+    cycle_initial=|_, _, _, _| AddonPreferences::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn addon_preferences<'db>(

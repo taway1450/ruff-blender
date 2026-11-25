@@ -331,7 +331,7 @@ pub(super) fn report_preferences_read(context: &InferContext, attribute: &ast::E
 /// Blender calls later (a timer, a handler) run after `register()` returned, and are left out.
 #[salsa::tracked(
     returns(deref),
-    cycle_initial=|_, _, _| Box::default(),
+    cycle_initial=|_, _, _, _| Box::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 fn early_preferences_reads<'db>(db: &'db dyn Db, key: AddonInProgram<'db>) -> Box<[Site]> {

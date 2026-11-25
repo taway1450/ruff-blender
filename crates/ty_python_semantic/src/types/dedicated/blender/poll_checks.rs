@@ -391,7 +391,7 @@ enum Gate {
 /// ([`panel_context_facts`]).
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn gated_facts<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<GatedFacts> {
@@ -456,7 +456,7 @@ fn gated_facts<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<GatedFact
 /// nothing.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn parent_poll_facts<'db>(
@@ -521,7 +521,7 @@ fn parent_panel<'db>(
 /// is not found or is opened as a popover ([`is_popover`]), where no context is checked.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn panel_context_facts<'db>(
@@ -575,7 +575,7 @@ fn class_attribute_owner<'db>(
 /// ([`method_after`]). `None` for a class without one.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn poll_facts<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> Option<(Box<[Fact]>, Name)> {
@@ -660,7 +660,7 @@ type PollFlow = Box<[(TextRange, Box<[Fact]>)]>;
 /// ([`known_before`]).
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn poll_flow<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<PollFlow> {
@@ -673,7 +673,7 @@ fn poll_flow<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<PollFlow> {
 /// pointer read on the way is set there too.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn opener_flow<'db>(db: &'db dyn Db, function: ScopeId<'db>) -> Option<PollFlow> {
@@ -752,7 +752,7 @@ fn recorded_flow<'db>(
 /// nothing, and so nothing holds.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn popover_facts<'db>(

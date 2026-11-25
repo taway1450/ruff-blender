@@ -79,7 +79,7 @@ pub(super) fn callback_root<'db>(
 /// any other binding (`poll = shared_poll`), gives `None`.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn method_shape<'db>(
@@ -152,7 +152,7 @@ pub(super) fn defining_class<'db>(
 /// ty's `incompatible-method-override` never report the same `def`.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn callback_problem<'db>(
@@ -444,7 +444,7 @@ impl<'db> OverrideTypes<'db> {
 /// to the overriding class. Registration plays no part: an unregistered base is typed too.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(crate) fn override_types<'db>(

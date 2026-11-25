@@ -106,7 +106,7 @@ impl ListSources<'_> {
 
 /// The sources the `template_list` calls of the add-on of the list `class` show it with.
 #[salsa::tracked(
-    cycle_initial=|_, _, _| ListSources::UNKNOWN,
+    cycle_initial=|_, _, _, _| ListSources::UNKNOWN,
     heap_size=ruff_memory_usage::heap_size
 )]
 fn list_sources<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -> ListSources<'db> {

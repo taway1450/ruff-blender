@@ -100,7 +100,7 @@ fn widens_enum_set<'db>(
 
 /// The type of the return annotation of the function `definition`, if it has one.
 #[salsa::tracked(
-    cycle_initial=|_, _, _| None,
+    cycle_initial=|_, _, _, _| None,
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn annotated_return<'db>(
@@ -222,7 +222,7 @@ pub(super) struct NarrowedParameter<'db> {
 /// such subtype is left to its `incompatible-method-override`.
 #[salsa::tracked(
     returns(deref),
-    cycle_initial=|_, _, _| Box::default(),
+    cycle_initial=|_, _, _, _| Box::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn narrowed_parameters<'db>(

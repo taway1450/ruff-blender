@@ -123,7 +123,7 @@ fn owners_id_data<'db>(
 /// such a cycle starts from no owners.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| Some(Box::default()),
+    cycle_initial=|_, _, _, _| Some(Box::default()),
     heap_size=ruff_memory_usage::heap_size
 )]
 fn group_owners<'db>(

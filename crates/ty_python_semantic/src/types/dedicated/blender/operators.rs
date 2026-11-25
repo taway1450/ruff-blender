@@ -118,7 +118,7 @@ pub(super) fn is_macro_class<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db
 /// it. A class registered later with the same idname replaces the earlier one, as at runtime.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| AddonOperators::default(),
+    cycle_initial=|_, _, _, _| AddonOperators::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn addon_operators<'db>(
@@ -188,7 +188,7 @@ pub(super) fn operators_of<'db>(
 /// and another such file's operators stay unknown to it.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| AddonOperators::default(),
+    cycle_initial=|_, _, _, _| AddonOperators::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 fn script_operators<'db>(db: &'db dyn Db, file: ProgramFile<'db>) -> AddonOperators<'db> {
@@ -584,7 +584,7 @@ pub(super) struct ClassProperty<'db> {
 /// decorator adds (`@orientation_helper`) follow the body's annotations of the decorated class.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| Box::default(),
+    cycle_initial=|_, _, _, _| Box::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn class_properties<'db>(

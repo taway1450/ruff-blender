@@ -89,7 +89,7 @@ pub(crate) fn mixin_self_bounds<'db>(
 /// add-on, in its folder. Empty for any other class.
 #[salsa::tracked(
     returns(deref),
-    cycle_initial=|_, _, _| Box::default(),
+    cycle_initial=|_, _, _, _| Box::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn mixin_users<'db>(
@@ -138,7 +138,7 @@ struct UserScope<'db> {
 /// starts from no mixins.
 #[salsa::tracked(
     returns(deref),
-    cycle_initial=|_, _, _| Box::default(),
+    cycle_initial=|_, _, _, _| Box::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 fn scope_mixins<'db>(
@@ -228,7 +228,7 @@ fn is_unittest_test_case<'db>(db: &'db dyn Db, class: StaticClassLiteral<'db>) -
 /// The module-level classes of `file`.
 #[salsa::tracked(
     returns(deref),
-    cycle_initial=|_, _, _| Box::default(),
+    cycle_initial=|_, _, _, _| Box::default(),
     heap_size=ruff_memory_usage::heap_size
 )]
 fn module_class_literals<'db>(

@@ -233,7 +233,7 @@ fn name_key<'db>(db: &'db dyn Db, scope: ScopeId<'db>, name: &str) -> AddonKey {
 /// (`A = B`, `B = A`) gives `Unknown`.
 #[salsa::tracked(
     returns(ref),
-    cycle_initial=|_, _, _| AddonKey::Unknown,
+    cycle_initial=|_, _, _, _| AddonKey::Unknown,
     heap_size=ruff_memory_usage::heap_size
 )]
 pub(super) fn definition_key<'db>(db: &'db dyn Db, definition: Definition<'db>) -> AddonKey {
