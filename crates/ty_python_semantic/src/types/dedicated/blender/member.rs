@@ -1026,6 +1026,10 @@ pub(super) fn without_none<'db>(db: &'db dyn Db, ty: Type<'db>) -> Type<'db> {
 /// (the registration itself) is unconstrained. Where ty finds the instance attribute that an
 /// Annotated property declares, which has the value type, the write type replaces it. The two
 /// differ only for a vector property. Read-only properties are rejected afterwards by [`check_property_write`].
+///
+/// ty resolves a union receiver arm by arm (`Scene | Object`, or `Scene | Unknown` for an item of
+/// a list that typed and untyped code filled), so the requirement of each arm passes through here
+/// too.
 pub(in crate::types) fn on_store<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,

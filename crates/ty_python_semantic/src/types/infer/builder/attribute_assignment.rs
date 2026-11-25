@@ -311,9 +311,11 @@ impl<'db> AssignmentAttributeWriteEvaluator<'_, 'db, '_, '_> {
             } => {
                 let value_ty = self.infer_value(TypeContext::default(), emit_diagnostics);
                 let attribute = self.attribute;
+                let file = self.builder.program_file();
                 let mut requirements = element_tys
                     .iter()
-                    .map(|ty| attribute_write_requirement(db, env, *ty, attribute, *receiver));
+                    .map(|ty| attribute_write_requirement(db, env, *ty, attribute, *receiver))
+                    .map(|arm| crate::types::blender::on_store(db, env, file, attribute, arm));
                 let valid = requirements.by_ref().all(|requirement| {
                     let mut current = AttributeDeprecation::Missing;
                     let valid = self.evaluate(
